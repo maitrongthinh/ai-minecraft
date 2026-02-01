@@ -1,6 +1,7 @@
 
 import { Coder } from './coder.js';
 import { SkillLibrary } from '../skills/SkillLibrary.js';
+import { lockdown } from './library/lockdown.js';
 
 export class SmartCoder extends Coder {
     constructor(agent) {
@@ -47,10 +48,7 @@ export class SmartCoder extends Coder {
         // and using DualBrain routing if possible (Agent already doing it via prompter)
 
         this.agent.bot.modes.pause('unstuck');
-        // lockdown(); // Coder imports lockdown, but we can't access it if it's not exported. 
-        // Coder.js imports lockdown but doesn't export it. 
-        // We might need to assume Coder.js lockdown logic is internal or we duplicate imports.
-        // For now, we rely on the fact that Coder constructor initialized things.
+        lockdown();
 
         let messages = agent_history.getHistory();
         messages.push({ role: 'system', content: 'Code generation started. Write code in codeblock.' });

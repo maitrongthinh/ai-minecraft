@@ -395,12 +395,11 @@ export class Agent {
             // If we are in a loop (i > 0) or it's self_prompt, likely Planning.
             let res;
             if (self_prompt || i > 0) {
-                // Complex Task / Loop -> High IQ (via internal prompter for now as it handles tools)
-                // In next phases, we will use this.brain.plan() explicitly.
-                res = await this.prompter.promptConvo(history);
+                // Complex Task / Loop -> High IQ (via DualBrain Plan)
+                res = await this.brain.plan(history);
             } else {
-                // First response to system/user -> Standard Check
-                res = await this.prompter.promptConvo(history);
+                // First response to system/user -> Standard Check (also Plan for now to ensure IQ)
+                res = await this.brain.plan(history);
             }
 
             console.log(`${this.name} full response to ${source}: ""${res}""`);

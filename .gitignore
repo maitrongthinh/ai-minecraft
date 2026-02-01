@@ -28,3 +28,28 @@ tasks/construction_tasks/train/**
 server_data*
 **/.DS_Store
 src/mindcraft-py/__pycache__/
+
+# Runtime Logs & Errors
+*.log
+*.txt
+error_log.txt
+vector_error.txt
+coder_error.txt
+verify*.txt
+
+# Authentication & Config
+.env
+
+# Runtime Data
+memories.json
+q_table.json
+brain/
+knowledge/
+profiles/
+
+# Local Verification Scripts
+verify*.js
+verify_*.js
+
+# Temporary Plans
+plans/
