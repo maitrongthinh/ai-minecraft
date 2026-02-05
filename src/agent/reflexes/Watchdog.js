@@ -44,6 +44,20 @@ export class Watchdog {
     check() {
         if (!this.enabled || !this.agent.bot || !this.agent.bot.entity) return;
 
+        // BRAIN REFACTOR Phase D: Respect agent flags (Reflex Guard)
+        // Don't interrupt during precision work or when reflexes disabled
+        if (this.agent.flags) {
+            if (this.agent.flags.critical_action) {
+                // Agent is doing precision work, don't interfere
+                this.lastActionTime = Date.now(); // Reset timer
+                return;
+            }
+            if (!this.agent.flags.allow_reflex) {
+                // Reflexes globally disabled
+                return;
+            }
+        }
+
         const currentPos = this.agent.bot.entity.position;
 
         // Initialize if first run
@@ -88,6 +102,18 @@ export class Watchdog {
                 `Bot got stuck at position ${posStr} for ${this.STUCK_TIMEOUT / 1000} seconds. Emergency protocol triggered.`,
                 { type: 'stuck', position: pos ? { x: pos.x, y: pos.y, z: pos.z } : null }
             ).catch(err => console.warn('[Watchdog] Failed to log stuck event to Cognee:', err.message));
+        }
+
+        // BRAIN REFACTOR Phase D: Log to history.addError for failure-aware planning
+        if (this.agent.history) {
+            const pos = this.agent.bot?.entity?.position;
+            const posStr = pos ? `(${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)})` : 'unknown';
+            const currentState = this.agent.stateStack ? this.agent.stateStack.current() : 'unknown';
+            this.agent.history.addError(
+                'got_stuck',
+                `Stuck at ${posStr} during ${currentState} state for ${this.STUCK_TIMEOUT / 1000}s`,
+                { position: pos, state: currentState }
+            );
         }
 
         // Level 1: Try Jumping

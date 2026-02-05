@@ -26,6 +26,67 @@ export class StrategyPlanner {
     }
 
     /**
+     * BRAIN REFACTOR Phase C: Get failure context for prompt injection
+     * Retrieves recent errors from history to prevent repeating mistakes
+     * @returns {string} - Formatted failure warning for LLM prompt
+     */
+    getFailureContext() {
+        if (!this.agent.history) return '';
+
+        const recentErrors = this.agent.history.getRecentErrors(3);
+        if (recentErrors.length === 0) return '';
+
+        const errorLines = recentErrors.map(e => {
+            const ago = Math.round((Date.now() - e.timestamp) / 1000 / 60);
+            return `- ${e.action}: ${e.error} (${ago} min ago)`;
+        });
+
+        return `\n⚠️ RECENT FAILURES (DO NOT REPEAT THESE ACTIONS):\n${errorLines.join('\n')}\n`;
+    }
+
+    /**
+     * MEMORY GAP A FIX: Get memory context from Cognee/VectorStore
+     * Retrieves relevant past experiences for better planning
+     * @param {string} goalDescription - The goal to search memories for
+     * @returns {Promise<string>} - Formatted memory context for LLM prompt
+     */
+    async getMemoryContext(goalDescription) {
+        // Try Cognee first (Graph-based memory)
+        if (this.agent.cogneeMemory && this.agent.world_id) {
+            try {
+                // Task 32: Active Recall - Ask "How to" specifically
+                const query = `how to ${goalDescription}`;
+                const recalled = await this.agent.cogneeMemory.recall(
+                    this.agent.world_id,
+                    query,
+                    3 // Get top 3 relevant memories
+                );
+                if (recalled.success && recalled.results && recalled.results.length > 0) {
+                    console.log(`[StrategyPlanner] 📚 Recalled ${recalled.results.length} memories for "${query}"`);
+                    return `\n📚 RELEVANT PAST EXPERIENCES (How to ${goalDescription}):\n${recalled.results.map(r => `- ${r}`).join('\n')}\n`;
+                }
+            } catch (e) {
+                console.warn('[StrategyPlanner] Cognee recall failed:', e.message);
+            }
+        }
+
+        // Fallback to VectorStore via Dreamer
+        if (this.agent.dreamer) {
+            try {
+                const memories = await this.agent.dreamer.searchMemories(goalDescription);
+                if (memories && memories.length > 0) {
+                    console.log(`[StrategyPlanner] 📚 Found ${memories.length} memories from VectorStore`);
+                    return `\n📚 RELEVANT MEMORIES:\n${memories.slice(0, 3).map(m => `- ${m.text}`).join('\n')}\n`;
+                }
+            } catch (e) {
+                console.warn('[StrategyPlanner] VectorStore search failed:', e.message);
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * Add a new goal to the queue
      * @param {string} description - Goal description
      * @param {number} priority - Priority level (default: MEDIUM)
@@ -35,7 +96,8 @@ export class StrategyPlanner {
             id: Date.now() + Math.random().toString(36).substr(2, 9),
             description,
             priority,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            attempt_count: 0 // Task 32: Anti-Stuck Counter
         };
         this.goals.push(goal);
         this.sortGoals();
@@ -62,11 +124,31 @@ export class StrategyPlanner {
         // 2. Goal Selection
         if (!this.currentGoal && this.goals.length > 0) {
             this.currentGoal = this.goals.shift();
-            console.log(`[StrategyPlanner] 🎯 Selected new goal: "${this.currentGoal.description}"`);
+
+            // Task 32: Anti-Stuck Logic
+            this.currentGoal.attempt_count = (this.currentGoal.attempt_count || 0) + 1;
+
+            if (this.currentGoal.attempt_count > 3) {
+                const failMsg = `⚠️ Goal FAILED after 3 attempts: "${this.currentGoal.description}". Skipping.`;
+                console.log(`[StrategyPlanner] ${failMsg}`);
+                this.agent.history.addError(this.currentGoal.description, "Too many failed attempts (Anti-Stuck)");
+
+                // Store failure in Cognee
+                if (this.agent.cogneeMemory) {
+                    this.agent.cogneeMemory.storeExperience(this.agent.world_id, [failMsg], { type: 'goal_failure', goal: this.currentGoal.description }).catch(e => { });
+                }
+
+                this.currentGoal = null; // discard
+                return; // Try next goal in next loop
+            }
+
+            console.log(`[StrategyPlanner] 🎯 Selected new goal (Attempt ${this.currentGoal.attempt_count}): "${this.currentGoal.description}"`);
 
             // Trigger DualBrain to plan for this goal
-            // We inject the goal into the context via a special message
-            await this.agent.handleMessage('system', `STRATEGIC GOAL: ${this.currentGoal.description}. Plan the next steps.`);
+            const failureContext = this.getFailureContext();
+            const memoryContext = await this.getMemoryContext(this.currentGoal.description);
+            const prompt = `STRATEGIC GOAL (Attempt ${this.currentGoal.attempt_count}/3): ${this.currentGoal.description}.${failureContext}${memoryContext}\nPlan the next steps carefully.`;
+            await this.agent.handleMessage('system', prompt);
         }
     }
 
@@ -105,7 +187,8 @@ export class StrategyPlanner {
 
             // If we have a current goal, push it back to queue
             if (this.currentGoal) {
-                this.goals.unshift(this.currentGoal); // Put back at front
+                // Task 32: Don't reset attempt_count, just put back
+                this.goals.unshift(this.currentGoal);
             }
 
             // Set immediate critical goal
@@ -116,7 +199,11 @@ export class StrategyPlanner {
                 timestamp: Date.now()
             };
 
-            await this.agent.handleMessage('system', `SURVIVAL INTERRUPT: ${criticalNeed}`);
+            // BRAIN REFACTOR Phase C: Inject failure context in survival prompts too
+            // MEMORY GAP C FIX: Also inject memory context for survival decisions
+            const failureContext = this.getFailureContext();
+            const memoryContext = await this.getMemoryContext(criticalNeed);
+            await this.agent.handleMessage('system', `SURVIVAL INTERRUPT: ${criticalNeed}${failureContext}${memoryContext}`);
         }
     }
 

@@ -6,6 +6,7 @@ import { itemSatisfied, rotateXZ } from './utils.js';
 import * as skills from '../library/skills.js';
 import * as world from '../library/world.js';
 import * as mc from '../../utils/mcdata.js';
+import { TerrainAnalyzer } from '../../blueprints/TerrainAnalyzer.js'; // Task 24
 
 
 export class NPCContoller {
@@ -17,6 +18,7 @@ export class NPCContoller {
         this.build_goal = new BuildGoal(agent);
         this.constructions = {};
         this.last_goals = {};
+        this.terrainAnalyzer = new TerrainAnalyzer(agent.bot); // Task 24
     }
 
     getBuiltPositions() {
@@ -157,12 +159,41 @@ export class NPCContoller {
                         this.data.built[goal.name].orientation
                     );
                 } else {
-                    res = await this.build_goal.executeNext(this.constructions[goal.name]);
-                    this.data.built[goal.name] = {
-                        name: goal.name,
-                        position: res.position,
-                        orientation: res.orientation
-                    };
+                    // Task 24: Smart Construction - Pre-analyze site
+                    const blueprint = this.constructions[goal.name];
+                    const sizex = blueprint.blocks[0][0].length;
+
+                    // 1. Find a spot
+                    let position = null;
+                    for (let x = 0; x < sizex - 1; x++) {
+                        position = world.getNearestFreeSpace(this.agent.bot, sizex - x, 16);
+                        if (position) break;
+                    }
+
+                    if (position) {
+                        console.log(`[NPCController] Found potential site for ${goal.name} at ${position}`);
+
+                        // 2. Analyze
+                        const analysis = this.terrainAnalyzer.analyze(blueprint, position);
+                        console.log(`[NPCController] Site Analysis: ${analysis.obstructionCount} obstructions, ${analysis.foundationCount} foundation gaps.`);
+
+                        // 3. Prepare (Terraform)
+                        if (analysis.obstructionCount > 0 || analysis.foundationCount > 0) {
+                            await this.terrainAnalyzer.prepareSite(analysis, this.agent);
+                        }
+
+                        // 4. Build
+                        res = await this.build_goal.executeNext(blueprint, position);
+
+                        this.data.built[goal.name] = {
+                            name: goal.name,
+                            position: res.position,
+                            orientation: res.orientation
+                        };
+                    } else {
+                        console.warn(`[NPCController] Could not find free space for ${goal.name}`);
+                        res = { missing: {}, acted: false, position: null, orientation: 0 }; // Fail safely
+                    }
                 }
                 if (Object.keys(res.missing).length === 0) {
                     this.data.home = goal.name;

@@ -17,17 +17,67 @@ export class History {
         // Natural language memory as a summary of recent messages + previous memory
         this.memory = '';
 
+        // ERROR TRACKING: For failure-aware planning (Brain Refactor Phase A)
+        // Stores { action, error, timestamp } objects
+        this.errors = [];
+        this.maxErrors = 10; // Keep only last 10 errors
+
         // Maximum number of messages to keep in context before saving chunk to memory
         this.max_messages = settings.max_messages;
 
         // Number of messages to remove from current history and save into memory
-        this.summary_chunk_size = 5; 
+        this.summary_chunk_size = 5;
         // chunking reduces expensive calls to promptMemSaving and appendFullHistory
         // and improves the quality of the memory summary
     }
 
     getHistory() { // expects an Examples object
         return JSON.parse(JSON.stringify(this.turns));
+    }
+
+    /**
+     * ERROR TRACKING: Record an action failure for failure-aware planning
+     * @param {string} action - What was attempted (e.g., "mine_wood", "go_to_location")
+     * @param {string} error - What went wrong (e.g., "fell into lava", "pathfinding failed")
+     * @param {object} context - Optional additional context (position, goal, etc.)
+     */
+    addError(action, error, context = {}) {
+        const errorEntry = {
+            action,
+            error,
+            context,
+            timestamp: Date.now()
+        };
+        this.errors.push(errorEntry);
+
+        // Keep only last N errors
+        if (this.errors.length > this.maxErrors) {
+            this.errors.shift();
+        }
+
+        console.log(`[History] Error recorded: ${action} - ${error}`);
+    }
+
+    /**
+     * Get recent errors for injection into planning prompts
+     * @param {number} n - Number of recent errors to return
+     * @returns {Array<{action: string, error: string, timestamp: number}>}
+     */
+    getRecentErrors(n = 3) {
+        return this.errors.slice(-n);
+    }
+
+    /**
+     * Check if a specific action has failed recently
+     * @param {string} action - Action to check
+     * @param {number} withinMs - Time window in milliseconds (default 5 minutes)
+     * @returns {boolean}
+     */
+    hasRecentFailure(action, withinMs = 5 * 60 * 1000) {
+        const cutoff = Date.now() - withinMs;
+        return this.errors.some(e =>
+            e.action === action && e.timestamp > cutoff
+        );
     }
 
     async summarizeMemories(turns) {
@@ -67,7 +117,7 @@ export class History {
             role = 'user';
             content = `${name}: ${content}`;
         }
-        this.turns.push({role, content});
+        this.turns.push({ role, content });
 
         if (this.turns.length >= this.max_messages) {
             let chunk = this.turns.splice(0, this.summary_chunk_size);
@@ -84,6 +134,7 @@ export class History {
             const data = {
                 memory: this.memory,
                 turns: this.turns,
+                errors: this.errors, // Persist errors for failure-aware planning
                 self_prompting_state: this.agent.self_prompter.state,
                 self_prompt: this.agent.self_prompter.isStopped() ? null : this.agent.self_prompter.prompt,
                 taskStart: this.agent.task.taskStartTime,
@@ -106,7 +157,9 @@ export class History {
             const data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
             this.memory = data.memory || '';
             this.turns = data.turns || [];
+            this.errors = data.errors || []; // Load errors for failure-aware planning
             console.log('Loaded memory:', this.memory);
+            console.log(`[History] Loaded ${this.errors.length} error records.`);
             return data;
         } catch (error) {
             console.error('Failed to load history:', error);
@@ -117,5 +170,6 @@ export class History {
     clear() {
         this.turns = [];
         this.memory = '';
+        this.errors = []; // Clear errors too
     }
 }

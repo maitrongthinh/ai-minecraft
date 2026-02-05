@@ -62,7 +62,8 @@ class ActionLogger {
             category: category.toUpperCase(),
             event,
             data,
-            world_id: worldId
+            world_id: worldId,
+            request_id: data.requestId || null // Task 29: Link Vision -> Thought -> Action
         };
 
         this.buffer.push(entry);

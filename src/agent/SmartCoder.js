@@ -2,6 +2,7 @@
 import { Coder } from './coder.js';
 import { SkillLibrary } from '../skills/SkillLibrary.js';
 import { lockdown } from './library/lockdown.js';
+import { JsonSanitizer } from '../utils/JsonSanitizer.js'; // Task 26: Data Integrity
 
 export class SmartCoder extends Coder {
     constructor(agent) {
@@ -18,7 +19,10 @@ export class SmartCoder extends Coder {
         const lastMessage = messages[messages.length - 1];
         const intent = lastMessage.content; // Simplified intent extraction
 
-        // 2. Search Skill Library (Semantic Search)
+        // Reset reference code for this generation
+        this.referenceCode = null;
+
+        // 2. Search Skill Library (Keyword Search)
         // Skip if it's a system error feedback loop
         if (lastMessage.role !== 'system') {
             const skill = this.library.search(intent);
@@ -30,7 +34,26 @@ export class SmartCoder extends Coder {
                     return `Executed cached skill '${skill.name}':\n${result.summary}`;
                 } else {
                     console.warn(`[SmartCoder] Cached skill '${skill.name}' failed. Falling back to generation.`);
-                    // Fallback to generation if cached skill fails (maybe context changed)
+                    // Keep failed skill as reference
+                    this.referenceCode = skill.code;
+                }
+            }
+
+            // 2.5. MEMORY GAP B FIX: Fallback to Vector Search if keyword search failed
+            if (!skill && this.agent.dreamer) {
+                try {
+                    const memories = await this.agent.dreamer.searchMemories(intent);
+                    const codeMemory = memories.find(m =>
+                        m.metadata?.source === 'skill' ||
+                        m.text?.includes('async ') ||
+                        m.text?.includes('function ')
+                    );
+                    if (codeMemory) {
+                        console.log(`[SmartCoder] Found code reference from VectorStore`);
+                        this.referenceCode = codeMemory.text;
+                    }
+                } catch (e) {
+                    console.warn('[SmartCoder] VectorStore search failed:', e.message);
                 }
             }
         }
@@ -43,6 +66,7 @@ export class SmartCoder extends Coder {
         return await this._generateAndLearn(agent_history);
     }
 
+
     async _generateAndLearn(agent_history) {
         // This is a copy of Coder.generateCode but with "Save Skill" logic
         // and using DualBrain routing if possible (Agent already doing it via prompter)
@@ -51,7 +75,15 @@ export class SmartCoder extends Coder {
         lockdown();
 
         let messages = agent_history.getHistory();
-        messages.push({ role: 'system', content: 'Code generation started. Write code in codeblock.' });
+
+        // MEMORY GAP B FIX: Inject reference code if found from VectorStore
+        let systemPrompt = 'Code generation started. Write code in codeblock.';
+        if (this.referenceCode) {
+            systemPrompt += `\n\n📚 REFERENCE CODE (from past similar task - adapt if useful):\n\`\`\`javascript\n${this.referenceCode.slice(0, 500)}...\n\`\`\``;
+            console.log('[SmartCoder] Injected reference code into generation prompt');
+        }
+        messages.push({ role: 'system', content: systemPrompt });
+
 
         const MAX_ATTEMPTS = 5;
         let no_code_failures = 0;
@@ -109,14 +141,17 @@ export class SmartCoder extends Coder {
                 response = await this.agent.prompter.chat(prompt);
             }
 
-            // Extract JSON
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const meta = JSON.parse(jsonMatch[0]);
-                this.library.addSkill(meta.name, code, meta.description, meta.tags);
-            }
-        } catch (e) {
-            console.error("[SmartCoder] Failed to save skill:", e);
         }
+
+            // Task 26: Use JsonSanitizer for dirty parsing
+            const meta = JsonSanitizer.parse(response);
+        if (meta && meta.name) {
+            this.library.addSkill(meta.name, code, meta.description, meta.tags);
+        } else {
+            console.warn("[SmartCoder] Could not parse skill metadata from response:", response);
+        }
+    } catch(e) {
+        console.error("[SmartCoder] Failed to save skill:", e);
     }
+}
 }

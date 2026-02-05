@@ -45,20 +45,21 @@ export class DualBrain {
      * CHAT: Uses MiniMax for all conversation
      */
     async chat(messages) {
-        ActionLogger.api('chat_request', { msgCount: messages.length });
+        const requestId = this.agent.latestRequestId;
+        ActionLogger.api('chat_request', { msgCount: messages.length, requestId });
 
         if (!this._checkBudget()) {
-            ActionLogger.api('chat_budget_exceeded', { budget: `${this.requestCount}/${this.limit}` });
+            ActionLogger.api('chat_budget_exceeded', { budget: `${this.requestCount}/${this.limit}`, requestId });
             return 'Xin lỗi, tôi đã dùng hết budget API cho hôm nay. Hãy thử lại sau.';
         }
 
         try {
             const res = await this.prompter.chat(messages, this.model);
             this._consumeBudget();
-            ActionLogger.api('chat_success', { budget: `${this.requestCount}/${this.limit}` });
+            ActionLogger.api('chat_success', { budget: `${this.requestCount}/${this.limit}`, requestId });
             return res;
         } catch (error) {
-            ActionLogger.error('chat_failed', { error: error.message });
+            ActionLogger.error('chat_failed', { error: error.message, requestId });
             return 'Có lỗi xảy ra khi xử lý tin nhắn.';
         }
     }
@@ -67,10 +68,11 @@ export class DualBrain {
      * PLAN: Uses MiniMax with strategic context
      */
     async plan(context, worldId = null) {
-        ActionLogger.api('plan_request', { contextMsgs: context.length, worldId }, worldId);
+        const requestId = this.agent.latestRequestId;
+        ActionLogger.api('plan_request', { contextMsgs: context.length, worldId, requestId }, worldId);
 
         if (!this._checkBudget()) {
-            ActionLogger.api('plan_budget_exceeded', { budget: `${this.requestCount}/${this.limit}` }, worldId);
+            ActionLogger.api('plan_budget_exceeded', { budget: `${this.requestCount}/${this.limit}`, requestId }, worldId);
             return 'Budget API đã hết. Không thể lập kế hoạch phức tạp.';
         }
 
@@ -91,10 +93,10 @@ export class DualBrain {
         try {
             const res = await this.prompter.chat(enrichedContext, this.model);
             this._consumeBudget();
-            ActionLogger.api('plan_success', { budget: `${this.requestCount}/${this.limit}` }, worldId);
+            ActionLogger.api('plan_success', { budget: `${this.requestCount}/${this.limit}`, requestId }, worldId);
             return res;
         } catch (error) {
-            ActionLogger.error('plan_failed', { error: error.message }, worldId);
+            ActionLogger.error('plan_failed', { error: error.message, requestId }, worldId);
             return 'Có lỗi khi lập kế hoạch. Hãy thử lại.';
         }
     }
@@ -103,10 +105,11 @@ export class DualBrain {
      * CODE: Uses MiniMax for code generation
      */
     async code(prompt, worldId = null) {
-        ActionLogger.api('code_request', { promptLength: prompt.length }, worldId);
+        const requestId = this.agent.latestRequestId;
+        ActionLogger.api('code_request', { promptLength: prompt.length, requestId }, worldId);
 
         if (!this._checkBudget()) {
-            ActionLogger.api('code_budget_exceeded', { budget: `${this.requestCount}/${this.limit}` }, worldId);
+            ActionLogger.api('code_budget_exceeded', { budget: `${this.requestCount}/${this.limit}`, requestId }, worldId);
             throw new Error('Budget Exceeded for Coding.');
         }
 
@@ -115,7 +118,7 @@ export class DualBrain {
         try {
             const res = await this.prompter.generateCode(enrichedPrompt, this.model);
             this._consumeBudget();
-            ActionLogger.api('code_success', { budget: `${this.requestCount}/${this.limit}` }, worldId);
+            ActionLogger.api('code_success', { budget: `${this.requestCount}/${this.limit}`, requestId }, worldId);
             return res;
         } catch (error) {
             ActionLogger.error('code_failed', { error: error.message }, worldId);

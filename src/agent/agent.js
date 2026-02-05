@@ -32,7 +32,10 @@ import { Watchdog } from './reflexes/Watchdog.js';
 import { MinecraftWiki } from '../tools/MinecraftWiki.js';
 import { DebugCommands } from './commands/DebugCommands.js'; // Phase 7.5: In-game debug
 import { ActionLogger } from '../utils/ActionLogger.js'; // Phase 7.5: File logging
+import { StateStack, STATE_PRIORITY } from './StateStack.js'; // Brain Refactor: Multi-tasking
+import { StateStack, STATE_PRIORITY } from './StateStack.js'; // Brain Refactor: Multi-tasking
 import { randomUUID } from 'crypto';
+import { HealthMonitor } from '../process/HealthMonitor.js'; // Task 28: Health Monitor
 
 /**
  * PRODUCTION-READY AGENT CLASS (Dual-Brain Edition)
@@ -44,6 +47,8 @@ export class Agent {
         this.count_id = count_id;
         this._disconnectHandled = false;
         this.running = true; // Lifecycle flag to manage update loop
+        this.latestRequestId = null; // Task 27: Interrupt Handling
+
 
         // Initialize components
         this.actions = new ActionManager(this);
@@ -80,8 +85,23 @@ export class Agent {
         this.arbiter = new Arbiter(this);
         this.arbiter = new Arbiter(this);
         this.planner = new StrategyPlanner(this); // Task 14: Initialize Strategy Planner
+        this.spatial = new SpatialMemory(this);   // Task 22: Persistent Vision Memory
+        this.wiki = new MinecraftWiki(this); // Task 19: Initialize Wiki Tool
         this.wiki = new MinecraftWiki(this); // Task 19: Initialize Wiki Tool
         this.debugCommands = new DebugCommands(this); // Phase 7.5: In-game debug commands
+        this.healthMonitor = new HealthMonitor(this); // Task 28: Health Monitor
+        this.healthMonitor.start();
+
+
+        // Brain Refactor Phase B: StateStack for multi-tasking
+        this.stateStack = new StateStack(this);
+
+        // Brain Refactor Phase D: Flags for reflex guard
+        this.flags = {
+            critical_action: false, // True during precision work (building, combat)
+            allow_reflex: true       // Master switch for reflexes
+        };
+
         convoManager.initAgent(this);
         // Wrap async init in try/catch
         try {
@@ -416,7 +436,7 @@ export class Agent {
 
                 // SAFETY CHECK (Task 15)
                 if (this.arbiter) {
-                    const safetyObj = this.arbiter.checkSafety(user_command_name);
+                    const safetyObj = this.arbiter.checkSafety(user_command_name, source);
                     if (!safetyObj.safe) {
                         this.routeResponse(source, `🚫 ACTION BLOCKED: ${safetyObj.reason}`);
                         this.history.add('system', `Action '${user_command_name}' blocked by Arbiter: ${safetyObj.reason}`);
@@ -472,9 +492,20 @@ export class Agent {
 
         const checkInterrupt = () => this.self_prompter.shouldInterrupt(self_prompt) || this.shut_up || convoManager.responseScheduledFor(source);
 
+        // Task 27: Generate Request ID
+        const requestId = randomUUID();
+        this.latestRequestId = requestId;
+
         // [Existing Loop logic preserved for safety in Phase 01, but logic is cleaner]
         for (let i = 0; i < max_responses; i++) {
             if (checkInterrupt()) break;
+
+            // Task 27: Check for Stale Request
+            if (this.latestRequestId !== requestId) {
+                console.log(`[Agent] Interrupting stale request ${requestId} (New: ${this.latestRequestId})`);
+                break;
+            }
+
             let history = this.history.getHistory();
 
             // IMPORTANT: Here we decide model based on context.
@@ -507,6 +538,13 @@ export class Agent {
                 res = truncCommandMessage(res);
                 this.history.add(this.name, res);
 
+                // Task 27: Check for Stale Request BEFORE Execution
+                if (this.latestRequestId !== requestId) {
+                    console.log(`[Agent] Aborting stale action execution for ${requestId}`);
+                    break;
+                }
+
+
                 if (!commandExists(command_name)) {
                     this.history.add('system', `Command ${command_name} does not exist.`);
                     continue;
@@ -534,7 +572,8 @@ export class Agent {
 
                 // SAFETY CHECK FOR AI COMMANDS (Fix)
                 if (this.arbiter) {
-                    const safetyObj = this.arbiter.checkSafety(command_name);
+                    // For AI generated commands, we check the original requester (source)
+                    const safetyObj = this.arbiter.checkSafety(command_name, source);
                     if (!safetyObj.safe) {
                         const blockMsg = `🚫 AI ACTION BLOCKED: ${safetyObj.reason}`;
                         console.warn(blockMsg);

@@ -8,7 +8,10 @@ import settings from '../agent/settings.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'url';
 import { selectAPI, createModel } from './_model_map.js';
+import { RequestQueue } from '../utils/RequestQueue.js'; // Task 25: API Reliability Layer
+import { JsonSanitizer } from '../utils/JsonSanitizer.js'; // Task 26: Data Integrity
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -97,7 +100,11 @@ export class Prompter {
                 throw new Error('Failed to save profile:', err);
             }
             console.log("Copy profile saved.");
+            console.log("Copy profile saved.");
         });
+
+        // Task 25: Initialize API Request Queue
+        this.requestQueue = new RequestQueue({ requestsPerMinute: 15 }); // Adjust based on model
     }
 
     getName() {
@@ -241,7 +248,12 @@ export class Prompter {
             let generation;
 
             try {
-                generation = await this.chat_model.sendRequest(messages, prompt);
+                // Task 25: Use RequestQueue with NORMAL priority
+                generation = await this.requestQueue.add(
+                    () => this.chat_model.sendRequest(messages, prompt),
+                    { priority: this.requestQueue.PRIORITY.NORMAL }
+                );
+
                 if (typeof generation !== 'string') {
                     console.error('Error: Generated response is not a string', generation);
                     throw new Error('Generated response is not a string');
@@ -286,7 +298,11 @@ export class Prompter {
         let prompt = this.profile.coding;
         prompt = await this.replaceStrings(prompt, messages, this.coding_examples);
 
-        let resp = await this.code_model.sendRequest(messages, prompt);
+        // Task 25: Use RequestQueue with HIGH priority
+        let resp = await this.requestQueue.add(
+            () => this.code_model.sendRequest(messages, prompt),
+            { priority: this.requestQueue.PRIORITY.HIGH }
+        );
         this.awaiting_coding = false;
         await this._saveLog(prompt, messages, resp, 'coding');
         return resp;
@@ -296,7 +312,13 @@ export class Prompter {
         await this.checkCooldown();
         let prompt = this.profile.saving_memory;
         prompt = await this.replaceStrings(prompt, null, null, to_summarize);
-        let resp = await this.chat_model.sendRequest([], prompt);
+
+        // Task 25: Use RequestQueue with LOW priority (Background task)
+        let resp = await this.requestQueue.add(
+            () => this.chat_model.sendRequest([], prompt),
+            { priority: this.requestQueue.PRIORITY.LOW }
+        );
+
         await this._saveLog(prompt, to_summarize, resp, 'memSaving');
         if (resp?.includes('</think>')) {
             const [_, afterThink] = resp.split('</think>')
@@ -311,7 +333,12 @@ export class Prompter {
         let messages = this.agent.history.getHistory();
         messages.push({ role: 'user', content: new_message });
         prompt = await this.replaceStrings(prompt, null, null, messages);
-        let res = await this.chat_model.sendRequest([], prompt);
+
+        // Task 25: Use RequestQueue with NORMAL priority
+        let res = await this.requestQueue.add(
+            () => this.chat_model.sendRequest([], prompt),
+            { priority: this.requestQueue.PRIORITY.NORMAL }
+        );
         return res.trim().toLowerCase() === 'respond';
     }
 
@@ -319,7 +346,12 @@ export class Prompter {
         await this.checkCooldown();
         let prompt = this.profile.image_analysis;
         prompt = await this.replaceStrings(prompt, messages, null, null, null);
-        return await this.vision_model.sendVisionRequest(messages, prompt, imageBuffer);
+
+        // Task 25: Use RequestQueue with HIGH priority (Vision is critical perception)
+        return await this.requestQueue.add(
+            () => this.vision_model.sendVisionRequest(messages, prompt, imageBuffer),
+            { priority: this.requestQueue.PRIORITY.HIGH }
+        );
     }
 
     async promptGoalSetting(messages, last_goals) {
@@ -332,12 +364,16 @@ export class Prompter {
         user_message = await this.replaceStrings(user_message, messages, null, null, last_goals);
         let user_messages = [{ role: 'user', content: user_message }];
 
-        let res = await this.chat_model.sendRequest(user_messages, system_message);
+        // Task 25: Use RequestQueue with NORMAL priority
+        let res = await this.requestQueue.add(
+            () => this.chat_model.sendRequest(user_messages, system_message),
+            { priority: this.requestQueue.PRIORITY.NORMAL }
+        );
 
         let goal = null;
         try {
-            let data = res.split('```')[1].replace('json', '').trim();
-            goal = JSON.parse(data);
+            // Task 26: Use JsonSanitizer
+            goal = JsonSanitizer.parse(res);
         } catch (err) {
             console.log('Failed to parse goal:', res, err);
         }
