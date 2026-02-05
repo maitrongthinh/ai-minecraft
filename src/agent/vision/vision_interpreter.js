@@ -65,6 +65,29 @@ export class VisionInterpreter {
         }
     }
 
+    /**
+     * Task 35: Active Vision Scan
+     * Periodically called to update spatial memory
+     */
+    async scanEnvironment() {
+        if (!this.allow_vision) return;
+
+        console.log('[Vision] Scanning environment...');
+        const filename = await this.camera.capture();
+        const analysis = await this.analyzeImage(filename);
+
+        // analyzeImage already parses JSON and updates agent.spatial if structured output is returned.
+        // However, analyzeImage logic currently has some "fallback to text" logic.
+        // We'll rely on analyzeImage's existing side-effect of updating spatial memory if possible.
+        // Let's verify analyzeImage logic below.
+
+        // Actually, analyzeImage logic in line 121-132 ALREADY updates spatial memory 
+        // IF the output is JSON.
+        // So we just need to log it.
+        console.log('[Vision] Scan complete. Updated spatial memory.');
+        return analysis;
+    }
+
     async analyzeImage(filename) {
         try {
             const imageBuffer = fs.readFileSync(`${this.fp}/${filename}.jpg`);

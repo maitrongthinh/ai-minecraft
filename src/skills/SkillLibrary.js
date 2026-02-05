@@ -222,9 +222,11 @@ ${code}
 
             // Task 11: Auto-trigger optimization after 10 successful uses
             if (skill.success_count >= 10 && this.skillOptimizer) {
-                // Don't await - run in background
-                this.autoOptimizeSkill(name).catch(err => {
-                    console.error(`[SkillLibrary] Auto-optimization error:`, err.message);
+                // Task 36: Ensure non-blocking execution using setImmediate
+                setImmediate(() => {
+                    this.autoOptimizeSkill(name).catch(err => {
+                        console.error(`[SkillLibrary] Auto-optimization error:`, err.message);
+                    });
                 });
             }
         } catch (err) {
