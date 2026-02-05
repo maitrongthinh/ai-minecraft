@@ -59,6 +59,17 @@ export class VisionInterpreter {
         const targetBlock = bot.blockAtCursor(maxDistance);
 
         if (targetBlock) {
+            // Task 1 (Healing): Vision -> Memory Bridge
+            // Instantly update spatial memory with what we are looking at (Raycast is cheap)
+            if (this.agent.spatial) {
+                this.agent.spatial.update([{
+                    type: 'block',
+                    name: targetBlock.name,
+                    position: targetBlock.position,
+                    confidence: 1.0,
+                    source: 'raycast'
+                }]);
+            }
             return `Block at center view: ${targetBlock.name} at (${targetBlock.position.x}, ${targetBlock.position.y}, ${targetBlock.position.z})`;
         } else {
             return "No block in center view";

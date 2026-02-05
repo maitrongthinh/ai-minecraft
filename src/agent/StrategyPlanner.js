@@ -147,7 +147,9 @@ export class StrategyPlanner {
             // Trigger DualBrain to plan for this goal
             const failureContext = this.getFailureContext();
             const memoryContext = await this.getMemoryContext(this.currentGoal.description);
-            const prompt = `STRATEGIC GOAL (Attempt ${this.currentGoal.attempt_count}/3): ${this.currentGoal.description}.${failureContext}${memoryContext}\nPlan the next steps carefully.`;
+            const spatialContext = this.getSpatialContext(this.currentGoal.description);
+
+            const prompt = `STRATEGIC GOAL (Attempt ${this.currentGoal.attempt_count}/3): ${this.currentGoal.description}.${failureContext}${memoryContext}${spatialContext}\nPlan the next steps carefully.`;
             await this.agent.handleMessage('system', prompt);
         }
     }
@@ -201,10 +203,39 @@ export class StrategyPlanner {
 
             // BRAIN REFACTOR Phase C: Inject failure context in survival prompts too
             // MEMORY GAP C FIX: Also inject memory context for survival decisions
+            // ARCHITECTURAL HEALING: Inject Spatial Context
             const failureContext = this.getFailureContext();
             const memoryContext = await this.getMemoryContext(criticalNeed);
-            await this.agent.handleMessage('system', `SURVIVAL INTERRUPT: ${criticalNeed}${failureContext}${memoryContext}`);
+            const spatialContext = this.getSpatialContext(criticalNeed); // New Task 2
+
+            await this.agent.handleMessage('system', `SURVIVAL INTERRUPT: ${criticalNeed}${failureContext}${memoryContext}${spatialContext}`);
         }
+    }
+
+    /**
+     * ARCHITECTURAL HEALING Task 2: Get spatial context (Attention Mechanism)
+     * Filters spatial memory for items relevant to the goal
+     * @param {string} query - Goal description or concept
+     */
+    getSpatialContext(query) {
+        if (!this.agent.spatial) return '';
+
+        // Simple keyword extraction or just pass the full query
+        // SpatialMemory.search does a substring match on 'name' or 'type'
+        // For a complex goal like "Get diamonds", "diamond" is the keyword.
+        // For now, valid heuristic: query is the filter.
+
+        // Attention Filter: Only items explicitly mentioned or highly relevant?
+        // Let's use the query string directly.
+        // But the query might be "Craft a furnace". We need "cobblestone" or "furnace".
+        // This effectively requires an NLP keyword extractor or just sending "nearby interesting items".
+
+        // Strategy: 
+        // 1. Search for keywords in the query (naïve)
+        // 2. ALSO Get a generic "What is around me" summary (short-term memory context)
+
+        // Option 2 is safer for general context.
+        return '\n' + this.agent.spatial.getShortTermMemoryContext(10) + '\n';
     }
 
     /**

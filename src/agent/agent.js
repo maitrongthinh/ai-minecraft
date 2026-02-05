@@ -33,9 +33,9 @@ import { MinecraftWiki } from '../tools/MinecraftWiki.js';
 import { DebugCommands } from './commands/DebugCommands.js'; // Phase 7.5: In-game debug
 import { ActionLogger } from '../utils/ActionLogger.js'; // Phase 7.5: File logging
 import { StateStack, STATE_PRIORITY } from './StateStack.js'; // Brain Refactor: Multi-tasking
-import { StateStack, STATE_PRIORITY } from './StateStack.js'; // Brain Refactor: Multi-tasking
 import { randomUUID } from 'crypto';
 import { HealthMonitor } from '../process/HealthMonitor.js'; // Task 28: Health Monitor
+import { MentalSnapshot } from '../utils/MentalSnapshot.js'; // Phase 11: Architectural Healing
 
 /**
  * PRODUCTION-READY AGENT CLASS (Dual-Brain Edition)
@@ -90,8 +90,15 @@ export class Agent {
         this.wiki = new MinecraftWiki(this); // Task 19: Initialize Wiki Tool
         this.debugCommands = new DebugCommands(this); // Phase 7.5: In-game debug commands
         this.healthMonitor = new HealthMonitor(this); // Task 28: Health Monitor
+        this.healthMonitor = new HealthMonitor(this); // Task 28: Health Monitor
         this.healthMonitor.start();
 
+        // Phase 11: Mental Snapshot (Persistence)
+        this.mentalSnapshot = new MentalSnapshot(this);
+        // Async load (fire and forget, or await if critical? Await is safer for state stack restoration)
+        this.mentalSnapshot.load().then(loaded => {
+            if (loaded) console.log('[Agent] 🧠 Restored mental state from snapshot.');
+        });
 
         // Brain Refactor Phase B: StateStack for multi-tasking
         this.stateStack = new StateStack(this);
@@ -783,7 +790,24 @@ export class Agent {
                 }
                 else if (stateName === 'idle') {
                     // Idle State: Light self-maintenance or observation
-                    // Don't do heavy processing here
+                    // Phase 11: Territorial Instinct (Social Reflex)
+                    if (this.humanManager) {
+                        try {
+                            const intruders = this.humanManager.getNearbyUntrustedPlayers(20); // 20 blocks radius
+                            if (intruders.length > 0) {
+                                // Found stranger -> Warn them!
+                                const target = intruders[0];
+                                console.log(`[SocialReflex] Detected intruder: ${target.username}`);
+                                // Push warning state or just act immediately?
+                                // Let's push a short-lived interaction state if possible, or just chat.
+                                // Simplest: Chat warning + Face them.
+                                this.bot.lookAt(target.position.offset(0, 1.6, 0));
+                                this.actions.execute('chat', { message: `Hey ${target.username}, what are you doing here? This is my territory.` });
+                            }
+                        } catch (e) {
+                            // ignore social errors
+                        }
+                    }
                 }
                 else {
                     // New State (no legacy mode) -> Needs specific handling
