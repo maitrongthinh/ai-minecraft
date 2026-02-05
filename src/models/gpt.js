@@ -16,12 +16,12 @@ export class GPT {
         if (hasKey('OPENAI_ORG_ID'))
             config.organization = getKey('OPENAI_ORG_ID');
 
-        config.apiKey = getKey('OPENAI_API_KEY');
+        config.apiKey = params?.apiKey || getKey('OPENAI_API_KEY');
 
         this.openai = new OpenAIApi(config);
     }
 
-    async sendRequest(turns, systemMessage, stop_seq='***') {
+    async sendRequest(turns, systemMessage, stop_seq = '***') {
         let messages = strictFormat(turns);
         messages = messages.map(message => {
             message.content += stop_seq;
@@ -36,7 +36,7 @@ export class GPT {
             // if a custom URL is set, use chat.completions
             // because custom "OpenAI-compatible" endpoints likely do not have responses endpoint
             if (this.url) {
-                let messages = [{'role': 'system', 'content': systemMessage}].concat(turns);
+                let messages = [{ 'role': 'system', 'content': systemMessage }].concat(turns);
                 messages = strictFormat(messages);
                 const pack = {
                     model: model,
@@ -49,10 +49,10 @@ export class GPT {
                 }
                 let completion = await this.openai.chat.completions.create(pack);
                 if (completion.choices[0].finish_reason == 'length')
-                    throw new Error('Context length exceeded'); 
+                    throw new Error('Context length exceeded');
                 console.log('Received.');
                 res = completion.choices[0].message.content;
-            } 
+            }
             // otherwise, use responses
             else {
                 let messages = strictFormat(turns);
@@ -99,7 +99,7 @@ export class GPT {
                 }
             ]
         });
-        
+
         return this.sendRequest(imageMessages, systemMessage);
     }
 

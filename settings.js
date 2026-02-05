@@ -1,11 +1,11 @@
 const settings = {
     "minecraft_version": "auto", // or specific version like "1.21.6"
     "host": "127.0.0.1", // or "localhost", "your.ip.address.here"
-    "port": 55916, // set to -1 to automatically scan for open ports
+    "port": 5000, // Minecraft server port
     "auth": "offline", // or "microsoft"
 
     // the mindserver manages all agents and hosts the UI
-    "mindserver_port": 8080,
+    "mindserver_port": 8090,
     "auto_open_ui": true, // opens UI in browser on startup
 
     "base_profile": "assistant", // survival, assistant, creative, or god_mode
@@ -58,18 +58,29 @@ const settings = {
 
     "log_all_prompts": false, // log ALL prompts to file
 
-    // Dual-Brain Configuration
+    // Single Model Configuration (MiniMax-M2 via MegaLLM)
     "models": {
         "high_iq": {
             "provider": "openai",
-            "model": "gpt-4o",
+            "model": "minimax-m2", // MiniMax-M2 model
+            "url": "https://ai.megallm.io/v1",
+            "params": {
+                "apiKey": process.env.MEGALLM_API_KEY
+            },
             "rate_limit": 200 // requests per 12h
-        },
-        "fast": {
-            "provider": "google", // or 'local', 'ollama'
-            "model": "gemini-flash"
         }
+        // Note: "fast" model removed - using single MiniMax for all tasks
     },
+
+    // Cognee Memory Service Configuration
+    "cognee_service_url": "http://localhost:8001",
+
+    // Watchdog Configuration (Anti-Stuck System)
+    "watchdog": {
+        "enabled": true,
+        "stuck_timeout_seconds": 180,   // Time before triggering emergency (3 min)
+        "check_interval_ms": 3000       // How often to check position
+    }
 
 }
 

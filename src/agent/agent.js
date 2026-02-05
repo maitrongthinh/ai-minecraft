@@ -18,11 +18,21 @@ import convoManager from './conversation.js';
 import { handleTranslation, handleEnglishTranslation } from '../utils/translator.js';
 import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
-import settings from './settings.js';
+import settings from '../../settings.js';
 import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
-import { DualBrain } from '../brain/DualBrain.js'; // Imported DualBrain
+import { DualBrain } from '../brain/DualBrain.js';
+import { CogneeMemoryBridge } from '../memory/CogneeMemoryBridge.js';
+import { SkillLibrary } from '../skills/SkillLibrary.js';
+import { SkillOptimizer } from '../skills/SkillOptimizer.js';
+import { StrategyPlanner } from './StrategyPlanner.js';
+import { DeathRecovery } from './reflexes/DeathRecovery.js';
+import { Watchdog } from './reflexes/Watchdog.js';
+import { MinecraftWiki } from '../tools/MinecraftWiki.js';
+import { DebugCommands } from './commands/DebugCommands.js'; // Phase 7.5: In-game debug
+import { ActionLogger } from '../utils/ActionLogger.js'; // Phase 7.5: File logging
+import { randomUUID } from 'crypto';
 
 /**
  * PRODUCTION-READY AGENT CLASS (Dual-Brain Edition)
@@ -39,8 +49,14 @@ export class Agent {
         this.actions = new ActionManager(this);
         this.prompter = new Prompter(this, settings.profile);
 
+        // Initialize Graph Memory (Task 6)
+        // Note: CogneeMemoryBridge will be init in spawn event after world_id is generated
+        this.cogneeMemory = null;
+        this.world_id = null;
+
         // Initialize Central Nervous System (DualBrain)
-        this.brain = new DualBrain(this.prompter);
+        // Initialize Central Nervous System (DualBrain)
+        this.brain = new DualBrain(this, this.prompter);
 
         this.name = (this.prompter.getName() || '').trim();
         console.log(`Initializing agent ${this.name}...`);
@@ -62,6 +78,10 @@ export class Agent {
         this.blueprintManager = new BlueprintManager();
         this.humanManager = new HumanManager(this);
         this.arbiter = new Arbiter(this);
+        this.arbiter = new Arbiter(this);
+        this.planner = new StrategyPlanner(this); // Task 14: Initialize Strategy Planner
+        this.wiki = new MinecraftWiki(this); // Task 19: Initialize Wiki Tool
+        this.debugCommands = new DebugCommands(this); // Phase 7.5: In-game debug commands
         convoManager.initAgent(this);
         // Wrap async init in try/catch
         try {
@@ -143,6 +163,37 @@ export class Agent {
                 console.log(`${this.name} spawned.`);
                 this.clearBotLogs();
 
+                // Task 6: Generate unique world_id and initialize Cognee Memory
+                this.world_id = randomUUID();
+                console.log(`[Task 6] Generated world_id: ${this.world_id}`);
+
+                try {
+                    const cogneeServiceUrl = settings.cognee_service_url || 'http://localhost:8001';
+                    this.cogneeMemory = new CogneeMemoryBridge(this, cogneeServiceUrl);
+                    await this.cogneeMemory.init();
+                    console.log('[Task 6] ✓ Cognee Memory Bridge initialized');
+
+                    // Task 9: Initialize SkillLibrary
+                    this.skillLibrary = new SkillLibrary();
+                    await this.skillLibrary.init();
+                    console.log('[Task 9] ✓ SkillLibrary initialized');
+
+                    // Task 10: Initialize SkillOptimizer
+                    this.skillOptimizer = new SkillOptimizer(this, this.skillLibrary);
+
+                    // Task 11: Link optimizer to library for auto-optimization
+                    this.skillLibrary.setOptimizer(this.skillOptimizer);
+                    console.log('[Task 11] ✓ SkillOptimizer linked for auto-optimization');
+
+                    // Task 12: Reinitialize DualBrain with Cognee context and Skill Catalog
+                    this.brain = new DualBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
+                    console.log('[Task 12] ✓ DualBrain updated with Cognee context and Skill Catalog');
+                } catch (err) {
+                    console.warn('[Agent] Failed to initialize AI subsystems (Cognee/Skills):', err.message);
+                    // Fallback: minimal DualBrain if advanced init fails
+                    if (!this.brain) this.brain = new DualBrain(this, this.prompter);
+                }
+
                 await this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
 
@@ -164,6 +215,14 @@ export class Agent {
                 await new Promise((resolve) => setTimeout(resolve, 10000));
                 // Only check if still running
                 if (this.running) this.checkAllPlayersPresent();
+
+                // Initialize Reflexes (Task 16 & 17)
+                this.deathRecovery = new DeathRecovery(this);
+                this.watchdog = new Watchdog(this);
+                this.watchdog.start();
+
+                // Check for pending recovery on spawn
+                await this.deathRecovery.onSpawn();
 
             } catch (error) {
                 console.error('Error in spawn event:', error);
@@ -205,6 +264,16 @@ export class Agent {
 
                 this.shut_up = false;
                 console.log(this.name, 'received message from', username, ':', message);
+
+                // Task 6: Auto-store player interactions to Cognee
+                if (this.cogneeMemory && this.world_id) {
+                    const interaction = `Player ${username} said: "${message}"`;
+                    this.cogneeMemory.storeExperience(this.world_id, [interaction], {
+                        type: 'player_interaction',
+                        timestamp: Date.now(),
+                        player: username
+                    }).catch(err => console.warn('[Task 6] Failed to store interaction:', err.message));
+                }
 
                 if (convoManager.isOtherAgent(username)) {
                     console.warn('received whisper from other bot??')
@@ -309,6 +378,13 @@ export class Agent {
             return false;
         }
 
+        // Phase 7.5: Intercept !debug commands
+        if (this.debugCommands && this.debugCommands.isDebugCommand(message)) {
+            const debugResponse = await this.debugCommands.handle(message);
+            this.routeResponse(source, debugResponse);
+            return true;
+        }
+
         const self_prompt = source === 'system' || source === this.name;
         const from_other_bot = convoManager.isOtherAgent(source);
 
@@ -337,6 +413,16 @@ export class Agent {
                 }
 
                 this.routeResponse(source, `*${source} used ${user_command_name.substring(1)}*`);
+
+                // SAFETY CHECK (Task 15)
+                if (this.arbiter) {
+                    const safetyObj = this.arbiter.checkSafety(user_command_name);
+                    if (!safetyObj.safe) {
+                        this.routeResponse(source, `🚫 ACTION BLOCKED: ${safetyObj.reason}`);
+                        this.history.add('system', `Action '${user_command_name}' blocked by Arbiter: ${safetyObj.reason}`);
+                        return false;
+                    }
+                }
 
                 // EXECUTE COMMAND (High IQ might be needed for code, but executeCommand handles it)
                 let execute_res = await executeCommand(this, message);
@@ -446,6 +532,18 @@ export class Agent {
                         this.routeResponse(source, pre_message);
                 }
 
+                // SAFETY CHECK FOR AI COMMANDS (Fix)
+                if (this.arbiter) {
+                    const safetyObj = this.arbiter.checkSafety(command_name);
+                    if (!safetyObj.safe) {
+                        const blockMsg = `🚫 AI ACTION BLOCKED: ${safetyObj.reason}`;
+                        console.warn(blockMsg);
+                        this.history.add('system', blockMsg);
+                        // Force break loop to prevent infinite retry of blocking action
+                        break;
+                    }
+                }
+
                 let execute_res = await executeCommand(this, res);
                 if (execute_res)
                     this.history.add('system', execute_res);
@@ -547,6 +645,27 @@ export class Agent {
                     death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.x.toFixed(2)}`;
                 }
                 let dimention = this.bot.game.dimension;
+
+                // Task 6: Auto-store death events to Cognee
+                if (this.cogneeMemory && this.world_id) {
+                    const deathFact = `Died at ${death_pos_text || "unknown"} in ${dimention} dimension. Cause: ${message}`;
+                    this.cogneeMemory.storeExperience(this.world_id, [deathFact], {
+                        type: 'death_event',
+                        timestamp: Date.now(),
+                        position: death_pos,
+                        dimension: dimention,
+                        cause: message
+                    }).catch(err => console.warn('[Task 6] Failed to store death event:', err.message));
+                }
+
+                // Task 6: Auto-store death events to Cognee
+                // ... (Existing Cognee logic) ...
+
+                // Task 16: Trigger Death Reflex Recording
+                if (this.deathRecovery) {
+                    this.deathRecovery.onDeath(message);
+                }
+
                 this.handleMessage('system', `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`);
             }
         });
@@ -599,6 +718,7 @@ export class Agent {
     async update(delta) {
         if (this.bot.modes) await this.bot.modes.update();
         if (this.self_prompter) this.self_prompter.update(delta);
+        if (this.planner) await this.planner.update(); // Task 14: Update Planner
         await this.checkTaskDone();
     }
 

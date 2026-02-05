@@ -1,0 +1,17 @@
+{
+  "iron pickaxe": {
+    "timestamp": 1770284133990,
+    "data": {
+      "recipes": []
+    }
+  },
+  "zombie": {
+    "timestamp": 1770284133981,
+    "data": {
+      "name": "zombie",
+      "hp": "Unknown",
+      "drops": "Unknown",
+      "summary": "A zombie is a common undead type of hostile mob that deals melee damage and drops rotten flesh on death."
+    }
+  }
+}
