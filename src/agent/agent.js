@@ -669,6 +669,18 @@ export class Agent {
             prev_health = this.bot.health;
         });
 
+        // Task 35 Fix: Auto-Gear Combat Reflex
+        this.bot.on('entityHurt', (entity) => {
+            if (entity === this.bot.entity) {
+                // If hurt -> Switch to Combat State immediately
+                // Priority 80 (Higher than Idle and Build)
+                if (this.stateStack && !this.stateStack.has('combat')) {
+                    this.stateStack.push('combat', 80, { target: null, reason: 'self_defense' });
+                    console.log("!!! ATTACKED -> TRIGGERING COMBAT STATE !!!");
+                }
+            }
+        });
+
         this.bot.on('death', () => {
             this.actions.cancelResume();
             this.actions.stop();
@@ -755,31 +767,36 @@ export class Agent {
     }
 
     async update(delta) {
-        // Task 35: Brain Integration (State Stack)
-        // Replaced legacy: if (this.bot.modes) await this.bot.modes.update();
+        // --- BRAIN INTEGRATION START: STATE STACK DRIVER ---
         if (this.stateStack) {
-            // TODO: Implement actual update logic in StateStack if it has one, 
-            // or here we process the current state.
-            // For now, StateStack is mostly a data structure. We need a "Processor" or just use logic here.
+            const currentState = this.stateStack.peek(); // Get highest priority state
+            if (currentState) {
+                const stateName = currentState.name.toLowerCase();
 
-            // Actually, StateStack is passive. The agent needs to execute the top state.
-            // Since we don't have a "StateProcessor", we might need to keep legacy modes for a bit 
-            // OR quickly implemented a "executeState" logic.
+                // 1. Map State Name to Legacy Mode (e.g., 'Combat' -> pvp.js)
+                // Assuming legacy modes are stored in this.bot.modes
+                const legacyMode = this.bot.modes ? this.bot.modes[stateName] : null;
 
-            // User requested: "Replace this.bot.modes.update() with await this.stateStack.update();"
-            // But StateStack.js provided earlier DOES NOT HAVE an update() method.
-            // The user might assume I added it or wants me to add it.
-            // I should check StateStack.js again. I did. It has no update().
-
-            // Plan: I will use legacy modes for *now* to prevent crash, BUT I will request user guidance 
-            // or better, I will implement a wrapper that maps State -> Mode execution.
-            // Wait, the user instruction was explicit: "Replace... await this.stateStack.update()".
-            // This implies I missed adding update() to StateStack.js or the user thinks it's there.
-            // I will add a simple update() stub to StateStack.js first, then call it here.
+                if (legacyMode && typeof legacyMode.update === 'function') {
+                    // If this state has a corresponding Mode -> Run it
+                    await legacyMode.update();
+                }
+                else if (stateName === 'idle') {
+                    // Idle State: Light self-maintenance or observation
+                    // Don't do heavy processing here
+                }
+                else {
+                    // New State (no legacy mode) -> Needs specific handling
+                    // e.g. 'crafting', 'analyzing'
+                    // For now, we log it to avoid silence
+                    // console.log(`[Agent] In state ${currentState.name} (No specific handler yet)`);
+                }
+            }
         }
+        // --- BRAIN INTEGRATION END ---
 
-        // Legacy fallback until StateStack processor is fully ready
-        if (this.bot.modes) await this.bot.modes.update();
+        // Legacy fallback removed to prevent double-execution
+        // if (this.bot.modes) await this.bot.modes.update(); 
 
         if (this.self_prompter) this.self_prompter.update(delta);
         if (this.planner) await this.planner.update(); // Task 14: Update Planner
