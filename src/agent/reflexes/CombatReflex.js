@@ -1,0 +1,554 @@
+/**
+ * CombatReflex.js - The Gladiator's Instinct
+ * 
+ * Phase 3: Gladiator Update
+ * Phase 4.5: MindOS Integration (SignalBus)
+ * 
+ * Combat controller with 50ms tick loop.
+ * Handles: weapon switching, critical hits, emergency healing, retreat.
+ * 
+ * State Machine: IDLE → ENGAGE → RETREAT
+ */
+
+import { globalBus, SIGNAL } from '../core/SignalBus.js';
+
+
+import { PRIORITY } from '../core/TaskScheduler.js';
+import { MovementTactics } from './MovementTactics.js';
+
+// Combat States
+const STATE = {
+    IDLE: 'IDLE',
+    ENGAGE: 'ENGAGE',
+    RETREAT: 'RETREAT'
+};
+
+// Weapon DPS table (attack damage * attack speed)
+const WEAPON_DPS = {
+    // Swords (fast attack speed: 1.6)
+    'netherite_sword': 12.8,  // 8 * 1.6
+    'diamond_sword': 11.2,    // 7 * 1.6
+    'iron_sword': 9.6,        // 6 * 1.6
+    'stone_sword': 8.0,       // 5 * 1.6
+    'golden_sword': 6.4,      // 4 * 1.6
+    'wooden_sword': 6.4,      // 4 * 1.6
+
+    // Axes (slow but high damage)
+    'netherite_axe': 10.0,    // 10 * 1.0
+    'diamond_axe': 9.0,       // 9 * 1.0
+    'iron_axe': 9.0,          // 9 * 1.0
+    'stone_axe': 9.0,         // 9 * 1.0
+    'golden_axe': 7.0,        // 7 * 1.0
+    'wooden_axe': 7.0,        // 7 * 1.0
+
+    // Ranged
+    'bow': 10.0,              // Estimated with power
+    'crossbow': 9.0,
+    'trident': 9.0
+};
+
+// Food healing values
+const FOOD_PRIORITY = [
+    'enchanted_golden_apple',  // 4 hunger + Absorption
+    'golden_apple',            // 4 hunger + Absorption
+    'golden_carrot',           // 6 hunger
+    'cooked_beef',             // 8 hunger
+    'cooked_porkchop',         // 8 hunger
+    'cooked_mutton',           // 6 hunger
+    'cooked_chicken',          // 6 hunger
+    'bread',                   // 5 hunger
+    'apple',                   // 4 hunger
+];
+
+export class CombatReflex {
+    constructor(agent) {
+        this.agent = agent;
+        this.bot = agent.bot;
+        this.tactics = new MovementTactics(agent.bot);
+
+        // State
+        this.state = STATE.IDLE;
+        this.target = null;
+        this.inCombat = false;
+
+        // Tick control
+        this.tickInterval = null;
+        this.TICK_RATE = 50; // ms (1 game tick)
+
+        // Cooldowns
+        this.lastAttackTime = 0;
+        this.lastHealTime = 0;
+        this.attackCooldown = 600; // ms (sword cooldown ~0.6s)
+
+        // Stats
+        this.stats = {
+            kills: 0,
+            damageDealt: 0,
+            retreats: 0
+        };
+
+        console.log('[CombatReflex] ⚔️ Gladiator initialized');
+    }
+
+    /**
+     * Enter combat mode - activates tick loop
+     * @param {Entity} target - The enemy entity
+     */
+    enterCombat(target) {
+        if (this.inCombat && this.target === target) return;
+
+        this.target = target;
+        this.state = STATE.ENGAGE;
+        this.inCombat = true;
+
+        // Signal MindOS (Phase 4.5)
+        globalBus.emitSignal(SIGNAL.COMBAT_STARTED, { target: target.name || target.username });
+
+        // Schedule as Priority 100 (SURVIVAL)
+        if (this.agent.scheduler) {
+            this.agent.scheduler.schedule(
+                'combat_reflex',
+                PRIORITY.SURVIVAL,
+                async () => this._combatLoop(),
+                false // Cannot run parallel - needs full control
+            );
+        } else {
+            // Fallback: start tick loop directly
+            this._startTickLoop();
+        }
+
+        console.log(`[CombatReflex] ⚔️ COMBAT ENGAGED: ${target?.name || 'unknown'}`);
+    }
+
+    /**
+     * Exit combat mode
+     */
+    exitCombat() {
+        this.state = STATE.IDLE;
+        this.target = null;
+        this.inCombat = false;
+        this._stopTickLoop();
+
+        // Signal MindOS
+        globalBus.emitSignal(SIGNAL.COMBAT_ENDED, { reason: 'manual_exit' });
+
+        // Clear control states
+        this.bot.clearControlStates();
+
+        console.log('[CombatReflex] 🛡️ Combat ended');
+    }
+
+    /**
+     * Main combat loop (runs via TaskScheduler)
+     */
+    async _combatLoop() {
+        this._startTickLoop();
+
+        // Wait while in combat
+        while (this.inCombat) {
+            await new Promise(r => setTimeout(r, 100));
+
+            // Check if target is dead or gone
+            if (!this._isValidTarget(this.target)) {
+                this.exitCombat();
+                break;
+            }
+        }
+    }
+
+    /**
+     * Start the 50ms tick loop
+     */
+    _startTickLoop() {
+        if (this.tickInterval) return;
+
+        this.tickInterval = setInterval(() => {
+            this.tick().catch(e => {
+                console.error('[CombatReflex] Tick error:', e.message);
+            });
+        }, this.TICK_RATE);
+    }
+
+    /**
+     * Stop the tick loop
+     */
+    _stopTickLoop() {
+        if (this.tickInterval) {
+            clearInterval(this.tickInterval);
+            this.tickInterval = null;
+        }
+    }
+
+    /**
+     * Main tick - called every 50ms during combat
+     */
+    async tick() {
+        if (!this.inCombat || !this.target) return;
+
+        const bot = this.bot;
+
+        // PRIORITY 1: Check retreat conditions
+        if (this._shouldRetreat()) {
+            this.state = STATE.RETREAT;
+            await this._executeRetreat();
+            return;
+        }
+
+        // PRIORITY 2: Emergency healing (HP < 8)
+        if (bot.health < 8 && Date.now() - this.lastHealTime > 3000) {
+            await this._emergencyHeal();
+            return;
+        }
+
+        // PRIORITY 3: Combat actions
+        if (this.state === STATE.ENGAGE) {
+            await this._executeEngagement();
+        }
+    }
+
+    /**
+     * Check if should retreat
+     */
+    _shouldRetreat() {
+        const bot = this.bot;
+
+        // Critical health (< 3 hearts)
+        if (bot.health < 6) return true;
+
+        // No weapon available
+        if (!this._getBestWeapon('melee') && !this._getBestWeapon('range')) {
+            return true;
+        }
+
+        // Armor almost broken
+        const armor = this._getArmorDurability();
+        if (armor.lowest < 5 && armor.lowest > 0) return true;
+
+        return false;
+    }
+
+    /**
+     * Execute retreat protocol
+     */
+    async _executeRetreat() {
+        console.log('[CombatReflex] 🏃 RETREAT TRIGGERED');
+
+        // Signal Critical Health
+        if (this.bot.health < 6) {
+            globalBus.emitSignal(SIGNAL.HEALTH_CRITICAL, { health: this.bot.health });
+        }
+
+        this.stats.retreats++;
+
+        // Priority 1: Pearl out
+        if (await this.tactics.pearlOut(this._getSafePosition())) {
+            this.exitCombat();
+            return;
+        }
+
+        // Priority 2: Pillar up
+        if (await this.tactics.pillarUp(5)) {
+            // Stay on pillar, heal, then exit
+            await this._emergencyHeal();
+            this.exitCombat();
+            return;
+        }
+
+        // Priority 3: Run away
+        await this.tactics.runAway(this.target, 20);
+        this.exitCombat();
+    }
+
+    /**
+     * Execute combat engagement
+     */
+    async _executeEngagement() {
+        if (!this._isValidTarget(this.target)) {
+            this.exitCombat();
+            return;
+        }
+
+        const distance = this._getDistance(this.target);
+
+        // Equip appropriate weapon
+        if (distance <= 4) {
+            await this._equipBestWeapon('melee');
+        } else if (distance > 8 && this._hasAmmo()) {
+            await this._equipBestWeapon('range');
+        }
+
+        // Shield management
+        if (this._isTargetAttacking()) {
+            this.bot.activateItem(); // Raise shield
+        } else {
+            this.bot.deactivateItem(); // Lower shield
+        }
+
+        // Movement + Attack
+        if (distance <= 4) {
+            // Melee range: strafe and crit attack
+            await this.tactics.strafe(this.target, 2.5);
+            await this._attemptCritAttack();
+        } else if (distance <= 8) {
+            // Close gap
+            await this.tactics.approach(this.target);
+        } else {
+            // Range attack
+            await this._rangedAttack();
+        }
+    }
+
+    /**
+     * Attempt critical hit (jump + fall + attack)
+     */
+    async _attemptCritAttack() {
+        const now = Date.now();
+        if (now - this.lastAttackTime < this.attackCooldown) return;
+
+        const velocity = this.bot.entity.velocity;
+
+        // If falling, attack now for crit
+        if (velocity.y < -0.1) {
+            this.bot.attack(this.target);
+            this.lastAttackTime = now;
+            return;
+        }
+
+        // Otherwise, initiate jump
+        if (this.bot.entity.onGround) {
+            this.bot.setControlState('jump', true);
+            setTimeout(() => this.bot.setControlState('jump', false), 100);
+        }
+    }
+
+    /**
+     * Ranged attack with bow/crossbow
+     */
+    async _rangedAttack() {
+        // Look at target
+        await this.bot.lookAt(this.target.position.offset(0, 1.6, 0));
+
+        // Charge and release
+        this.bot.activateItem();
+        await new Promise(r => setTimeout(r, 800)); // Charge time
+        this.bot.deactivateItem();
+    }
+
+    /**
+     * Emergency heal when HP < 8
+     */
+    async _emergencyHeal() {
+        const food = this._getBestFood();
+        if (!food) {
+            console.warn('[CombatReflex] No food available for healing!');
+            return false;
+        }
+
+        console.log(`[CombatReflex] 🍖 Emergency heal with ${food.name}`);
+
+        globalBus.emitSignal(SIGNAL.HEALTH_LOW, { health: this.bot.health, action: 'eating' });
+
+        try {
+            await this.bot.equip(food, 'hand');
+            this.bot.activateItem();
+
+            // Wait for eating (typically 1.6s)
+            await new Promise(r => setTimeout(r, 1800));
+
+            this.bot.deactivateItem();
+            this.lastHealTime = Date.now();
+
+            // Re-equip weapon
+            await this._equipBestWeapon('melee');
+            return true;
+        } catch (e) {
+            console.error('[CombatReflex] Heal failed:', e.message);
+            return false;
+        }
+    }
+
+    /**
+     * Equip best weapon for given mode
+     */
+    async _equipBestWeapon(mode) {
+        const weapon = this._getBestWeapon(mode);
+        if (!weapon) return false;
+
+        try {
+            await this.bot.equip(weapon, 'hand');
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get best weapon from inventory
+     */
+    _getBestWeapon(mode) {
+        const items = this.bot.inventory.items();
+        let bestWeapon = null;
+        let bestDPS = 0;
+
+        const isRange = mode === 'range';
+
+        for (const item of items) {
+            const dps = WEAPON_DPS[item.name] || 0;
+
+            if (isRange) {
+                // Only consider ranged weapons
+                if (['bow', 'crossbow', 'trident'].includes(item.name)) {
+                    if (dps > bestDPS) {
+                        bestDPS = dps;
+                        bestWeapon = item;
+                    }
+                }
+            } else {
+                // Melee weapons (swords and axes)
+                if (item.name.includes('sword') || item.name.includes('axe')) {
+                    if (dps > bestDPS) {
+                        bestDPS = dps;
+                        bestWeapon = item;
+                    }
+                }
+            }
+        }
+
+        return bestWeapon;
+    }
+
+    /**
+     * Get best food from inventory
+     */
+    _getBestFood() {
+        const items = this.bot.inventory.items();
+
+        for (const foodName of FOOD_PRIORITY) {
+            const food = items.find(i => i.name === foodName);
+            if (food) return food;
+        }
+
+        // Fallback: any food
+        return items.find(i =>
+            i.name.includes('cooked') ||
+            i.name.includes('apple') ||
+            i.name.includes('bread')
+        );
+    }
+
+    /**
+     * Check if has arrows for bow
+     */
+    _hasAmmo() {
+        const items = this.bot.inventory.items();
+        return items.some(i => i.name === 'arrow' || i.name.includes('arrow'));
+    }
+
+    /**
+     * Get armor durability
+     */
+    _getArmorDurability() {
+        const slots = ['head', 'torso', 'legs', 'feet'];
+        let lowest = Infinity;
+
+        for (const slot of slots) {
+            const armor = this.bot.inventory.slots[this.bot.getEquipmentDestSlot(slot)];
+            if (armor && armor.durabilityUsed !== undefined) {
+                const remaining = armor.maxDurability - armor.durabilityUsed;
+                if (remaining < lowest) lowest = remaining;
+            }
+        }
+
+        return { lowest: lowest === Infinity ? 100 : lowest };
+    }
+
+    /**
+     * Check if target is valid and alive
+     */
+    _isValidTarget(target) {
+        if (!target) return false;
+        if (!target.isValid) return false;
+        if (target.metadata?.[6] !== undefined && target.metadata[6] <= 0) return false; // Dead
+
+        const distance = this._getDistance(target);
+        if (distance > 32) return false; // Too far
+
+        return true;
+    }
+
+    /**
+     * Check if target is currently attacking
+     */
+    _isTargetAttacking() {
+        if (!this.target) return false;
+
+        // Check if target is swinging arm or drawing bow
+        // Simplified: if target is looking at us and within range
+        const distance = this._getDistance(this.target);
+        return distance < 4;
+    }
+
+    /**
+     * Get distance to entity
+     */
+    _getDistance(entity) {
+        if (!entity?.position || !this.bot?.entity?.position) return Infinity;
+        return this.bot.entity.position.distanceTo(entity.position);
+    }
+
+    /**
+     * Get safe position (home or far from target)
+     */
+    _getSafePosition() {
+        // Try to get home from memory
+        if (this.agent.memory_bank) {
+            const home = this.agent.memory_bank.getPlace('home');
+            if (home) return home;
+        }
+
+        // Otherwise, position away from target
+        if (this.target?.position && this.bot?.entity?.position) {
+            const dir = this.bot.entity.position.minus(this.target.position).normalize();
+            return this.bot.entity.position.plus(dir.scaled(30));
+        }
+
+        return null;
+    }
+
+    /**
+     * Find nearby hostiles
+     */
+    findNearbyHostiles(radius = 10) {
+        return Object.values(this.bot.entities).filter(e => {
+            if (!e.position) return false;
+            if (this._getDistance(e) > radius) return false;
+
+            // Check if hostile
+            return (e.type === 'mob' || e.type === 'hostile') &&
+                e.name !== 'iron_golem' &&
+                e.name !== 'snow_golem';
+        });
+    }
+
+    /**
+     * Find the entity that attacked us
+     */
+    findAttacker() {
+        // Get nearest hostile within 8 blocks
+        const hostiles = this.findNearbyHostiles(8);
+        if (hostiles.length === 0) return null;
+
+        // Sort by distance
+        hostiles.sort((a, b) => this._getDistance(a) - this._getDistance(b));
+        return hostiles[0];
+    }
+
+    /**
+     * Get stats
+     */
+    getStats() {
+        return { ...this.stats, inCombat: this.inCombat, state: this.state };
+    }
+}
+
+export default CombatReflex;

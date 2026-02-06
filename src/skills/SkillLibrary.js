@@ -9,16 +9,23 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { globalBus, SIGNAL } from '../agent/core/SignalBus.js'; // Phase 4.5: MindOS Integration
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const LIBRARY_DIR = path.resolve(__dirname, 'library');
+const GENERATED_DIR = path.resolve(__dirname, 'generated'); // Phase 2: AI-generated skills
 
 export class SkillLibrary {
     constructor(skillOptimizer = null) {
         this.skills = {}; // Cached in-memory for fast access
         this.skillOptimizer = skillOptimizer; // Task 11: Optimizer reference
         this.optimizingSkills = new Set(); // Task 11: Lock flags to prevent concurrent optimization
+
+        // Phase 2: Evolution Engine support
+        this.blacklist = new Map(); // skillName -> failCount (blacklist after 3 failures)
+        this.generatedDir = GENERATED_DIR;
+
         this.ensureLibraryDir();
         // Note: loadSkills() is async - must call init() after construction
     }
@@ -43,12 +50,17 @@ export class SkillLibrary {
     }
 
     /**
-     * Ensure library directory exists
+     * Ensure library directories exist
      */
     ensureLibraryDir() {
         if (!fs.existsSync(LIBRARY_DIR)) {
             fs.mkdirSync(LIBRARY_DIR, { recursive: true });
             console.log(`[SkillLibrary] Created library directory: ${LIBRARY_DIR}`);
+        }
+        // Phase 2: Ensure generated skills directory exists
+        if (!fs.existsSync(GENERATED_DIR)) {
+            fs.mkdirSync(GENERATED_DIR, { recursive: true });
+            console.log(`[SkillLibrary] Created generated directory: ${GENERATED_DIR}`);
         }
     }
 
@@ -58,6 +70,7 @@ export class SkillLibrary {
      */
     async loadSkills() {
         try {
+            if (!fs.existsSync(LIBRARY_DIR)) return;
             const files = fs.readdirSync(LIBRARY_DIR).filter(f => f.endsWith('.js'));
 
             for (const file of files) {
@@ -371,5 +384,107 @@ ${code}
         } catch (err) {
             console.error('[SkillLibrary] Migration failed:', err);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 2: Evolution Engine Support
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Hot-swap: Load new skill without restart
+     * Used by EvolutionEngine to deploy AI-generated skills
+     * 
+     * @param {string} name - Skill name
+     * @param {string} code - Skill code
+     * @param {string} description - What the skill does
+     * @returns {boolean} Success
+     */
+    async hotSwap(name, code, description) {
+        try {
+            const skillPath = path.join(this.generatedDir, `${name}.js`);
+
+            // Generate JSDoc-annotated file
+            const fileContent = this.generateSkillFile(name, code, description, ['generated', 'evolution'], {
+                success_count: 0,
+                created_at: Date.now(),
+                last_optimized: null,
+                version: 1,
+                generated: true
+            });
+
+            // Write file
+            fs.writeFileSync(skillPath, fileContent, 'utf8');
+
+            // Update in-memory cache immediately
+            this.skills[name] = {
+                description,
+                tags: ['generated', 'evolution'],
+                filePath: skillPath,
+                code: fileContent,
+                success_count: 0,
+                created_at: Date.now(),
+                generated: true
+            };
+
+            console.log(`[SkillLibrary] 🔥 Hot-swapped: ${name}`);
+            return true;
+        } catch (err) {
+            console.error(`[SkillLibrary] Hot-swap failed for '${name}':`, err.message);
+            return false;
+        }
+    }
+
+    /**
+     * Mark a skill as failed
+     * After 3 failures, skill is blacklisted
+     * 
+     * @param {string} name - Skill name
+     * @returns {boolean} True if skill was blacklisted
+     */
+    markFailure(name) {
+        if (globalBus) globalBus.emitSignal(SIGNAL.SKILL_FAILED, { name });
+
+        const count = (this.blacklist.get(name) || 0) + 1;
+        this.blacklist.set(name, count);
+
+        console.log(`[SkillLibrary] ⚠️ Skill '${name}' failure count: ${count}/3`);
+
+        if (count >= 3) {
+            // Remove from active skills
+            delete this.skills[name];
+            console.warn(`[SkillLibrary] ⛔ Blacklisted: ${name} (too many failures)`);
+            return true; // Blacklisted
+        }
+        return false;
+    }
+
+    /**
+     * Check if a skill is blacklisted
+     * 
+     * @param {string} name - Skill name
+     * @returns {boolean}
+     */
+    isBlacklisted(name) {
+        return (this.blacklist.get(name) || 0) >= 3;
+    }
+
+    /**
+     * Clear blacklist for a skill (for recovery/testing)
+     * 
+     * @param {string} name - Skill name
+     */
+    clearBlacklist(name) {
+        this.blacklist.delete(name);
+        console.log(`[SkillLibrary] ✅ Cleared blacklist for: ${name}`);
+    }
+
+    /**
+     * Get list of all generated skills
+     * @returns {string[]} Names of generated skills
+     */
+    getGeneratedSkills() {
+        return Object.entries(this.skills)
+            .filter(([_, skill]) => skill.generated)
+            .map(([name]) => name);
     }
 }

@@ -1,24 +1,32 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 
-let keys = {};
+// Simple .env parser to avoid checking in keys.json
 try {
-    const data = readFileSync('./keys.json', 'utf8');
-    keys = JSON.parse(data);
+    if (existsSync('./.env')) {
+        const envConfig = readFileSync('./.env', 'utf8');
+        envConfig.split('\n').forEach(line => {
+            const [key, ...values] = line.split('=');
+            if (key && values.length > 0) {
+                const val = values.join('=').trim();
+                if (val && !process.env[key.trim()]) {
+                    process.env[key.trim()] = val;
+                }
+            }
+        });
+        console.log('[System] Loaded environment variables from .env');
+    }
 } catch (err) {
-    console.warn('keys.json not found. Defaulting to environment variables.'); // still works with local models
+    console.warn('[System] Failed to load .env file:', err.message);
 }
 
 export function getKey(name) {
-    let key = keys[name];
+    let key = process.env[name];
     if (!key) {
-        key = process.env[name];
-    }
-    if (!key) {
-        throw new Error(`API key "${name}" not found in keys.json or environment variables!`);
+        throw new Error(`API key "${name}" not found in environment variables!`);
     }
     return key;
 }
 
 export function hasKey(name) {
-    return keys[name] || process.env[name];
+    return !!process.env[name];
 }

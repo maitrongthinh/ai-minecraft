@@ -1,4 +1,5 @@
-import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFile, readFile } from 'fs/promises';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { NPCData } from './npc/data.js';
 import settings from './settings.js';
 
@@ -29,6 +30,11 @@ export class History {
         this.summary_chunk_size = 5;
         // chunking reduces expensive calls to promptMemSaving and appendFullHistory
         // and improves the quality of the memory summary
+
+        // NON-BLOCKING I/O: Debounce buffer for async saves
+        this._saveBuffer = null;
+        this._saveTimer = null;
+        this._savePending = false;
     }
 
     getHistory() { // expects an Examples object
@@ -119,6 +125,11 @@ export class History {
         }
         this.turns.push({ role, content });
 
+        // Trim history to prevent memory bloat (keep last 50 turns)
+        if (this.turns.length > 50) {
+            this.turns = this.turns.slice(-50);
+        }
+
         if (this.turns.length >= this.max_messages) {
             let chunk = this.turns.splice(0, this.summary_chunk_size);
             while (this.turns.length > 0 && this.turns[0].role === 'assistant')
@@ -127,25 +138,59 @@ export class History {
             await this.summarizeMemories(chunk);
             await this.appendFullHistory(chunk);
         }
+
+        // Trigger non-blocking background save (debounced)
+        this.triggerBackgroundSave();
+    }
+
+    /**
+     * NON-BLOCKING I/O: Trigger a debounced background save
+     * Saves after 5 seconds of idle to batch multiple changes
+     */
+    triggerBackgroundSave() {
+        if (this._saveTimer) {
+            clearTimeout(this._saveTimer);
+        }
+
+        this._saveTimer = setTimeout(async () => {
+            await this.persistToDisk();
+        }, 5000); // Debounce 5000ms
+    }
+
+    /**
+     * NON-BLOCKING I/O: Persist memory to disk asynchronously
+     * Won't block the main thread during write operations
+     */
+    async persistToDisk() {
+        if (this._savePending) return; // Already saving, skip
+        this._savePending = true;
+
+        try {
+            const data = JSON.stringify({
+                memory: this.memory,
+                turns: this.turns,
+                errors: this.errors,
+                self_prompting_state: this.agent.self_prompter?.state,
+                self_prompt: this.agent.self_prompter?.isStopped() ? null : this.agent.self_prompter?.prompt,
+                taskStart: this.agent.task?.taskStartTime,
+                last_sender: this.agent.last_sender,
+                last_update: Date.now()
+            }, null, 2);
+
+            // Async write - doesn't block main thread
+            await writeFile(this.memory_fp, data, 'utf8');
+            // console.log('[IO] Memory snapshot saved.');
+        } catch (err) {
+            console.error('[IO] Async save failed:', err.message);
+        } finally {
+            this._savePending = false;
+        }
     }
 
     async save() {
-        try {
-            const data = {
-                memory: this.memory,
-                turns: this.turns,
-                errors: this.errors, // Persist errors for failure-aware planning
-                self_prompting_state: this.agent.self_prompter.state,
-                self_prompt: this.agent.self_prompter.isStopped() ? null : this.agent.self_prompter.prompt,
-                taskStart: this.agent.task.taskStartTime,
-                last_sender: this.agent.last_sender
-            };
-            writeFileSync(this.memory_fp, JSON.stringify(data, null, 2));
-            console.log('Saved memory to:', this.memory_fp);
-        } catch (error) {
-            console.error('Failed to save history:', error);
-            throw error;
-        }
+        // Trigger immediate async save (bypasses debounce)
+        await this.persistToDisk();
+        console.log('Saved memory to:', this.memory_fp);
     }
 
     load() {
@@ -154,10 +199,11 @@ export class History {
                 console.log('No memory file found.');
                 return null;
             }
+            // Load uses sync read for startup (needs data immediately)
             const data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
             this.memory = data.memory || '';
             this.turns = data.turns || [];
-            this.errors = data.errors || []; // Load errors for failure-aware planning
+            this.errors = data.errors || [];
             console.log('Loaded memory:', this.memory);
             console.log(`[History] Loaded ${this.errors.length} error records.`);
             return data;

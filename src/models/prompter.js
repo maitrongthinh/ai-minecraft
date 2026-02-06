@@ -1,13 +1,12 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { Examples } from '../utils/examples.js';
 import { getCommandDocs } from '../agent/commands/index.js';
-import { SkillLibrary } from "../agent/library/skill_library.js";
+import { SkillLibrary } from "../skills/SkillLibrary.js";
 import { stringifyTurns } from '../utils/text.js';
 import { getCommand } from '../agent/commands/index.js';
 import settings from '../agent/settings.js';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { fileURLToPath } from 'url';
 import { selectAPI, createModel } from './_model_map.js';
 import { RequestQueue } from '../utils/RequestQueue.js'; // Task 25: API Reliability Layer

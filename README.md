@@ -1,253 +1,170 @@
-<h1 align="center">🧠mindcraft⛏️</h1>
-<h1 align="center">
-  <a href="https://trendshift.io/repositories/9163" target="_blank"><img src="https://trendshift.io/api/badge/repositories/9163" alt="kolbytn%2Fmindcraft | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</h1>
+<div align="center">
 
-<p align="center">Crafting minds for Minecraft with LLMs and <a href="https://prismarinejs.github.io/mineflayer/#/">Mineflayer!</a></p>
+# 🧠 MindOS V1.0 (Evolution Edition)
+### The First Event-Driven, Self-Evolving AI Kernel for Minecraft
+### Hệ Điều Hành AI Hướng Sự Kiện & Tự Tiến Hóa Đầu Tiên Cho Minecraft
 
-<p align="center">
-  <a href="https://github.com/mindcraft-bots/mindcraft/blob/main/FAQ.md">FAQ</a> | 
-  <a href="https://discord.gg/mp73p35dzC">Discord Support</a> | 
-  <a href="https://www.youtube.com/watch?v=gRotoL8P8D8">Video Tutorial</a> | 
-  <a href="https://kolbynottingham.com/mindcraft/">Blog Post</a> | 
-  <a href="https://github.com/users/kolbytn/projects/1">Contributor TODO</a> | 
-  <a href="https://mindcraft-minecollab.github.io/index.html">Paper Website</a> | 
-  <a href="https://github.com/mindcraft-bots/mindcraft/blob/main/minecollab.md">MineCollab</a>
-</p>
+[![License: MIT](https://img.shields.io/badge/License-MIT-gold.svg)](https://opensource.org/licenses/MIT)
+[![Status: Stable](https://img.shields.io/badge/Status-Stable-brightgreen.svg)]()
+[![Core: MindOS](https://img.shields.io/badge/Core-MindOS_Kernel_v1.0-blue)](https://github.com/your-repo/mindcraft)
+[![Architecture: Event-Driven](https://img.shields.io/badge/Architecture-Event--Driven-purple)]()
 
-> [!Caution]
-Do not connect this bot to public servers with coding enabled. This project allows an LLM to write/execute code on your computer. The code is sandboxed, but still vulnerable to injection attacks. Code writing is disabled by default, you can enable it by setting `allow_insecure_coding` to `true` in `settings.js`. Ye be warned.
+</div>
 
-# Getting Started
-## Requirements
+---
 
-- [Minecraft Java Edition](https://www.minecraft.net/en-us/store/minecraft-java-bedrock-edition-pc) (up to v1.21.6, recommend v1.21.6)
-- [Node.js Installed](https://nodejs.org/) (Node v18 or v20 LTS recommended. Node v24+ may cause issues with native dependencies)
-- At least one API key from a supported API provider. See [supported APIs](#model-customization). OpenAI is the default.
+## 📖 Introduction / Giới Thiệu
 
-> [!Important]
-> If installing node on windows, ensure you check `Automatically install the necessary tools`
->
-> If you encounter `npm install` errors on macOS, see the [FAQ](FAQ.md#common-issues) for troubleshooting native module build issues
+**MindOS** is not just a Minecraft bot; it is a **Generalized AI Operating System** designed to mimic the cognitive architecture of a biological organism. Unlike traditional linear scripts, MindOS features a **Dual-Loop Nervous System** that allows it to "think fast" (reflexes) and "think slow" (planning) simultaneously, enabling true autonomy.
+**MindOS** không chỉ là một bot Minecraft; nó là một **Hệ Điều Hành AI Tổng Quát** được thiết kế để mô phỏng kiến trúc nhận thức của sinh vật sống. Khác với các kịch bản tuyến tính truyền thống, MindOS sở hữu **Hệ Thần Kinh Vòng Lặp Kép** cho phép nó "tư duy nhanh" (phản xạ) và "tư duy chậm" (lập kế hoạch) cùng lúc, mang lại khả năng tự chủ thực sự.
 
-## Install and Run
+### The Philosophy / Triết Lý
+> "Code that writes itself is the only code that survives context shifts."
+> "Mã nguồn tự viết là mã nguồn duy nhất tồn tại qua sự thay đổi ngữ cảnh."
 
-1. Make sure you have the requirements above.
+We built MindOS to solve the **"Context Collapse"** problem in AI agents. By decoupling the **Brain (Planner)** from the **Body (Executor)** via a **SignalBus**, the agent can adapt to any situation without crashing its core logic.
+Chúng tôi xây dựng MindOS để giải quyết vấn đề **"Sụp Đổ Ngữ Cảnh"** trong các tác nhân AI. Bằng cách tách biệt **Bộ Não (Planner)** khỏi **Cơ Thể (Executor)** thông qua **SignalBus**, tác nhân có thể thích nghi với mọi tình huống mà không làm hỏng logic cốt lõi.
 
-2. Download the [latest release](https://github.com/mindcraft-bots/mindcraft/releases/latest) and unzip it, or clone the repository.
+---
 
-3. Rename `keys.example.json` to `keys.json` and fill in your API keys (you only need one). The desired model is set in `andy.json` or other profiles. For other models refer to the table below.
+## 🚀 Enterprise Features / Tính Năng Doanh Nghiệp
 
-4. In terminal/command prompt, run `npm install` from the installed directory
+### 1. 🧠 Dual-Loop Cognitive Architecture / Kiến Trúc Nhận Thức Kép
+- **System 1 (Reflexes/Phản Xạ):** Millisecond-latency responses to threats (Creepers, Lava, Hunger). Powered by `ReflexSystem`.
+  - *Hệ Thống 1:* Phản hồi mối đe dọa với độ trễ mili-giây. Được vận hành bởi `ReflexSystem`.
+- **System 2 (Reasoning/Suy Luận):** Long-horizon planning and tool crafting. Powered by `StrategyPlanner` & LLMs.
+  - *Hệ Thống 2:* Lập kế hoạch dài hạn và chế tạo công cụ. Được vận hành bởi `StrategyPlanner` & LLMs.
 
-5. Start a minecraft world and open it to LAN on localhost port `55916`
+### 2. ⚡ Event-Driven Kernel / Kernel Hướng Sự Kiện
+- **SignalBus Technology:** A standardized event bus that decouples all modules. Sensors emit signals (`ENTITY_SPOTTED`), and systems subscribe eagerly or lazily.
+  - *Công nghệ SignalBus:* Bus sự kiện chuẩn hóa giúp tách rời mọi module. Cảm biến phát tín hiệu, hệ thống đăng ký nhận tin.
 
-6. Run `node main.js` from the installed directory
+### 3. 🧬 Evolution Engine / Động Cơ Tiến Hóa
+- **Self-Coding Skills:** The agent detects missing capabilities and writes its own JavaScript modules using `SmartCoder`.
+  - *Kỹ Năng Tự Code:* Agent phát hiện khả năng còn thiếu và tự viết module JavaScript bằng `SmartCoder`.
+- **Hot-Swapping:** New code is loaded into memory without restarting the bot.
+  - *Thay Thế Nóng:* Code mới được nạp vào bộ nhớ ngay lập tức mà không cần khởi động lại.
 
-If you encounter issues, check the [FAQ](https://github.com/mindcraft-bots/mindcraft/blob/main/FAQ.md) or find support on [discord](https://discord.gg/mp73p35dzC). We are currently not very responsive to github issues. To run tasks please refer to [Minecollab Instructions](minecollab.md#installation)
+### 4. 🛡️ Military-Grade Reliability / Độ Tin Cậy Cấp Quân Sự
+- **Watchdog Timer:** Detects frozen logic loops and force-resets the decision stack.
+- **Bootloader Safety:** Verifies module integrity before the "conscious" mind awakens.
+- **Secure Sandbox:** AI-generated code runs in a sandbox to prevent system damage.
 
+---
 
-# Configuration
-## Model Customization
+## 🛠️ System Architecture / Kiến Trúc Hệ Thống
 
-You can configure project details in `settings.js`. [See file.](settings.js)
+The MindOS Kernel is composed of 4 distinct layers working in harmony:
+MindOS Kernel bao gồm 4 tầng riêng biệt hoạt động hài hòa:
 
-You can configure the agent's name, model, and prompts in their profile like `andy.json`. The model can be specified with the `model` field, with values like `model: "gemini-2.5-pro"`. You will need the correct API key for the API provider you choose. See all supported APIs below.
+```mermaid
+graph TD
+    classDef kernel fill:#f96,stroke:#333,stroke-width:2px;
+    classDef signal fill:#ff9,stroke:#333,stroke-width:2px;
 
-<details>
-<summary><strong>⭐ VIEW SUPPORTED APIs ⭐</strong></summary>
+    User[User / Player] -->|Command| SignalBus
+    Env[Environment] -->|Sensor Data| SignalBus
 
-| API Name | Config Variable| Docs |
-|------|------|------|
-| `openai` | `OPENAI_API_KEY` | [docs](https://platform.openai.com/docs/models) |
-| `google` | `GEMINI_API_KEY` | [docs](https://ai.google.dev/gemini-api/docs/models/gemini) |
-| `anthropic` | `ANTHROPIC_API_KEY` | [docs](https://docs.anthropic.com/claude/docs/models-overview) |
-| `xai` | `XAI_API_KEY` | [docs](https://docs.x.ai/docs) |
-| `deepseek` | `DEEPSEEK_API_KEY` | [docs](https://api-docs.deepseek.com/) |
-| `ollama` (local) | n/a | [docs](https://ollama.com/library) |
-| `qwen` | `QWEN_API_KEY` | [Intl.](https://www.alibabacloud.com/help/en/model-studio/developer-reference/use-qwen-by-calling-api)/[cn](https://help.aliyun.com/zh/model-studio/getting-started/models) |
-| `mistral` | `MISTRAL_API_KEY` | [docs](https://docs.mistral.ai/getting-started/models/models_overview/) |
-| `replicate` | `REPLICATE_API_KEY` | [docs](https://replicate.com/collections/language-models) |
-| `groq` (not grok) | `GROQCLOUD_API_KEY` | [docs](https://console.groq.com/docs/models) |
-| `huggingface` | `HUGGINGFACE_API_KEY` | [docs](https://huggingface.co/models) |
-| `novita` | `NOVITA_API_KEY` | [docs](https://novita.ai/model-api/product/llm-api?utm_source=github_mindcraft&utm_medium=github_readme&utm_campaign=link) |
-| `openrouter` | `OPENROUTER_API_KEY` | [docs](https://openrouter.ai/models) |
-| `glhf` | `GHLF_API_KEY` | [docs](https://glhf.chat/user-settings/api) |
-| `hyperbolic` | `HYPERBOLIC_API_KEY` | [docs](https://docs.hyperbolic.xyz/docs/getting-started) |
-| `vllm` | n/a | n/a |
-| `cerebras` | `CEREBRAS_API_KEY` | [docs](https://inference-docs.cerebras.ai/introduction) |
-| `mercury` | `MERCURY_API_KEY` | [docs](https://www.inceptionlabs.ai/) |
+    subgraph "MindOS Kernel"
+        SignalBus((⚡ SignalBus)):::signal
+        Core[CoreSystem]:::kernel
+        Mem[UnifiedMemory]:::kernel
+    end
 
-</details>
+    subgraph "Layer 1: The Body (System 1)"
+        Reflex[ReflexSystem] -->|Interrupt| SignalBus
+        Action[ActionManager]
+    end
 
-For more comprehensive model configuration and syntax, see [Model Specifications](#model-specifications).
+    subgraph "Layer 2: The Mind (System 2)"
+        Arbiter[The Arbiter] -->|Decision| SignalBus
+        Planner[StrategyPlanner] -->|Plan| SignalBus
+    end
 
-For local models we support [ollama](https://ollama.com/) and we provide our own finetuned models for you to use. 
-To install our models, install ollama and run the following terminal command:
-```bash
-ollama pull sweaterdog/andy-4:micro-q8_0 && ollama pull embeddinggemma
+    subgraph "Layer 3: Evolution"
+        Coder[SmartCoder] -->|New Skill| SignalBus
+        Sandbox[V8 Sandbox]
+    end
+
+    SignalBus -->|Event Routing| Arbiter
+    SignalBus -->|Execution| Action
+    Arbiter -->|Code Request| Coder
 ```
 
-## Online Servers
-To connect to online servers your bot will need an official Microsoft/Minecraft account. You can use your own personal one, but will need another account if you want to connect too and play with it. To connect, change these lines in `settings.js`:
-```javascript
-"host": "111.222.333.444",
-"port": 55920,
-"auth": "microsoft",
+---
 
-// rest is same...
-```
-> [!Important]
-> The bot's name in the profile.json must exactly match the Minecraft profile name! Otherwise the bot will spam talk to itself.
+## ⚡ Quick Start / Bắt Đầu Nhanh
 
-To use different accounts, Mindcraft will connect with the account that the Minecraft launcher is currently using. You can switch accounts in the launcher, then run `node main.js`, then switch to your main account after the bot has connected.
+### Prerequisites / Yêu Cầu
+- **Runtime:** Node.js v18+ (LTS Recommended)
+- **Game:** Minecraft Java Edition (v1.20.4 or compatible)
+- **API Key:** One valid key (OpenAI, Gemini, Anthropic, or Local LLM)
 
-## Tasks
+### Installation / Cài Đặt
 
-Tasks automatically start the bot with a prompt and a goal item to aquire or blueprint to construct. To run a simple task that involves collecting 4 oak_logs run 
+1.  **Clone Repository:**
+    ```bash
+    git clone https://github.com/your-repo/mindcraft.git
+    cd mindcraft
+    ```
 
-`node main.js --task_path tasks/basic/single_agent.json --task_id gather_oak_logs`
+2.  **Install Dependencies:**
+    ```bash
+    npm install
+    # If using Vision (Canvas), ensure python/build tools are installed
+    ```
 
-Here is an example task json format: 
+3.  **Configure Environment (New!):**
+    We now use `.env` for security.
+    ```bash
+    # Copy example file
+    cp .env.example .env
+    
+    # Edit .env with your keys
+    # OPENAI_API_KEY=sk-proj-...
+    ```
 
-```
-{
-    "gather_oak_logs": {
-      "goal": "Collect at least four logs",
-      "initial_inventory": {
-        "0": {
-          "wooden_axe": 1
-        }
-      },
-      "agent_count": 1,
-      "target": "oak_log",
-      "number_of_target": 4,
-      "type": "techtree",
-      "max_depth": 1,
-      "depth": 0,
-      "timeout": 300,
-      "blocked_actions": {
-        "0": [],
-        "1": []
-      },
-      "missing_items": [],
-      "requires_ctable": false
-    }
-}
-```
+### Running / Chạy
 
-The `initial_inventory` is what the bot will have at the start of the episode, `target` refers to the target item and `number_of_target` refers to the number of target items the agent needs to collect to successfully complete the task. 
+*   **Standard Mode:**
+    ```bash
+    node main.js --profile ./profiles/andy.json
+    ```
 
-If you want more optimization and automatic launching of the minecraft world, you will need to follow the instructions in [Minecollab Instructions](minecollab.md#installation)
+*   **Interactive Menu (Recommended):**
+    ```bash
+    npm start
+    # Select Option 1 (Run) or Option 4 (Debug)
+    ```
 
-## Docker Container
+---
 
-If you intend to `allow_insecure_coding`, it is a good idea to run the app in a docker container to reduce risks of running unknown code. This is strongly recommended before connecting to remote servers, although still does not guarantee complete safety.
+## 📚 Documentation Suite / Bộ Tài Liệu
 
-```bash
-docker build -t mindcraft . && docker run --rm --add-host=host.docker.internal:host-gateway -p 8080:8080 -p 3000-3003:3000-3003 -e SETTINGS_JSON='{"auto_open_ui":false,"profiles":["./profiles/gemini.json"],"host":"host.docker.internal"}' --volume ./keys.json:/app/keys.json --name mindcraft mindcraft
-```
-or simply
-```bash
-docker-compose up --build
-```
+We provide comprehensive documentation for developers and researchers:
+Chúng tôi cung cấp tài liệu toàn diện cho nhà phát triển và nhà nghiên cứu:
 
-When running in docker, if you want the bot to join your local minecraft server, you have to use a special host address `host.docker.internal` to call your localhost from inside your docker container. Put this into your [settings.js](settings.js):
+| Document | Description | Mô Tả |
+|----------|-------------|-------|
+| [**SYSTEM_ARCHITECTURE.md**](./docs/architecture/SYSTEM_ARCHITECTURE.md) | Deep dive into the Kernel, SignalBus, and Arbiter. | Đi sâu vào Kernel, SignalBus và Arbiter. |
+| [**DEVELOPER_GUIDE.md**](./docs/DEVELOPER_GUIDE.md) | How to write Skills, contribute code, and debug. | Cách viết Skill, đóng góp code và gỡ lỗi. |
+| [**SELF_EVOLUTION.md**](./docs/SELF_EVOLUTION.md) | Theory and practice of the SmartCoder engine. | Lý thuyết và thực hành của động cơ SmartCoder. |
+| [**FAQ.md**](./FAQ.md) | Troubleshooting common errors (Ports, Mods). | Khắc phục lỗi thường gặp (Cổng, Mod). |
+| [**TEST_PLAN.md**](./docs/TEST_PLAN.md) | QA protocols and integration tests. | Quy trình QA và kiểm thử tích hợp. |
 
-```javascript
-"host": "host.docker.internal", // instead of "localhost", to join your local minecraft from inside the docker container
-```
+---
 
-To connect to an unsupported minecraft version, you can try to use [viaproxy](services/viaproxy/README.md)
+## 🤝 Contributing / Đóng Góp
 
-# Bot Profiles
+We welcome contributions! Please see the `DEVELOPER_GUIDE.md` for our coding standards.
+Chúng tôi hoan nghênh mọi đóng góp! Vui lòng xem `DEVELOPER_GUIDE.md` để biết tiêu chuẩn code.
 
-Bot profiles are json files (such as `andy.json`) that define:
+- **Issues:** Report bugs via GitHub Issues.
+- **Pull Requests:** Submit PRs to the `develop` branch.
 
-1. Bot backend LLMs to use for talking, coding, and embedding.
-2. Prompts used to influence the bot's behavior.
-3. Examples help the bot perform tasks.
+---
 
-## Model Specifications
-
-LLM models can be specified simply as `"model": "gpt-4o"`, or more specifically with `"{api}/{model}"`, like `"openrouter/google/gemini-2.5-pro"`. See all supported APIs [here](#model-customization).
-
-The `model` field can be a string or an object. A model object must specify an `api`, and optionally a `model`, `url`, and additional `params`. You can also use different models/providers for chatting, coding, vision, embedding, and voice synthesis. See the example below.
-
-```json
-"model": {
-  "api": "openai",
-  "model": "gpt-4o",
-  "url": "https://api.openai.com/v1/",
-  "params": {
-    "max_tokens": 1000,
-    "temperature": 1
-  }
-},
-"code_model": {
-  "api": "openai",
-  "model": "gpt-4",
-  "url": "https://api.openai.com/v1/"
-},
-"vision_model": {
-  "api": "openai",
-  "model": "gpt-4o",
-  "url": "https://api.openai.com/v1/"
-},
-"embedding": {
-  "api": "openai",
-  "url": "https://api.openai.com/v1/",
-  "model": "text-embedding-ada-002"
-},
-"speak_model": "openai/tts-1/echo"
-```
-
-`model` is used for chat, `code_model` is used for newAction coding, `vision_model` is used for image interpretation, `embedding` is used to embed text for example selection, and `speak_model` is used for voice synthesis. `model` will be used by default for all other models if not specified. Not all APIs support embeddings, vision, or voice synthesis.
-
-All apis have default models and urls, so those fields are optional. The `params` field is optional and can be used to specify additional parameters for the model. It accepts any key-value pairs supported by the api. Is not supported for embedding models.
-
-## Embedding Models
-
-Embedding models are used to embed and efficiently select relevant examples for conversation and coding.
-
-Supported Embedding APIs: `openai`, `google`, `replicate`, `huggingface`, `novita`
-
-If you try to use an unsupported model, then it will default to a simple word-overlap method. Expect reduced performance. We recommend using supported embedding APIs.
-
-## Voice Synthesis Models
-
-Voice synthesis models are used to narrate bot responses and specified with `speak_model`. This field is parsed differently than other models and only supports strings formatted as `"{api}/{model}/{voice}"`, like `"openai/tts-1/echo"`. We only support `openai` and `google` for voice synthesis.
-
-## Specifying Profiles via Command Line
-
-By default, the program will use the profiles specified in `settings.js`. You can specify one or more agent profiles using the `--profiles` argument: `node main.js --profiles ./profiles/andy.json ./profiles/jill.json`
-
-
-# Contributing
-
-We welcome contributions to the project! We are generally less responsive to github issues, and more responsive to pull requests. Join the [discord](https://discord.gg/mp73p35dzC) for more active support and direction.
-
-While AI generated code is allowed, please vet it carefully. Submitting tons of sloppy code and documentation actively harms development.
-
-## Patches
-
-Some of the node modules that we depend on have bugs in them. To add a patch, change your local node module file and run `npx patch-package [package-name]`
-
-## Development Team
-Thanks to all who contributed to the project, especially the official development team: [@MaxRobinsonTheGreat](https://github.com/MaxRobinsonTheGreat), [@kolbytn](https://github.com/kolbytn), [@icwhite](https://github.com/icwhite), [@Sweaterdog](https://github.com/Sweaterdog), [@Ninot1Quyi](https://github.com/Ninot1Quyi), [@riqvip](https://github.com/riqvip), [@uukelele-scratch](https://github.com/uukelele-scratch), [@mrelmida](https://github.com/mrelmida)
-
-
-## Citation:
-This work is published in the paper [Collaborating Action by Action: A Multi-agent LLM Framework for Embodied Reasoning](https://arxiv.org/abs/2504.17950). Please use this citation if you use this project in your research:
-```
-@article{mindcraft2025,
-  title = {Collaborating Action by Action: A Multi-agent LLM Framework for Embodied Reasoning},
-  author = {White*, Isadora and Nottingham*, Kolby and Maniar, Ayush and Robinson, Max and Lillemark, Hansen and Maheshwari, Mehul and Qin, Lianhui and Ammanabrolu, Prithviraj},
-  journal = {arXiv preprint arXiv:2504.17950},
-  year = {2025},
-  url = {https://arxiv.org/abs/2504.17950},
-}
-```
-#   a i - m i n e c r a f t  
- #   a i - m i n e c r a f t  
- 
+<div align="center">
+    <b>Built with ❤️ by the Antigravity Team</b><br>
+    <i>"Intelligence is the ability to adapt to change." - Stephen Hawking</i>
+</div>

@@ -2,6 +2,7 @@ import { Vec3 } from 'vec3';
 import { Camera } from "./camera.js";
 import fs from 'fs';
 import { JsonSanitizer } from '../../utils/JsonSanitizer.js'; // Task 26: Data Integrity
+import { globalBus, SIGNAL } from '../core/SignalBus.js'; // Phase 4.5: MindOS Integration
 
 export class VisionInterpreter {
     constructor(agent, allow_vision) {
@@ -70,6 +71,14 @@ export class VisionInterpreter {
                     source: 'raycast'
                 }]);
             }
+
+            // Phase 4.5: Emit Signal
+            globalBus.emitSignal(SIGNAL.BLOCK_FOUND, {
+                block: targetBlock.name,
+                position: targetBlock.position,
+                source: 'vision_raycast'
+            });
+
             return `Block at center view: ${targetBlock.name} at (${targetBlock.position.x}, ${targetBlock.position.y}, ${targetBlock.position.z})`;
         } else {
             return "No block in center view";
@@ -94,8 +103,15 @@ export class VisionInterpreter {
 
         // Actually, analyzeImage logic in line 121-132 ALREADY updates spatial memory 
         // IF the output is JSON.
-        // So we just need to log it.
+        // So we just need to log it and emit signal.
         console.log('[Vision] Scan complete. Updated spatial memory.');
+
+        // Emit Signal for Event-Driven Architecture
+        globalBus.emitSignal(SIGNAL.ENVIRONMENT_SCAN, {
+            analysis: analysis,
+            timestamp: Date.now()
+        });
+
         return analysis;
     }
 
@@ -163,6 +179,17 @@ Ensure valid JSON. Do not include markdown formatting like \`\`\`json.`
                     });
 
                     await this.agent.spatial.update(parsed.objects);
+
+                    // Phase 4.5: Emit Signals for detected objects
+                    if (globalBus) {
+                        parsed.objects.forEach(obj => {
+                            if (obj.type === 'entity') {
+                                globalBus.emitSignal(SIGNAL.ENTITY_SPOTTED, { entity: obj.name, position: obj.position });
+                            } else if (obj.type === 'block') {
+                                globalBus.emitSignal(SIGNAL.BLOCK_FOUND, { block: obj.name, position: obj.position });
+                            }
+                        });
+                    }
                 }
             } else {
                 console.warn('[Vision] Failed to parse JSON from vision response. Using raw text.');

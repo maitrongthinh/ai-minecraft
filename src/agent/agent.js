@@ -36,6 +36,15 @@ import { StateStack, STATE_PRIORITY } from './StateStack.js'; // Brain Refactor:
 import { randomUUID } from 'crypto';
 import { HealthMonitor } from '../process/HealthMonitor.js'; // Task 28: Health Monitor
 import { MentalSnapshot } from '../utils/MentalSnapshot.js'; // Phase 11: Architectural Healing
+import { TaskScheduler, PRIORITY } from './core/TaskScheduler.js'; // Keep for PRIORITY export access if needed, or re-export from core?
+// import { CombatReflex } from './reflexes/CombatReflex.js'; // Phase 3: Gladiator
+import { globalBus, SIGNAL } from './core/SignalBus.js'; // Phase 4: MindOS Kernel
+// import { UnifiedMemory } from './memory/UnifiedMemory.js'; // Handled by CoreSystem
+// import { ContextManager } from './core/ContextManager.js'; // Handled by CoreSystem
+import { ToolRegistry } from './core/ToolRegistry.js'; // Phase 2: MCP Skill Registry
+import { System2Loop } from './orchestration/System2Loop.js'; // Phase 4: Multi-Agent Orchestration
+import EvolutionEngine from './core/EvolutionEngine.js'; // Phase 6: Self-Learning
+import { CoreSystem } from './core/CoreSystem.js'; // Phase 1: MindOS Kernel (Bootloader)
 
 /**
  * PRODUCTION-READY AGENT CLASS (Dual-Brain Edition)
@@ -53,6 +62,20 @@ export class Agent {
         // Initialize components
         this.actions = new ActionManager(this);
         this.prompter = new Prompter(this, settings.profile);
+
+        // Phase 1: MindOS Kernel (Safe Bootloader)
+        this.core = new CoreSystem(this);
+        await this.core.initialize();
+
+        // Map Kernel Components (Bridge to new architecture)
+        this.scheduler = this.core.scheduler;
+        this.contextManager = this.core.contextManager;
+        this.unifiedMemory = this.core.unifiedMemory;
+        this.reflexSystem = this.core.reflexSystem;
+        this.bus = this.core.bus;
+
+        // Register Agent Module
+        this.bus.registerModule('agent', this);
 
         // Initialize Graph Memory (Task 6)
         // Note: CogneeMemoryBridge will be init in spawn event after world_id is generated
@@ -83,15 +106,33 @@ export class Agent {
         this.blueprintManager = new BlueprintManager();
         this.humanManager = new HumanManager(this);
         this.arbiter = new Arbiter(this);
-        this.arbiter = new Arbiter(this);
         this.planner = new StrategyPlanner(this); // Task 14: Initialize Strategy Planner
         this.spatial = new SpatialMemory(this);   // Task 22: Persistent Vision Memory
         this.wiki = new MinecraftWiki(this); // Task 19: Initialize Wiki Tool
-        this.wiki = new MinecraftWiki(this); // Task 19: Initialize Wiki Tool
         this.debugCommands = new DebugCommands(this); // Phase 7.5: In-game debug commands
         this.healthMonitor = new HealthMonitor(this); // Task 28: Health Monitor
-        this.healthMonitor = new HealthMonitor(this); // Task 28: Health Monitor
         this.healthMonitor.start();
+
+        // Phase 3: Gladiator Combat Reflex
+        this.combatReflex = new CombatReflex(this);
+
+        // Legacay Phase 4: MindOS Kernel (Now handled by CoreSystem)
+        // this.bus = globalBus; 
+        // this.unifiedMemory = new UnifiedMemory(this);
+        // this.bus.registerModule('agent', this);
+
+        // Phase 2: Kernel Enhancement (Dual-Loop Architecture)
+        // this.contextManager = new ContextManager(this, 8000); // Handled by CoreSystem
+        this.toolRegistry = new ToolRegistry(this);
+
+        // Phase 4: Multi-Agent Orchestration (System 2 - Slow Loop)
+        this.system2 = new System2Loop(this);
+
+        // Phase 6: Evolution Layer (Self-Learning)
+        this.evolution = new EvolutionEngine(this);
+
+        console.log('[MindOS] 🧠 Kernel initialized - Full stack ready');
+        console.log('[MindOS] Components: SignalBus + UnifiedMemory + ContextManager + ToolRegistry + System2 + Evolution');
 
         // Phase 11: Mental Snapshot (Persistence)
         this.mentalSnapshot = new MentalSnapshot(this);
@@ -180,82 +221,133 @@ export class Agent {
                 // Double check if we are still running before proceeding
                 if (!this.running) return;
 
-                addBrowserViewer(this.bot, count_id);
-                console.log('Initializing vision intepreter...');
-                this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
+                // ============================================
+                // PHASE 1: STABILIZATION (2s)
+                // Ensure bot lands safely, chunks are loaded
+                // ============================================
+                console.log(`[INIT] ${this.name} spawned. Stabilizing...`);
+                await new Promise((resolve) => setTimeout(resolve, 2000));
 
-                // wait for a bit so stats are not undefined
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-
-                console.log(`${this.name} spawned.`);
+                // ============================================
+                // PHASE 2: CORE MODULE LOADING (Lightweight)
+                // Essential modules that need sync initialization
+                // ============================================
+                console.log('[INIT] Loading core modules...');
                 this.clearBotLogs();
+                addBrowserViewer(this.bot, count_id);
 
-                // Task 6: Generate unique world_id and initialize Cognee Memory
+                // Task 6: Generate unique world_id
                 this.world_id = randomUUID();
-                console.log(`[Task 6] Generated world_id: ${this.world_id}`);
+                console.log(`[INIT] Generated world_id: ${this.world_id}`);
 
-                try {
-                    const cogneeServiceUrl = settings.cognee_service_url || 'http://localhost:8001';
-                    this.cogneeMemory = new CogneeMemoryBridge(this, cogneeServiceUrl);
-                    await this.cogneeMemory.init();
-                    console.log('[Task 6] ✓ Cognee Memory Bridge initialized');
+                // Phase 4: Initialize UnifiedMemory with backends
+                this.unifiedMemory.init();
+                this.bus.emitSignal(SIGNAL.BOT_SPAWNED, {
+                    name: this.name,
+                    world_id: this.world_id
+                });
 
-                    // Task 9: Initialize SkillLibrary
-                    this.skillLibrary = new SkillLibrary();
-                    await this.skillLibrary.init();
-                    console.log('[Task 9] ✓ SkillLibrary initialized');
-
-                    // Task 10: Initialize SkillOptimizer
-                    this.skillOptimizer = new SkillOptimizer(this, this.skillLibrary);
-
-                    // Task 11: Link optimizer to library for auto-optimization
-                    this.skillLibrary.setOptimizer(this.skillOptimizer);
-                    console.log('[Task 11] ✓ SkillOptimizer linked for auto-optimization');
-
-                    // Task 12: Reinitialize DualBrain with Cognee context and Skill Catalog
-                    this.brain = new DualBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
-                    console.log('[Task 12] ✓ DualBrain updated with Cognee context and Skill Catalog');
-                } catch (err) {
-                    console.warn('[Agent] Failed to initialize AI subsystems (Cognee/Skills):', err.message);
-                    // Fallback: minimal DualBrain if advanced init fails
-                    if (!this.brain) this.brain = new DualBrain(this, this.prompter);
+                // Initialize DualBrain with minimal config (will be enhanced in Phase 3)
+                if (!this.brain) {
+                    this.brain = new DualBrain(this, this.prompter);
                 }
 
                 await this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
+                console.log('[INIT] Core modules loaded.');
 
-                // Initialize Dreamer (loads VectorDB)
-                this.dreamer.init().catch(err => console.error('Dreamer init failed:', err));
 
-                if (!load_mem) {
-                    if (settings.task) {
-                        this.task.initBotTask();
-                        this.task.setAgentGoal();
-                    }
-                } else {
-                    // set the goal without initializing the rest of the task
-                    if (settings.task) {
-                        this.task.setAgentGoal();
-                    }
-                }
+                // ============================================
+                // PHASE 3: HEAVY MODULES (Background Lazy Load)
+                // AI subsystems that can initialize asynchronously
+                // ============================================
+                this.scheduler.schedule('heavy_subsystems_init', PRIORITY.BACKGROUND, async () => {
+                    await this._initHeavySubsystems(count_id, load_mem);
+                }, true); // canRunParallel = true
 
-                await new Promise((resolve) => setTimeout(resolve, 10000));
-                // Only check if still running
-                if (this.running) this.checkAllPlayersPresent();
-
-                // Initialize Reflexes (Task 16 & 17)
-                this.deathRecovery = new DeathRecovery(this);
-                this.watchdog = new Watchdog(this);
-                this.watchdog.start();
-
-                // Check for pending recovery on spawn
-                await this.deathRecovery.onSpawn();
+                console.log('[INIT] Agent is online and listening.');
 
             } catch (error) {
                 console.error('Error in spawn event:', error);
                 this.shutdown('Spawn Event Error'); // SAFE SHUTDOWN
             }
         });
+    }
+
+    /**
+     * Phase 3: Initialize heavy AI subsystems in background
+     * This runs via TaskScheduler to avoid blocking main thread
+     */
+    async _initHeavySubsystems(count_id, load_mem) {
+        console.log('[INIT] ⏳ Starting heavy subsystems initialization...');
+
+        // Vision Interpreter (heavy - uses canvas)
+        if (settings.allow_vision) {
+            try {
+                console.log('[INIT] Loading VisionInterpreter...');
+                this.vision_interpreter = new VisionInterpreter(this, true);
+                console.log('[INIT] ✓ VisionInterpreter loaded');
+            } catch (err) {
+                console.warn('[INIT] ⚠ VisionInterpreter failed:', err.message);
+            }
+        }
+
+        // Cognee Memory Bridge (requires Python service)
+        try {
+            const cogneeServiceUrl = settings.cognee_service_url || 'http://localhost:8001';
+            this.cogneeMemory = new CogneeMemoryBridge(this, cogneeServiceUrl);
+            await this.cogneeMemory.init();
+            console.log('[INIT] ✓ Cognee Memory Bridge initialized');
+
+            // SkillLibrary
+            this.skillLibrary = new SkillLibrary();
+            await this.skillLibrary.init();
+            console.log('[INIT] ✓ SkillLibrary initialized');
+
+            // SkillOptimizer
+            this.skillOptimizer = new SkillOptimizer(this, this.skillLibrary);
+            this.skillLibrary.setOptimizer(this.skillOptimizer);
+            console.log('[INIT] ✓ SkillOptimizer linked');
+
+            // ToolRegistry: Discover all MCP-compatible skills
+            await this.toolRegistry.discoverSkills();
+            console.log('[INIT] ✓ ToolRegistry discovered skills');
+
+            // Reinitialize DualBrain with full context
+            this.brain = new DualBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
+            console.log('[INIT] ✓ DualBrain enhanced with Cognee + Skills');
+        } catch (err) {
+            console.warn('[INIT] ⚠ AI subsystems init failed (Cognee/Skills):', err.message);
+        }
+
+        // Dreamer (VectorDB)
+        if (this.dreamer) {
+            this.dreamer.init().catch(err => console.warn('[INIT] ⚠ Dreamer init failed:', err.message));
+        }
+
+        // Task initialization
+        if (!load_mem) {
+            if (settings.task) {
+                this.task.initBotTask();
+                this.task.setAgentGoal();
+            }
+        } else {
+            if (settings.task) {
+                this.task.setAgentGoal();
+            }
+        }
+
+        // Wait a bit then check players
+        await new Promise((resolve) => setTimeout(resolve, 8000));
+        if (this.running) this.checkAllPlayersPresent();
+
+        // Initialize Reflexes
+        this.deathRecovery = new DeathRecovery(this);
+        this.watchdog = new Watchdog(this);
+        this.watchdog.start();
+        await this.deathRecovery.onSpawn();
+
+        console.log('[INIT] ✅ All heavy subsystems initialized.');
     }
 
     // New helper for safe disconnection logic
@@ -676,11 +768,18 @@ export class Agent {
             prev_health = this.bot.health;
         });
 
-        // Task 35 Fix: Auto-Gear Combat Reflex
+        // Phase 3: Gladiator Combat Reflex
         this.bot.on('entityHurt', (entity) => {
             if (entity === this.bot.entity) {
-                // If hurt -> Switch to Combat State immediately
-                // Priority 80 (Higher than Idle and Build)
+                // Phase 3: Full combat reflex activation
+                if (this.combatReflex) {
+                    const attacker = this.combatReflex.findAttacker();
+                    if (attacker) {
+                        this.combatReflex.enterCombat(attacker);
+                    }
+                }
+
+                // Legacy: Also push to stateStack for other systems
                 if (this.stateStack && !this.stateStack.has('combat')) {
                     this.stateStack.push('combat', 80, { target: null, reason: 'self_defense' });
                     console.log("!!! ATTACKED -> TRIGGERING COMBAT STATE !!!");
@@ -874,6 +973,45 @@ export class Agent {
                 this.killAll();
             }
         }
+    }
+
+    /**
+     * Phase 7: MindOS Health Check
+     * Returns the status of all kernel components
+     */
+    getMindOSHealth() {
+        return {
+            status: 'online',
+            uptime: process.uptime(),
+            components: {
+                brain: !!this.brain,
+                memory: {
+                    unified: !!this.unifiedMemory,
+                    ram: !!this.memory_bank,
+                    graph: !!this.cogneeMemory,
+                    vector: !!this.dreamer
+                },
+                kernel: {
+                    signalBus: !!this.bus,
+                    contextManager: !!this.contextManager,
+                    toolRegistry: !!this.toolRegistry,
+                    system2: !!this.system2,
+                    evolution: !!this.evolution
+                },
+                reflexes: {
+                    combat: !!this.combatReflex,
+                    death: !!this.deathReflex,
+                    watchdog: !!this.watchdog
+                }
+            },
+            system2: this.system2 ? {
+                active: this.system2.isRunning,
+                currentGoal: this.system2.currentGoal,
+                failures: this.system2.failureCount
+            } : null,
+            evolution: this.evolution ? this.evolution.getStats() : null,
+            unifiedMemory: this.unifiedMemory ? this.unifiedMemory.getStats() : null
+        };
     }
 
     killAll() {

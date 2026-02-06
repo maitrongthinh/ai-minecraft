@@ -1,63 +1,36 @@
 {
     "meta": {
         "schema_version": "1.1.0",
-        "awf_version": "3.3.0",
-        "last_updated": "2026-02-05T22:15:00+07:00"
+        "awf_version": "4.1.2",
+        "created_at": "2026-02-06T16:05:00Z"
     },
     "project": {
-        "name": "mindcraft-antigravity",
-        "type": "Minecraft AI Bot",
-        "status": "v2.0-stable",
-        "description": "Autonomous Minecraft Agent with Dual-Brain architecture, Active Vision, and Self-Improving Skills."
+        "name": "mindcraft-develop",
+        "type": "AI Agent / Minecraft Bot",
+        "status": "Active Development"
     },
     "tech_stack": {
-        "runtime": "Node.js (type: module)",
-        "core_libraries": {
-            "mineflayer": "^4.33.0",
-            "mineflayer-pathfinder": "^2.4.5",
-            "three": "^0.128.0",
-            "prismarine-viewer": "^1.32.0"
-        },
-        "ai_layer": {
-            "openai": "^4.4.0",
-            "@mistralai/mistralai": "^1.1.0",
-            "cognee-service": "HTTP/8001"
-        }
+        "language": "JavaScript (Node.js)",
+        "core_libraries": [
+            "mineflayer",
+            "vec3",
+            "minecraft-protocol"
+        ],
+        "ai_engine": "LLM (OpenAI/Gemini/Anthropic)",
+        "architecture": "MindOS V1.0 (Dual-Loop Event-Driven)"
     },
-    "architecture": {
-        "core_components": [
-            {
-                "name": "DualBrain",
-                "role": "Central Nervous System",
-                "modules": [
-                    "Planner (Slow/Smart)",
-                    "Reflexes (Fast)"
-                ]
-            },
-            {
-                "name": "StateStack",
-                "role": "Behavior Priority Manager",
-                "description": "Stack-based state machine handling interruptions (Combat > Building > Idle)"
-            },
-            {
-                "name": "VisionInterpreter",
-                "role": "Active Perception",
-                "description": "Captures and analyzes screenshots every 10s via internal browser viewer"
-            },
-            {
-                "name": "SkillLibrary",
-                "role": "Procedural Memory",
-                "description": "Stores and auto-optimizes executable skills using MiniMax-M2"
-            }
-        ]
-    },
-    "database_schema": {
-        "type": "Vector & Graph (Cognee)",
-        "storage": "Local JSON/Vector Stores",
-        "entities": [
-            "Experiences",
-            "Skills",
-            "WorldMap"
-        ]
+    "architecture_summary": "Bio-inspired 4-layer architecture: 1. Input (Sensors), 2. Kernel (SignalBus, Memory), 3. Intelligence (System 1/2), 4. Action. Features self-evolution via Code Generation.",
+    "features": [
+        "Dual-Loop Brain (Fast Reflexes vs Slow Planning)",
+        "Event-Driven SignalBus",
+        "Unified Memory (RAM + Vector + Graph)",
+        "Self-Evolution (Runtime Code Generation)",
+        "Visual Status (Head Nodding/Shaking)"
+    ],
+    "documentation_map": {
+        "readme": "README.md",
+        "architecture": "docs/architecture/SYSTEM_ARCHITECTURE.md",
+        "guide": "docs/guides/DEVELOPER_GUIDE.md",
+        "concepts": "docs/concepts/SELF_EVOLUTION.md"
     }
 }

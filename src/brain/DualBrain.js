@@ -147,6 +147,91 @@ export class DualBrain {
     }
 
     /**
+     * Phase 4: Dynamic Context Loading (MindOS)
+     * Prepares context based on current agent state/mode
+     * @param {string} state - Current agent state (combat, crafting, building, etc.)
+     * @returns {Promise<object>} Enriched context object
+     */
+    async prepareContext(state) {
+        let context = {
+            mode: state,
+            timestamp: Date.now(),
+            health: this.agent.bot.health,
+            food: this.agent.bot.food,
+            position: this.agent.bot.entity.position
+        };
+
+        // Dynamic context switching based on state
+        switch (state) {
+            case 'combat':
+            case 'survival':
+                context.combat = {
+                    weapons: this._getWeaponsSummary(),
+                    nearbyHostiles: this._getNearbyHostiles(),
+                    armor: this._getArmorSummary()
+                };
+                break;
+
+            case 'crafting':
+            case 'resource_gathering':
+                context.crafting = {
+                    inventory: this._getInventorySummary(),
+                    recipes: await this.agent.unifiedMemory.query('recipes', { limit: 3 })
+                };
+                break;
+
+            case 'building':
+                context.building = {
+                    blueprint: this.agent.blueprintManager?.current?.name || 'none',
+                    materials: this._getMaterialsSummary(),
+                    location: this.agent.unifiedMemory.getPlace('construction_site')
+                };
+                break;
+
+            default:
+                // General context
+                context.general = {
+                    nearbyEntities: this._getNearbyEntities(5),
+                    timeOfDay: this.agent.bot.time.timeOfDay
+                };
+        }
+
+        return context;
+    }
+
+    // Phase 4 Helpers
+    _getWeaponsSummary() {
+        return this.agent.inventory.items().filter(i => i.name.includes('sword') || i.name.includes('bow')).map(i => i.name).join(', ');
+    }
+
+    _getNearbyHostiles() {
+        // Use Vision if available, else standard bot find
+        if (this.agent.vision) return this.agent.vision.getHostiles();
+        return 'unknown';
+    }
+
+    _getArmorSummary() {
+        return this.agent.bot.inventory.slots.slice(5, 9).map(i => i ? i.name : 'empty').join(', ');
+    }
+
+    _getInventorySummary() {
+        return this.agent.inventory.items().map(i => `${i.name} x${i.count}`).join(', ');
+    }
+
+    _getMaterialsSummary() {
+        return this.agent.inventory.items().filter(i => i.name.includes('log') || i.name.includes('stone') || i.name.includes('plank')).map(i => `${i.name} x${i.count}`).join(', ');
+    }
+
+    _getNearbyEntities(range) {
+        // Simplified for context
+        return Object.values(this.agent.bot.entities)
+            .filter(e => e.position.distanceTo(this.agent.bot.entity.position) < range && e !== this.agent.bot.entity)
+            .map(e => e.name || e.username)
+            .join(', ');
+    }
+
+    /**
+     * Legacy Enrichtment (Compat)
      * Enrich context with Cognee memory and skill catalog
      */
     async _enrichContext(context, worldId) {

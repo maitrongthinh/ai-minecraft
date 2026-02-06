@@ -1,3 +1,5 @@
+import { globalBus, SIGNAL } from './core/SignalBus.js';
+
 export class ActionManager {
     constructor(agent) {
         this.agent = agent;
@@ -24,17 +26,31 @@ export class ActionManager {
     }
 
     async stop() {
+        // 1. Force Stop Mineflayer Actions (Reflex Layer)
+        if (this.agent.bot) {
+            try {
+                this.agent.bot.pathfinder?.setGoal(null);
+                this.agent.bot.pathfinder?.stop();
+                this.agent.bot.pvp?.stop();
+                this.agent.bot.stopDigging();
+                this.agent.bot.clearControlStates();
+            } catch (e) {
+                // ignore errors during stop
+            }
+        }
+
         if (!this.executing) return;
+
         const timeout = setTimeout(() => {
             this.agent.cleanKill('Code execution refused stop after 10 seconds. Killing process.');
         }, 10000);
         while (this.executing) {
             this.agent.requestInterrupt();
-            console.log('waiting for code to finish executing...');
+            // console.log('waiting for code to finish executing...');
             await new Promise(resolve => setTimeout(resolve, 300));
         }
         clearTimeout(timeout);
-    } 
+    }
 
     cancelResume() {
         this.resume_func = null;
@@ -96,6 +112,12 @@ export class ActionManager {
             this.currentActionLabel = actionLabel;
             this.currentActionFn = actionFn;
 
+            // Emit Start Signal
+            globalBus.emitSignal(SIGNAL.ACTION_STARTED, {
+                action: actionLabel,
+                timestamp: Date.now()
+            });
+
             // timeout in minutes
             if (timeout > 0) {
                 TIMEOUT = this._startTimeout(timeout);
@@ -116,6 +138,15 @@ export class ActionManager {
             let timedout = this.timedout;
             this.agent.clearBotLogs();
 
+            // Emit Completion Signal
+            globalBus.emitSignal(SIGNAL.ACTION_COMPLETED, {
+                action: actionLabel,
+                success: true,
+                interrupted,
+                timedout,
+                output: output.substring(0, 100) // Truncate for event bus
+            });
+
             // if not interrupted and not generating, emit idle event
             if (!interrupted) {
                 this.agent.bot.emit('idle');
@@ -132,13 +163,20 @@ export class ActionManager {
             console.error("Code execution triggered catch:", err);
             // Log the full stack trace
             console.error(err.stack);
+
+            // Emit Failure Signal
+            globalBus.emitSignal(SIGNAL.ACTION_FAILED, {
+                action: actionLabel,
+                error: err.toString()
+            });
+
             await this.stop();
             err = err.toString();
 
             let message = this.getBotOutputSummary() +
                 '!!Code threw exception!!\n' +
                 'Error: ' + err + '\n' +
-                'Stack trace:\n' + err.stack+'\n';
+                'Stack trace:\n' + err.stack + '\n';
 
             let interrupted = this.agent.bot.interrupt_code;
             this.agent.clearBotLogs();

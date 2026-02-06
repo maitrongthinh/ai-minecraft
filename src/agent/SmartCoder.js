@@ -2,12 +2,34 @@
 import { Coder } from './coder.js';
 import { SkillLibrary } from '../skills/SkillLibrary.js';
 import { lockdown } from './library/lockdown.js';
-import { JsonSanitizer } from '../utils/JsonSanitizer.js'; // Task 26: Data Integrity
+import { JsonSanitizer } from '../utils/JsonSanitizer.js';
+import { globalBus, SIGNAL } from './core/SignalBus.js';
 
 export class SmartCoder extends Coder {
     constructor(agent) {
         super(agent);
         this.library = new SkillLibrary();
+        this._setupSignals();
+    }
+
+    _setupSignals() {
+        globalBus.subscribe(SIGNAL.CODE_REQUEST, async (payload) => {
+            console.log('[SmartCoder] 📨 Received CODE_REQUEST');
+            // Mock a history object if payload has messages
+            const mockHistory = {
+                getHistory: () => payload.messages || [{ role: 'user', content: payload.prompt }]
+            };
+
+            try {
+                const result = await this.generateCode(mockHistory);
+                globalBus.emitSignal(SIGNAL.CODE_GENERATED, {
+                    success: !result.includes('Failed'),
+                    result
+                });
+            } catch (err) {
+                globalBus.emitSignal(SIGNAL.CODE_GENERATED, { success: false, error: err.message });
+            }
+        });
     }
 
     /**
@@ -141,17 +163,15 @@ export class SmartCoder extends Coder {
                 response = await this.agent.prompter.chat(prompt);
             }
 
-        }
-
             // Task 26: Use JsonSanitizer for dirty parsing
             const meta = JsonSanitizer.parse(response);
-        if (meta && meta.name) {
-            this.library.addSkill(meta.name, code, meta.description, meta.tags);
-        } else {
-            console.warn("[SmartCoder] Could not parse skill metadata from response:", response);
+            if (meta && meta.name) {
+                this.library.addSkill(meta.name, code, meta.description, meta.tags);
+            } else {
+                console.warn("[SmartCoder] Could not parse skill metadata from response:", response);
+            }
+        } catch (e) {
+            console.error("[SmartCoder] Failed to save skill:", e);
         }
-    } catch(e) {
-        console.error("[SmartCoder] Failed to save skill:", e);
     }
-}
 }
