@@ -62,19 +62,25 @@ export class CoreSystem {
      * Start Omega Safeguards
      */
     startSafeguards() {
-        // 1. Zombie Task Killer
+        // 1. Zombie Task Killer (DISABLED for Stability)
         // Checks every 10s for tasks running > 60s without updates
+        /*
         this.zombieInterval = setInterval(() => {
             if (this.scheduler) {
                 this.scheduler.checkZombieTasks(60000); // 60s TTL
             }
         }, 10000);
+        */
+        console.log('[CoreSystem] 🛡️ Zombie Task Killer DISABLED');
 
-        // 2. Physical Watchdog
+        // 2. Physical Watchdog (DISABLED for Stability)
         // Checks if bot is physically stuck while moving
+        /*
         this.watchdogInterval = setInterval(() => {
             this.checkPhysicalState();
         }, 3000); // Check every 3s
+        */
+        console.log('[CoreSystem] 🛡️ Physical Watchdog DISABLED');
     }
 
     /**

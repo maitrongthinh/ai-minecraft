@@ -206,6 +206,8 @@ export class Agent {
                 this.bot.chat(`/skin clear`);
         });
 
+        // Spawn Timeout (DISABLED for Stability)
+        /*
         const spawnTimeoutDuration = settings.spawn_timeout;
         // Keep reference to timeout to clear it on shutdown
         this.spawnTimeoutTimer = setTimeout(() => {
@@ -213,6 +215,8 @@ export class Agent {
             log(this.name, msg);
             this.shutdown('Spawn Timeout'); // SAFE SHUTDOWN
         }, spawnTimeoutDuration * 1000);
+        */
+        console.log(`[INIT] Spawn timeout DISABLED. Waiting indefinitely...`);
 
         this.bot.once('spawn', async () => {
             try {
@@ -255,6 +259,8 @@ export class Agent {
                 await this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
                 console.log('[INIT] Core modules loaded.');
+                this.isReady = true; // SignalBus is ready, events hooked up.
+
 
 
                 // ============================================
@@ -292,7 +298,7 @@ export class Agent {
             }
         }
 
-        // Cognee Memory Bridge (requires Python service)
+        // Cognee Memory Bridge (Optional Service)
         try {
             const cogneeServiceUrl = settings.cognee_service_url || 'http://localhost:8001';
             this.cogneeMemory = new CogneeMemoryBridge(this, cogneeServiceUrl);
@@ -316,8 +322,12 @@ export class Agent {
             // Reinitialize DualBrain with full context
             this.brain = new DualBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
             console.log('[INIT] ✓ DualBrain enhanced with Cognee + Skills');
+
         } catch (err) {
-            console.warn('[INIT] ⚠ AI subsystems init failed (Cognee/Skills):', err.message);
+            console.warn('[INIT] ⚠ External AI Services Unavailable (Cognee/Skills).');
+            console.warn(`[INIT] Running in OFFLINE MODE. Error: ${err.message}`);
+            // Fallback: Ensure critical components exist even if empty
+            if (!this.brain) this.brain = new DualBrain(this, this.prompter);
         }
 
         // Dreamer (VectorDB)
@@ -374,6 +384,7 @@ export class Agent {
 
         const respondFunc = async (username, message) => {
             if (!this.running) return;
+            if (!this.isReady) return; // Ignore chat during startup
             if (message === "") return;
             if (username === this.name) return;
             if (settings.only_chat_with.length > 0 && !settings.only_chat_with.includes(username)) return;
