@@ -1,7 +1,7 @@
 const settings = {
     "minecraft_version": "auto", // or specific version like "1.21.6"
-    "host": "127.0.0.1", // or "localhost", "your.ip.address.here"
-    "port": 5000, // Minecraft server port
+    "host": "thinhmcvn.aternos.me", // or "localhost", "your.ip.address.here"
+    "port": 51282, // Minecraft server port
     "auth": "offline", // or "microsoft"
 
     // the mindserver manages all agents and hosts the UI
@@ -61,8 +61,8 @@ const settings = {
     // Single Model Configuration (MiniMax-M2 via MegaLLM)
     "models": {
         "high_iq": {
-            "provider": "openai",
-            "model": "minimax-m2", // MiniMax-M2 model
+            "api": "openai",
+            "model": "openai-gpt-oss-20b",
             "url": "https://ai.megallm.io/v1",
             "params": {
                 "apiKey": process.env.MEGALLM_API_KEY

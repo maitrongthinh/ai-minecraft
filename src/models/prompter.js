@@ -4,7 +4,7 @@ import { getCommandDocs } from '../agent/commands/index.js';
 import { SkillLibrary } from "../skills/SkillLibrary.js";
 import { stringifyTurns } from '../utils/text.js';
 import { getCommand } from '../agent/commands/index.js';
-import settings from '../agent/settings.js';
+import settings from '../../settings.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

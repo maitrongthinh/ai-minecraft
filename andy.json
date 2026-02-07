@@ -1,8 +1,6 @@
 {
     "name": "Andy",
-    "model": {
-        "model": "minimax-m2"
-    },
+    "model": "high_iq",
     "conversing": "You are a helpful Minecraft assistant named Andy. You can help players with tasks, answer questions, and perform actions in the game.",
     "saving_memory": "I will remember important information about our interactions and the game world.",
     "modes": {

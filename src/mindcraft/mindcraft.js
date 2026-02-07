@@ -9,7 +9,7 @@ let agent_processes = {};
 let agent_count = 0;
 let mindserver_port = 8080;
 
-export async function init(host_public=false, port=8080, auto_open_ui=true) {
+export async function init(host_public = false, port = 8080, auto_open_ui = true) {
     if (connected) {
         console.error('Already initiliazed!');
         return;
@@ -21,7 +21,7 @@ export async function init(host_public=false, port=8080, auto_open_ui=true) {
         setTimeout(() => {
             // check if browser listener is already open
             if (numStateListeners() === 0) {
-                open('http://localhost:'+port);
+                open('http://localhost:' + port);
             }
         }, 3000);
     }
@@ -50,14 +50,15 @@ export async function createAgent(settings) {
             settings.port = server.port;
             settings.minecraft_version = server.version;
         } catch (error) {
-            console.warn(`Error getting server:`, error);
+            console.warn(`[Connection Warning] Could not ping server at ${settings.host}:${settings.port}.`);
+            console.warn(`Reason: ${error.message}`);
             if (settings.minecraft_version === "auto") {
-                settings.minecraft_version = null;
+                settings.minecraft_version = null; // Let mineflayer auto-detect
             }
-            console.warn(`Attempting to connect anyway...`);
+            console.warn(`Attempting to connect anyway... (This is normal if the server blocks pings or is starting up)`);
         }
 
-        const agentProcess = new AgentProcess(agent_name, mindserver_port);
+        const agentProcess = new AgentProcess(agent_name, mindserver_port, settings.profile_path);
         agentProcess.start(load_memory, init_message, agentIndex);
         agent_processes[settings.profile.name] = agentProcess;
     } catch (error) {

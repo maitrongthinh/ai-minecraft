@@ -1,6 +1,8 @@
 import { Agent } from '../agent/agent.js';
 import { serverProxy } from '../agent/mindserver_proxy.js';
 import yargs from 'yargs';
+import settings from '../../settings.js';
+import { readFileSync } from 'fs';
 
 const args = process.argv.slice(2);
 if (args.length < 1) {
@@ -35,10 +37,34 @@ const argv = yargs(args)
         type: 'number',
         description: 'port of mindserver'
     })
+    .option('profile', {
+        alias: 'P',
+        type: 'string',
+        description: 'path to profile json file'
+    })
     .argv;
 
 (async () => {
     try {
+        if (argv.profile) {
+            console.log(`[Init] Loading profile from: ${argv.profile}`);
+            try {
+                const profileContent = readFileSync(argv.profile, 'utf8');
+                settings.profile = JSON.parse(profileContent);
+                console.log(`[Init] Profile loaded. Name: ${settings.profile.name}`);
+
+                // Resolve model alias from settings
+                if (settings.profile.model === 'high_iq' && settings.models && settings.models.high_iq) {
+                    console.log('[Init] Resolving "high_iq" model alias from settings.');
+                    settings.profile.model = settings.models.high_iq;
+                }
+            } catch (err) {
+                console.error(`[Init] Failed to load profile: ${err.message}`);
+            }
+        } else {
+            console.warn('[Init] No profile path provided via --profile / -P');
+        }
+
         console.log('Connecting to MindServer');
         await serverProxy.connect(argv.name, argv.port);
         console.log('Starting agent');

@@ -1,8 +1,15 @@
 // extremely lightweight obj that can be imported/modified by any file
 let settings = {
     models: {
-        high_iq: { provider: 'openai', model: 'gpt-4o' },
-        fast: { provider: 'google', model: 'gemini-flash' }
+        high_iq: {
+            api: 'openai',
+            model: 'openai-gpt-oss-20b',
+            url: 'https://ai.megallm.io/v1',
+            params: {
+                apiKey: process.env.MEGALLM_API_KEY
+            }
+        },
+        fast: { api: 'google', model: 'gemini-flash' }
     },
     max_messages: 20, // Task 28: History Summarization Threshold
     spawn_timeout: 45, // default
