@@ -142,13 +142,18 @@ export class Prompter {
     async replaceStrings(prompt, messages, examples = null, to_summarize = [], last_goals = null) {
         prompt = prompt.replaceAll('$NAME', this.agent.name);
 
+        // MODE: UNLEASHED - MAX CONTEXT
+        // Context Slicing DISABLED. Full state is always injected.
+
         if (prompt.includes('$STATS')) {
             let stats = await getCommand('!stats').perform(this.agent) + '\n';
+            // ALWAYS include entities and blocks for maximum perception
             stats += await getCommand('!entities').perform(this.agent) + '\n';
             stats += await getCommand('!nearbyBlocks').perform(this.agent);
             prompt = prompt.replaceAll('$STATS', stats);
         }
         if (prompt.includes('$INVENTORY')) {
+            // ALWAYS include full inventory
             let inventory = await getCommand('!inventory').perform(this.agent);
             prompt = prompt.replaceAll('$INVENTORY', inventory);
         }
@@ -177,10 +182,10 @@ export class Prompter {
             let memoryContext = '';
             // RAG: Inject memories if available
             if (this.agent.dreamer) {
-                const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-                if (lastMsg && lastMsg.role === 'user' && lastMsg.content) {
+                const lastMsgObj = messages.length > 0 ? messages[messages.length - 1] : null;
+                if (lastMsgObj && lastMsgObj.role === 'user' && lastMsgObj.content) {
                     try {
-                        const memories = await this.agent.dreamer.searchMemories(lastMsg.content);
+                        const memories = await this.agent.dreamer.searchMemories(lastMsgObj.content);
                         if (memories && memories.length > 0) {
                             memoryContext = '\n\nRelevant Memories (from long-term storage):\n' + memories.map(m => `- ${m.text}`).join('\n');
                         }

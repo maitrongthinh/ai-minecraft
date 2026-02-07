@@ -132,7 +132,8 @@ export class UnifiedMemory {
         // Tier 2: Graph (Cognee) - Structured relationships
         if (this.cognee && this.worldId) {
             try {
-                const graphResult = await this._queryGraph(question, options.limit || 5);
+                // UNLEASHED MODE: Increase limit to 20
+                const graphResult = await this._queryGraph(question, options.limit || 20);
                 if (graphResult?.results?.length > 0) {
                     this.stats.hits.GRAPH++;
                     this._cacheResult(cacheKey, graphResult.results);
@@ -146,7 +147,8 @@ export class UnifiedMemory {
         // Tier 3: Vector (Dreamer) - Semantic search
         if (this.dreamer) {
             try {
-                const vectorResult = await this._queryVector(question, options.limit || 5);
+                // UNLEASHED MODE: Increase limit to 20
+                const vectorResult = await this._queryVector(question, options.limit || 20);
                 if (vectorResult?.length > 0) {
                     this.stats.hits.VECTOR++;
                     this._cacheResult(cacheKey, vectorResult);

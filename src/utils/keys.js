@@ -19,14 +19,35 @@ try {
     console.warn('[System] Failed to load .env file:', err.message);
 }
 
+const activeKeys = new Set();
+// Map standard keys to Minecraft controls if needed, or use as is
+// For now, we trust the KeyCode passed from the client matches what we expect
+
 export function getKey(name) {
-    let key = process.env[name];
-    if (!key) {
-        throw new Error(`API key "${name}" not found in environment variables!`);
+    if (name.startsWith('env:')) {
+        let key = process.env[name.substring(4)];
+        if (!key) {
+            throw new Error(`API key "${name}" not found in environment variables!`);
+        }
+        return key;
     }
-    return key;
+    // If asking for keyboard state
+    return activeKeys.has(name);
+}
+
+export function setKeyState(name, isPressed) {
+    if (isPressed) {
+        activeKeys.add(name);
+    } else {
+        activeKeys.delete(name);
+    }
+}
+
+export function resetAllKeys() {
+    activeKeys.clear();
 }
 
 export function hasKey(name) {
-    return !!process.env[name];
+    if (name.startsWith('env:')) return !!process.env[name.substring(4)];
+    return activeKeys.has(name);
 }

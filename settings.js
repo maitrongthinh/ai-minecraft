@@ -42,12 +42,13 @@ const settings = {
 
     "allow_insecure_coding": false, // allows newAction command and model can write/run code on your computer. enable at own risk
     "allow_vision": false, // allows vision model to interpret screenshots as inputs
-    "blocked_actions": ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"], // commands to disable and remove from docs. Ex: ["!setMode"]
+    "allow_offline_mode": true, // User Request: Defaults to true
+    "blocked_actions": ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"], // commands to disable and remove from docs. Ex: ["!setMode"],
     "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
     "relevant_docs_count": 5, // number of relevant code function docs to select for prompting. -1 for all
 
-    "max_messages": 15, // max number of messages to keep in context
-    "num_examples": 2, // number of examples to give to the model
+    "max_messages": 50, // MODE: UNLEASHED - MAX CONTEXT
+    "num_examples": 5, // number of examples to give to the model
     "max_commands": -1, // max number of commands that can be used in consecutive responses. -1 for no limit
     "show_command_syntax": "full", // "full", "shortened", or "none"
     "narrate_behavior": true, // chat simple automatic actions ('Picking up item!')
@@ -77,7 +78,7 @@ const settings = {
 
     // Watchdog Configuration (Anti-Stuck System)
     "watchdog": {
-        "enabled": true,
+        "enabled": false, // User Request: Defaults to false
         "stuck_timeout_seconds": 180,   // Time before triggering emergency (3 min)
         "check_interval_ms": 3000       // How often to check position
     }

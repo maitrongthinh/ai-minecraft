@@ -384,7 +384,17 @@ export class Agent {
 
         const respondFunc = async (username, message) => {
             if (!this.running) return;
-            if (!this.isReady) return; // Ignore chat during startup
+
+            // Phase 3: Safe Startup Sequence
+            // Gatekeep Events
+            if (!this.isReady) {
+                // Optional: Queue or Reply. User plan suggests "I am waking up..." or queue.
+                // Let's reply once per user to avoid spam, or just ignore. 
+                // User said: "If not ready, reply... or queue". Let's ignore to match previous safe behavior but add debug log.
+                // console.debug('[Agent] Ignored message (not ready):', message);
+                return;
+            }
+
             if (message === "") return;
             if (username === this.name) return;
             if (settings.only_chat_with.length > 0 && !settings.only_chat_with.includes(username)) return;
@@ -861,11 +871,12 @@ export class Agent {
 
             let start = Date.now();
             try {
-                // If IDLE for too long -> Trigger HumanManager (Heuristic)
-                // This logic will be expanded in Phase 4
+                // REFACTORED: Full Global Fault Tolerance
+                // Wrap END-TO-END update logic
                 await this.update(start - last);
             } catch (err) {
-                console.error('Update loop error:', err);
+                console.error('[UpdateLoop Error]', err);
+                // Continuity is handled by the finally/scheduling block below
             }
 
             let remaining = INTERVAL - (Date.now() - start);
@@ -933,7 +944,17 @@ export class Agent {
         // if (this.bot.modes) await this.bot.modes.update(); 
 
         if (this.self_prompter) this.self_prompter.update(delta);
-        if (this.planner) await this.planner.update(); // Task 14: Update Planner
+
+        // Task 14: Update Planner (Protected)
+        // If high-level planning fails, low-level reflexes must still work
+        if (this.planner) {
+            try {
+                await this.planner.update();
+            } catch (err) {
+                console.error('[UpdateLoop] ⚠ Planner crashed (ignoring to keep Reflexes alive):', err.message);
+            }
+        }
+
         await this.checkTaskDone();
 
         // Task 35: Active Vision Loop

@@ -11,7 +11,7 @@ class MindServerProxy {
         if (MindServerProxy.instance) {
             return MindServerProxy.instance;
         }
-        
+
         this.socket = null;
         this.connected = false;
         this.agents = [];
@@ -20,7 +20,7 @@ class MindServerProxy {
 
     async connect(name, port) {
         if (this.connected) return;
-        
+
         this.name = name;
         this.socket = io(`http://localhost:${port}`);
 
@@ -60,7 +60,7 @@ class MindServerProxy {
             console.log(`Restarting agent: ${agentName}`);
             this.agent.cleanKill();
         });
-		
+
         this.socket.on('send-message', (data) => {
             try {
                 this.agent.respondFunc(data.from, data.message);
@@ -133,4 +133,9 @@ export function sendBotChatToServer(agentName, json) {
 // for sending general output to server for display
 export function sendOutputToServer(agentName, message) {
     serverProxy.getSocket().emit('bot-output', agentName, message);
+}
+
+// for sending internal thoughts/plans to server for display
+export function sendThoughtToServer(agentName, thought) {
+    serverProxy.getSocket().emit('bot-thought', agentName, thought);
 }

@@ -1,6 +1,7 @@
 import settings from '../../settings.js';
 import { getStrategicPrompt } from '../prompts/StrategicPrompts.js';
 import { ActionLogger } from '../utils/ActionLogger.js';
+import { sendThoughtToServer } from '../agent/mindserver_proxy.js';
 
 /**
  * SingleBrain: Unified AI Controller
@@ -34,11 +35,12 @@ export class DualBrain {
         // Rate Limiter State
         this.requestCount = 0;
         this.windowStart = Date.now();
-        this.limit = settings.models?.high_iq?.rate_limit || 200;
+        // MODE: UNLEASHED - Context Stuffing Enforced
+        this.limit = 1000; // Effectively unlimited for now (was settings.models?.high_iq?.rate_limit)
         this.windowSize = 12 * 60 * 60 * 1000; // 12 hours
 
         ActionLogger.api('brain_init', { model: this.model.model, limit: this.limit });
-        console.log(`[Brain] Initialized with single model: ${this.model.model}`);
+        console.log(`[Brain] Initialized with single model: ${this.model.model} (UNLEASHED MODE)`);
     }
 
     /**
@@ -94,6 +96,11 @@ export class DualBrain {
             const res = await this.prompter.chat(enrichedContext, this.model);
             this._consumeBudget();
             ActionLogger.api('plan_success', { budget: `${this.requestCount}/${this.limit}`, requestId }, worldId);
+
+            // Extract core thought if available (e.g. from <think> tags or just the response summary)
+            let thoughtPreview = res.includes('</think>') ? res.split('</think>')[0].substring(0, 150) + '...' : res.substring(0, 100) + '...';
+            sendThoughtToServer(this.agent.name, `[PLAN] ${thoughtPreview}`);
+
             return res;
         } catch (error) {
             ActionLogger.error('plan_failed', { error: error.message, requestId }, worldId);
@@ -119,6 +126,7 @@ export class DualBrain {
             const res = await this.prompter.generateCode(enrichedPrompt, this.model);
             this._consumeBudget();
             ActionLogger.api('code_success', { budget: `${this.requestCount}/${this.limit}`, requestId }, worldId);
+            sendThoughtToServer(this.agent.name, `[CODE_GEN] Generated code for: "${prompt.substring(0, 50)}..."`);
             return res;
         } catch (error) {
             ActionLogger.error('code_failed', { error: error.message }, worldId);

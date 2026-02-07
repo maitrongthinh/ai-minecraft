@@ -193,23 +193,27 @@ export function createMindServer(host_public = false, port = 8080) {
                 console.log('Exiting MindServer');
                 process.exit(0);
             }, 2000);
-            
+
         });
 
-		socket.on('send-message', (agentName, data) => {
-			if (!agent_connections[agentName]) {
-				console.warn(`Agent ${agentName} not in game, cannot send message via MindServer.`);
-				return
-			}
-			try {
-				agent_connections[agentName].socket.emit('send-message', data)
-			} catch (error) {
-				console.error('Error: ', error);
-			}
-		});
+        socket.on('send-message', (agentName, data) => {
+            if (!agent_connections[agentName]) {
+                console.warn(`Agent ${agentName} not in game, cannot send message via MindServer.`);
+                return
+            }
+            try {
+                agent_connections[agentName].socket.emit('send-message', data)
+            } catch (error) {
+                console.error('Error: ', error);
+            }
+        });
 
         socket.on('bot-output', (agentName, message) => {
             io.emit('bot-output', agentName, message);
+        });
+
+        socket.on('bot-thought', (agentName, thought) => {
+            io.emit('bot-thought', agentName, thought);
         });
 
         socket.on('listen-to-agents', () => {
@@ -233,7 +237,7 @@ function agentsStatusUpdate(socket) {
     for (let agentName in agent_connections) {
         const conn = agent_connections[agentName];
         agents.push({
-            name: agentName, 
+            name: agentName,
             in_game: conn.in_game,
             viewerPort: conn.viewer_port,
             socket_connected: !!conn.socket

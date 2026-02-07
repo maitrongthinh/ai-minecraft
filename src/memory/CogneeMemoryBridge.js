@@ -53,8 +53,13 @@ export class CogneeMemoryBridge {
         try {
             await this.healthCheck();
             console.log('[CogneeMemoryBridge] ✓ Connected to Cognee service');
+            this.offlineMode = false;
         } catch (err) {
             console.warn('[CogneeMemoryBridge] ⚠ Cognee service unavailable, using VectorStore fallback');
+            console.warn('[CogneeMemoryBridge] 🛡️ Running in SAFE / OFFLINE MODE');
+            console.info("[Memory] Running in Offline Mode (RAM only)."); // User Requested Log
+            this.offlineMode = true;
+            this.serviceAvailable = false;
         }
     }
 
@@ -111,8 +116,12 @@ export class CogneeMemoryBridge {
         }
 
         // Check if we should attempt service or go straight to fallback
-        if (this._shouldFallback()) {
-            console.log('[CogneeMemoryBridge] Using VectorStore fallback (service degraded)');
+        if (this.offlineMode || this._shouldFallback()) {
+            if (this.offlineMode) {
+                // Silent fallback in offline mode
+            } else {
+                console.log('[CogneeMemoryBridge] Using VectorStore fallback (service degraded)');
+            }
             return await this._fallbackStore(facts, metadata);
         }
 
@@ -166,8 +175,8 @@ export class CogneeMemoryBridge {
         }
 
         // Check if we should use fallback
-        if (this._shouldFallback()) {
-            console.log('[CogneeMemoryBridge] Using VectorStore fallback for recall');
+        if (this.offlineMode || this._shouldFallback()) {
+            if (!this.offlineMode) console.log('[CogneeMemoryBridge] Using VectorStore fallback for recall');
             return await this._fallbackRecall(query, limit);
         }
 
