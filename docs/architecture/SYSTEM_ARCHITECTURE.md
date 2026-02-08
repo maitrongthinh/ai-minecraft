@@ -139,6 +139,30 @@ A background heartbeat monitor that ensures the bot never hangs.
 *   **Mechanism:** If a task takes > 60 seconds without reporting progress, the Watchdog emits `SYSTEM_RESET`.
 *   **Recovery:** The Arbiter clears the task queue and respawns the default Idle state.
 
+### 4.3. Ironclad DoS Protection (v2.2)
+*Location: `src/agent/intelligence/CodeSanitizer.js`*
+
+To prevent "Death by Infinite Loop" (e.g., `while(true)`), MindOS uses an **AST-Based Sanitizer**:
+1.  **Parse:** All LLM code is parsed into an Abstract Syntax Tree (using `acorn`).
+2.  **Inject:** A `timeout check` is injected into the body of every loop (`for`, `while`, `do-while`).
+3.  **Execute:** If a loop runs > 5 seconds, it throws an `Execution Timeout` error, saving the Main Thread.
+
+### 4.4. Brain-Body Protocol (Structured Thought)
+*Location: `UnifiedBrain.js` -> `Agent.js`*
+
+The "Mind" and "Body" are decoupled via a strict JSON Protocol:
+```json
+{
+  "thought": "Internal monologue (Reasoning)",
+  "chat": "External speech (Communication)",
+  "task": {
+    "type": "code",
+    "content": "bot.pathfinder.goto(...)"
+  }
+}
+```
+This ensures the Planner never "hallucinates" actions it cannot perform. The Body only executes valid `task` objects.
+
 ---
 
 ## 5. Developer Notes / Ghi Chú Phát Triển

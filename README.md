@@ -1,12 +1,12 @@
 <div align="center">
 
-# 🧠 MindOS V1.0 (Evolution Edition)
+# 🧠 MindOS V2.2 (Ironclad Cortex)
 ### The First Event-Driven, Self-Evolving AI Kernel for Minecraft
 ### Hệ Điều Hành AI Hướng Sự Kiện & Tự Tiến Hóa Đầu Tiên Cho Minecraft
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-gold.svg)](https://opensource.org/licenses/MIT)
-[![Status: Stable](https://img.shields.io/badge/Status-Stable-brightgreen.svg)]()
-[![Core: MindOS](https://img.shields.io/badge/Core-MindOS_Kernel_v1.0-blue)](https://github.com/your-repo/mindcraft)
+[![Status: Production Ready](https://img.shields.io/badge/Status-Production_Ready-brightgreen.svg)]()
+[![Core: MindOS](https://img.shields.io/badge/Core-MindOS_Kernel_v2.2-blue)](https://github.com/your-repo/mindcraft)
 [![Architecture: Event-Driven](https://img.shields.io/badge/Architecture-Event--Driven-purple)]()
 
 </div>
@@ -49,6 +49,11 @@ Chúng tôi xây dựng MindOS để giải quyết vấn đề **"Sụp Đổ N
 - **Watchdog Timer:** Detects frozen logic loops and force-resets the decision stack.
 - **Bootloader Safety:** Verifies module integrity before the "conscious" mind awakens.
 - **Secure Sandbox:** AI-generated code runs in a sandbox to prevent system damage.
+
+### 5. ⚔️ Ironclad Security (v2.2) / Bảo Mật Thép
+- **DoS Prevention:** `CodeSanitizer` uses AST parsing to inject timeout guards into every generated loop, preventing infinite freezes.
+- **Structured Thought:** The `UnifiedBrain` thinks in strict JSON, separating internal monologue from external speech.
+- **Token Economy:** `InventorySummarizer` compresses data by 40%, allowing for longer context windows.
 
 ---
 

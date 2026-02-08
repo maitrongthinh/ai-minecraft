@@ -34,9 +34,9 @@ We verify **NO** direct coupling between the Planner and the Body.
 *   ✅ **Do:** `globalBus.emitSignal(SIGNAL.OUT_CHAT, { content: "Hello" })`
 
 ### The Task Paradigm
-Every action is a `Task`.
-*   Tasks have **Priority** (Critical > User > Work > Background).
-*   Tasks must be **Interruptible**. You must check `if (bot.interrupt_code)` in your loops.
+Every action is a `Task` delivered via the new **JSON Protocol**.
+*   **Protocol:** `{ thought, chat, task: { type: 'code', content: '...' } }`.
+*   **Tasks** must be interruptible. Check `if (bot.interrupt_code)` in your loops.
 
 ---
 
