@@ -15,6 +15,7 @@ import { globalBus, SIGNAL } from '../core/SignalBus.js';
 
 import { PRIORITY } from '../core/TaskScheduler.js';
 import { MovementTactics } from './MovementTactics.js';
+import { SocialProfile } from './SocialProfile.js';
 
 // Combat States
 const STATE = {
@@ -70,6 +71,7 @@ export class CombatReflex {
         this.state = STATE.IDLE;
         this.target = null;
         this.inCombat = false;
+        this._isUpdating = false; // Add async update lock
 
         // Tick control
         this.tickInterval = null;
@@ -183,26 +185,31 @@ export class CombatReflex {
      * Main tick - called every 50ms during combat
      */
     async tick() {
-        if (!this.inCombat || !this.target) return;
+        if (!this.inCombat || !this.target || this._isUpdating) return;
+        this._isUpdating = true;
 
-        const bot = this.bot;
+        try {
+            const bot = this.bot;
 
-        // PRIORITY 1: Check retreat conditions
-        if (this._shouldRetreat()) {
-            this.state = STATE.RETREAT;
-            await this._executeRetreat();
-            return;
-        }
+            // PRIORITY 1: Check retreat conditions
+            if (this._shouldRetreat()) {
+                this.state = STATE.RETREAT;
+                await this._executeRetreat();
+                return;
+            }
 
-        // PRIORITY 2: Emergency healing (HP < 8)
-        if (bot.health < 8 && Date.now() - this.lastHealTime > 3000) {
-            await this._emergencyHeal();
-            return;
-        }
+            // PRIORITY 2: Emergency healing (HP < 8)
+            if (bot.health < 8 && Date.now() - this.lastHealTime > 3000) {
+                await this._emergencyHeal();
+                return;
+            }
 
-        // PRIORITY 3: Combat actions
-        if (this.state === STATE.ENGAGE) {
-            await this._executeEngagement();
+            // PRIORITY 3: Combat actions
+            if (this.state === STATE.ENGAGE) {
+                await this._executeEngagement();
+            }
+        } finally {
+            this._isUpdating = false;
         }
     }
 
@@ -215,8 +222,14 @@ export class CombatReflex {
         // Critical health (< 3 hearts)
         if (bot.health < 6) return true;
 
-        // No weapon available
-        if (!this._getBestWeapon('melee') && !this._getBestWeapon('range')) {
+        // No weapon available (Check if inventory is already synced)
+        const hasMelee = this._getBestWeapon('melee');
+        const hasRange = this._getBestWeapon('range');
+
+        // Wait at least 2 seconds after combat start before retreating for "no weapon"
+        // to allow inventory sync (Phase 3 Fix)
+        const combatDuration = Date.now() - this.lastAttackTime;
+        if (!hasMelee && !hasRange && combatDuration > 2000) {
             return true;
         }
 
@@ -284,6 +297,22 @@ export class CombatReflex {
             this.bot.deactivateItem(); // Lower shield
         }
 
+        // PRIORITY: LOS Check
+        const hasLOS = this._hasLineOfSight(this.target);
+        if (!hasLOS && distance < 10) {
+            console.log('[CombatReflex] 🧱 Target obscured by wall. Repositioning...');
+            await this.tactics.strafe(this.target, distance); // Reposition
+            return;
+        }
+
+        // PRIORITY: Terrain Safety
+        if (!this._isTerrainSafe()) {
+            console.log('[CombatReflex] ⚠️ Dangerous terrain (cliff/void)! Backing up...');
+            this.bot.setControlState('back', true);
+            setTimeout(() => this.bot.setControlState('back', false), 500);
+            return;
+        }
+
         // Movement + Attack
         if (distance <= 4) {
             // Melee range: strafe and crit attack
@@ -296,6 +325,46 @@ export class CombatReflex {
             // Range attack
             await this._rangedAttack();
         }
+    }
+
+    /**
+     * Check if bot has Line of Sight to target (no blocks blocking)
+     */
+    _hasLineOfSight(target) {
+        if (!target) return false;
+
+        const eyePos = this.bot.entity.position.offset(0, 1.6, 0);
+        const targetPos = target.position.offset(0, 1.6, 0); // Head height
+
+        const direction = targetPos.minus(eyePos).normalize();
+        const dist = eyePos.distanceTo(targetPos);
+
+        // Raycast up to the distance of target
+        const block = this.bot.world.raycast(eyePos, direction, dist);
+
+        // If no block found, or block is transparent/non-solid
+        if (!block) return true;
+
+        // Double check if block found is actually "solid"
+        return block.boundingBox === 'empty';
+    }
+
+    /**
+     * Check if the bot is in a safe position (not edge of cliff)
+     */
+    _isTerrainSafe() {
+        const botPos = this.bot.entity.position;
+
+        // Check 1 block ahead in moving direction
+        const velocity = this.bot.entity.velocity.normalize();
+        const checkPos = botPos.plus(velocity.scaled(1.2));
+
+        // Check block directly underneath
+        const blockBelow = this.bot.blockAt(checkPos.offset(0, -1, 0));
+        const blockTwoBelow = this.bot.blockAt(checkPos.offset(0, -2, 0));
+
+        // If both are air, it's a cliff
+        return !(!blockBelow || blockBelow.type === 0) || !(!blockTwoBelow || blockTwoBelow.type === 0);
     }
 
     /**
@@ -374,10 +443,15 @@ export class CombatReflex {
         const weapon = this._getBestWeapon(mode);
         if (!weapon) return false;
 
+        // Check if already equipped
+        const held = this.bot.inventory.slots[this.bot.getEquipmentDestSlot('hand')];
+        if (held && held.name === weapon.name) return true;
+
         try {
             await this.bot.equip(weapon, 'hand');
             return true;
         } catch (e) {
+            console.warn(`[CombatReflex] Equip failed: ${e.message}`);
             return false;
         }
     }

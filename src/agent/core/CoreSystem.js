@@ -1,6 +1,6 @@
 
 import { globalBus, SIGNAL } from './SignalBus.js';
-import { UnifiedMemory } from '../memory/UnifiedMemory.js';
+import { MemorySystem } from '../memory/MemorySystem.js';
 import { TaskScheduler } from './TaskScheduler.js';
 import { ContextManager } from './ContextManager.js';
 import { ReflexSystem } from './ReflexSystem.js';
@@ -24,7 +24,7 @@ export class CoreSystem {
         this.scheduler = new TaskScheduler(agent);
         this.contextManager = new ContextManager(agent);
         this.reflexSystem = new ReflexSystem(agent);
-        this.unifiedMemory = new UnifiedMemory(agent); // Renamed from 'memory' to 'unifiedMemory'
+        this.memory = new MemorySystem(agent);
 
         // Safeguard Timers (still null initially)
         this.zombieInterval = null;
@@ -40,10 +40,9 @@ export class CoreSystem {
         console.log('[CoreSystem] 🚀 Initializing MindOS Kernel...');
 
         // 1. Initialize Signal Bus (Already singleton, but verify)
-        this.bus.emitSignal(SIGNAL.SYSTEM_READY, { status: 'booting' });
 
         // 2. Initialize Subsystems
-        await this.unifiedMemory.init();
+        await this.memory.init();
         this.reflexSystem.init(); // Sync init (listeners)
 
         // 3. Initialize Scheduler

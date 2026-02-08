@@ -1,195 +1,197 @@
 import { History } from './history.js';
-import { SmartCoder } from './SmartCoder.js';
-// import { Coder } from './coder.js';
-import { VisionInterpreter } from './vision/vision_interpreter.js';
-import { Prompter } from '../models/prompter.js';
-import { Dreamer } from './Dreamer.js';
-import { BlueprintManager } from '../blueprints/BlueprintManager.js';
-import { HumanManager } from '../human_core/HumanManager.js';
-import { Arbiter } from './Arbiter.js';
-import { initModes } from './modes.js';
-import { initBot } from '../utils/mcdata.js';
+import { MemorySystem } from './memory/MemorySystem.js';
+import { SocialEngine } from './interaction/SocialEngine.js';
+import { CodeEngine } from './intelligence/CodeEngine.js';
+import { ScenarioManager } from './tasks/ScenarioManager.js';
+import { TaskScheduler, PRIORITY } from './core/TaskScheduler.js';
+import { StateStack, STATE_PRIORITY } from './StateStack.js';
+import { globalBus, SIGNAL } from './core/SignalBus.js';
 import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
-import { NPCContoller } from './npc/controller.js';
-import { MemoryBank } from './memory_bank.js';
 import { SelfPrompter } from './self_prompter.js';
 import convoManager from './conversation.js';
 import { handleTranslation, handleEnglishTranslation } from '../utils/translator.js';
 import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
 import settings from '../../settings.js';
-import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
-import { DualBrain } from '../brain/DualBrain.js';
-import { CogneeMemoryBridge } from '../memory/CogneeMemoryBridge.js';
-import { SkillLibrary } from '../skills/SkillLibrary.js';
-import { SkillOptimizer } from '../skills/SkillOptimizer.js';
+import { UnifiedBrain } from '../brain/UnifiedBrain.js';
 import { StrategyPlanner } from './StrategyPlanner.js';
 import { DeathRecovery } from './reflexes/DeathRecovery.js';
 import { Watchdog } from './reflexes/Watchdog.js';
 import { MinecraftWiki } from '../tools/MinecraftWiki.js';
-import { DebugCommands } from './commands/DebugCommands.js'; // Phase 7.5: In-game debug
-import { ActionLogger } from '../utils/ActionLogger.js'; // Phase 7.5: File logging
-import { StateStack, STATE_PRIORITY } from './StateStack.js'; // Brain Refactor: Multi-tasking
+import { DebugCommands } from './commands/DebugCommands.js';
+import { ActionLogger } from '../utils/ActionLogger.js';
 import { randomUUID } from 'crypto';
-import { HealthMonitor } from '../process/HealthMonitor.js'; // Task 28: Health Monitor
-import { MentalSnapshot } from '../utils/MentalSnapshot.js'; // Phase 11: Architectural Healing
-import { TaskScheduler, PRIORITY } from './core/TaskScheduler.js'; // Keep for PRIORITY export access if needed, or re-export from core?
-// import { CombatReflex } from './reflexes/CombatReflex.js'; // Phase 3: Gladiator
-import { globalBus, SIGNAL } from './core/SignalBus.js'; // Phase 4: MindOS Kernel
-// import { UnifiedMemory } from './memory/UnifiedMemory.js'; // Handled by CoreSystem
-// import { ContextManager } from './core/ContextManager.js'; // Handled by CoreSystem
-import { ToolRegistry } from './core/ToolRegistry.js'; // Phase 2: MCP Skill Registry
-import { System2Loop } from './orchestration/System2Loop.js'; // Phase 4: Multi-Agent Orchestration
-import EvolutionEngine from './core/EvolutionEngine.js'; // Phase 6: Self-Learning
-import { CoreSystem } from './core/CoreSystem.js'; // Phase 1: MindOS Kernel (Bootloader)
+import { HealthMonitor } from '../process/HealthMonitor.js';
+import { MentalSnapshot } from '../utils/MentalSnapshot.js';
+import { ToolRegistry } from './core/ToolRegistry.js';
+import { System2Loop } from './orchestration/System2Loop.js';
+import EvolutionEngine from './core/EvolutionEngine.js';
+import { CoreSystem } from './core/CoreSystem.js';
+import { CombatReflex } from './reflexes/CombatReflex.js';
 
-/**
- * PRODUCTION-READY AGENT CLASS (Dual-Brain Edition)
- * Refactored to remove process.exit(), implement Dual-Brain Architecture, and Event-Driven Loop.
- */
+class ControlLock {
+    constructor() {
+        this.owner = null;
+        this.timestamp = 0;
+    }
+    request(owner, timeout = 5000) {
+        if (!this.owner || (Date.now() - this.timestamp > timeout)) {
+            this.owner = owner;
+            this.timestamp = Date.now();
+            return true;
+        }
+        return this.owner === owner;
+    }
+    release(owner) {
+        if (this.owner === owner) {
+            this.owner = null;
+            return true;
+        }
+        return false;
+    }
+}
+
 export class Agent {
     async start(load_mem = false, init_message = null, count_id = 0) {
         this.last_sender = null;
         this.count_id = count_id;
         this._disconnectHandled = false;
-        this.running = true; // Lifecycle flag to manage update loop
-        this.latestRequestId = null; // Task 27: Interrupt Handling
+        this.running = true;
+        this.latestRequestId = null;
 
-
-        // Initialize components
+        // Core Components
         this.actions = new ActionManager(this);
         this.prompter = new Prompter(this, settings.profile);
 
-        // Phase 1: MindOS Kernel (Safe Bootloader)
+        // MindOS Core (Bootloader)
         this.core = new CoreSystem(this);
         await this.core.initialize();
 
-        // Map Kernel Components (Bridge to new architecture)
+        // Consolidate Unified Modules (Phase 2 Refactor)
+        this.memory = this.core.memory; // Bridged from Kernel
+        this.social = new SocialEngine(this);
+        this.intelligence = new CodeEngine(this);
+        this.scenarios = new ScenarioManager(null, this);
+        // Core Bridges
         this.scheduler = this.core.scheduler;
-        this.contextManager = this.core.contextManager;
-        this.unifiedMemory = this.core.unifiedMemory;
-        this.reflexSystem = this.core.reflexSystem;
-        this.bus = this.core.bus;
+        this.bus = globalBus;
 
-        // Register Agent Module
-        this.bus.registerModule('agent', this);
-
-        // Initialize Graph Memory (Task 6)
-        // Note: CogneeMemoryBridge will be init in spawn event after world_id is generated
-        this.cogneeMemory = null;
-        this.world_id = null;
-
-        // Initialize Central Nervous System (DualBrain)
-        // Initialize Central Nervous System (DualBrain)
-        this.brain = new DualBrain(this, this.prompter);
+        // Nervous System
+        this.brain = new UnifiedBrain(this, this.prompter);
 
         this.name = (this.prompter.getName() || '').trim();
-        console.log(`Initializing agent ${this.name}...`);
+        console.log(`[MindOS] Agent ${this.name} waking up...`);
 
-        // Validate Name Format
-        const nameCheck = validateNameFormat(this.name);
-        if (!nameCheck.success) {
-            log(this.name, nameCheck.msg);
-            this.shutdown('Invalid name format'); // SAFE SHUTDOWN
+        if (!validateNameFormat(this.name).success) {
+            this.shutdown('Invalid name format');
             return;
         }
 
+        // Feature Modules
         this.history = new History(this);
-        this.coder = new SmartCoder(this);
-        this.npc = new NPCContoller(this);
-        this.memory_bank = new MemoryBank();
-        this.self_prompter = new SelfPrompter(this);
-        this.dreamer = new Dreamer(this);
-        this.blueprintManager = new BlueprintManager();
-        this.humanManager = new HumanManager(this);
         this.arbiter = new Arbiter(this);
-        this.planner = new StrategyPlanner(this); // Task 14: Initialize Strategy Planner
-        this.spatial = new SpatialMemory(this);   // Task 22: Persistent Vision Memory
-        this.wiki = new MinecraftWiki(this); // Task 19: Initialize Wiki Tool
-        this.debugCommands = new DebugCommands(this); // Phase 7.5: In-game debug commands
-        this.healthMonitor = new HealthMonitor(this); // Task 28: Health Monitor
+        this.planner = new StrategyPlanner(this);
+        this.wiki = new MinecraftWiki(this);
+        this.debugCommands = new DebugCommands(this);
+        this.healthMonitor = new HealthMonitor(this);
         this.healthMonitor.start();
 
-        // Phase 3: Gladiator Combat Reflex
+        // Reflexes & Optimization
         this.combatReflex = new CombatReflex(this);
-
-        // Legacay Phase 4: MindOS Kernel (Now handled by CoreSystem)
-        // this.bus = globalBus; 
-        // this.unifiedMemory = new UnifiedMemory(this);
-        // this.bus.registerModule('agent', this);
-
-        // Phase 2: Kernel Enhancement (Dual-Loop Architecture)
-        // this.contextManager = new ContextManager(this, 8000); // Handled by CoreSystem
         this.toolRegistry = new ToolRegistry(this);
-
-        // Phase 4: Multi-Agent Orchestration (System 2 - Slow Loop)
         this.system2 = new System2Loop(this);
-
-        // Phase 6: Evolution Layer (Self-Learning)
         this.evolution = new EvolutionEngine(this);
-
-        console.log('[MindOS] 🧠 Kernel initialized - Full stack ready');
-        console.log('[MindOS] Components: SignalBus + UnifiedMemory + ContextManager + ToolRegistry + System2 + Evolution');
-
-        // Phase 11: Mental Snapshot (Persistence)
         this.mentalSnapshot = new MentalSnapshot(this);
-        // Async load (fire and forget, or await if critical? Await is safer for state stack restoration)
-        this.mentalSnapshot.load().then(loaded => {
-            if (loaded) console.log('[Agent] 🧠 Restored mental state from snapshot.');
-        });
 
-        // Brain Refactor Phase B: StateStack for multi-tasking
-        this.stateStack = new StateStack(this);
-
-        // Brain Refactor Phase D: Flags for reflex guard
-        this.flags = {
-            critical_action: false, // True during precision work (building, combat)
-            allow_reflex: true       // Master switch for reflexes
+        // Resource Locking
+        this.locks = {
+            look: new ControlLock(),
+            move: new ControlLock()
         };
 
+        this.stateStack = new StateStack(this);
+        this.flags = { critical_action: false, allow_reflex: true };
+
+        // Post-Init
+        this.intelligence.initialPrompt = settings.initial_prompt;
         convoManager.initAgent(this);
-        // Wrap async init in try/catch
+
+        await this.prompter.initExamples();
+        this.mentalSnapshot.load();
+
+        let save_data = load_mem ? this.history.load() : null;
+        this._connectToMinecraft(save_data, init_message);
+    }
+
+    async update(delta) {
+        if (!this.running) return;
+
         try {
-            await this.prompter.initExamples();
+            // High Frequency Reflex Update (50ms)
+            if (this.combatReflex && this.combatReflex.inCombat) {
+                if (this.locks.look.request('combat') && this.locks.move.request('combat')) {
+                    await this.combatReflex.tick();
+                }
+            }
+
+            // Central Intelligence Processing
+            await this.brain.update(delta);
+
+            // Social Territorial Check (Optimized)
+            this._territorialUpdate();
+
         } catch (err) {
-            console.error(`${this.name} failed to init examples:`, err);
+            console.error(`[MindOS] Loop error in ${this.name}:`, err.message);
+            // Don't crash, just wait for next tick
         }
+    }
 
-        // load mem first before doing task
-        let save_data = null;
-        if (load_mem) {
-            save_data = this.history.load();
-        }
-        let taskStart = null;
-        if (save_data) {
-            taskStart = save_data.taskStart;
-        } else {
-            taskStart = Date.now();
-        }
-        this.task = new Task(this, settings.task, taskStart);
-        this.blocked_actions = settings.blocked_actions.concat(this.task.blocked_actions || []);
-        blacklistCommands(this.blocked_actions);
+    _territorialUpdate() {
+        const bot = this.bot;
+        if (!bot || !bot.entities) return;
 
-        console.log(this.name, 'logging into minecraft...');
+        const intruders = Object.values(bot.entities).filter(e => {
+            if (e.type !== 'player' || e.username === bot.username) return false;
+            // Check if the player is in the whitelist
+            if (settings.whitelist.length > 0 && !settings.whitelist.includes(e.username)) return false;
+            return bot.entity.position.distanceTo(e.position) < 15;
+        });
+
+        const dangerousIntruders = this.social.checkIntruders(intruders);
+        if (dangerousIntruders.length > 0) {
+            const target = dangerousIntruders[0];
+            if (!this._lastAlertTime || Date.now() - this._lastAlertTime > 10000) {
+                this.speak(`Stop right there, ${target.username}! This is my territory.`);
+                this._lastAlertTime = Date.now();
+            }
+        }
+    }
+
+    /**
+     * Internal helper to manage Minecraft connection and auto-reconnect
+     */
+    async _connectToMinecraft(save_data = null, init_message = null, attempt = 0) {
+        if (!this.running) return;
+
+        console.log(`${this.name} logging into minecraft (Attempt ${attempt + 1})...`);
         try {
             this.bot = initBot(this.name);
+            this._disconnectHandled = false;
         } catch (err) {
             console.error(`${this.name} failed to init bot instance:`, err);
-            this.shutdown('Bot Initialization Failed');
+            this._handleReconnect(save_data, init_message, attempt);
             return;
         }
 
-        // Connection Handler replaced with safe internal handler
-        this.bot.once('kicked', (reason) => this.handleSafeDisconnect('Kicked', reason));
-        this.bot.once('end', (reason) => this.handleSafeDisconnect('Disconnected', reason));
+        this.bot.once('kicked', (reason) => this.handleSafeDisconnect('Kicked', reason, save_data, init_message, attempt));
+        this.bot.once('end', (reason) => this.handleSafeDisconnect('Disconnected', reason, save_data, init_message, attempt));
         this.bot.on('error', (err) => {
+            log(this.name, `[LoginGuard] Connection Error: ${String(err)}`);
             if (String(err).includes('Duplicate') || String(err).includes('ECONNREFUSED')) {
-                this.handleSafeDisconnect('Error', err);
-            } else {
-                log(this.name, `[LoginGuard] Connection Error: ${String(err)}`);
+                this.handleSafeDisconnect('Error', err, save_data, init_message, attempt);
             }
         });
 
@@ -198,86 +200,66 @@ export class Agent {
         this.bot.on('login', () => {
             console.log(this.name, 'logged in!');
             serverProxy.login();
-
-            // Set skin for profile
             if (this.prompter.profile.skin)
                 this.bot.chat(`/skin set URL ${this.prompter.profile.skin.model} ${this.prompter.profile.skin.path}`);
             else
                 this.bot.chat(`/skin clear`);
         });
 
-        // Spawn Timeout (DISABLED for Stability)
-        /*
-        const spawnTimeoutDuration = settings.spawn_timeout;
-        // Keep reference to timeout to clear it on shutdown
-        this.spawnTimeoutTimer = setTimeout(() => {
-            const msg = `Bot has not spawned after ${spawnTimeoutDuration} seconds. Exiting.`;
-            log(this.name, msg);
-            this.shutdown('Spawn Timeout'); // SAFE SHUTDOWN
-        }, spawnTimeoutDuration * 1000);
-        */
-        console.log(`[INIT] Spawn timeout DISABLED. Waiting indefinitely...`);
-
         this.bot.once('spawn', async () => {
             try {
-                if (this.spawnTimeoutTimer) clearTimeout(this.spawnTimeoutTimer);
-
-                // Double check if we are still running before proceeding
                 if (!this.running) return;
-
-                // ============================================
-                // PHASE 1: STABILIZATION (2s)
-                // Ensure bot lands safely, chunks are loaded
-                // ============================================
                 console.log(`[INIT] ${this.name} spawned. Stabilizing...`);
                 await new Promise((resolve) => setTimeout(resolve, 2000));
 
-                // ============================================
-                // PHASE 2: CORE MODULE LOADING (Lightweight)
-                // Essential modules that need sync initialization
-                // ============================================
-                console.log('[INIT] Loading core modules...');
                 this.clearBotLogs();
-                addBrowserViewer(this.bot, count_id);
+                addBrowserViewer(this.bot, this.count_id);
 
-                // Task 6: Generate unique world_id
-                this.world_id = randomUUID();
-                console.log(`[INIT] Generated world_id: ${this.world_id}`);
+                if (!this.world_id) this.world_id = randomUUID();
 
-                // Phase 4: Initialize UnifiedMemory with backends
                 this.unifiedMemory.init();
                 this.bus.emitSignal(SIGNAL.BOT_SPAWNED, {
                     name: this.name,
                     world_id: this.world_id
                 });
 
-                // Initialize DualBrain with minimal config (will be enhanced in Phase 3)
-                if (!this.brain) {
-                    this.brain = new DualBrain(this, this.prompter);
-                }
-
                 await this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
-                console.log('[INIT] Core modules loaded.');
-                this.isReady = true; // SignalBus is ready, events hooked up.
+                this.isReady = true;
 
-
-
-                // ============================================
-                // PHASE 3: HEAVY MODULES (Background Lazy Load)
-                // AI subsystems that can initialize asynchronously
-                // ============================================
                 this.scheduler.schedule('heavy_subsystems_init', PRIORITY.BACKGROUND, async () => {
-                    await this._initHeavySubsystems(count_id, load_mem);
-                }, true); // canRunParallel = true
+                    await this._initHeavySubsystems(this.count_id, !!save_data);
+                }, true);
 
                 console.log('[INIT] Agent is online and listening.');
-
             } catch (error) {
                 console.error('Error in spawn event:', error);
-                this.shutdown('Spawn Event Error'); // SAFE SHUTDOWN
+                this.handleSafeDisconnect('SpawnError', error, save_data, init_message, attempt);
             }
         });
+    }
+
+    _handleReconnect(save_data, init_message, attempt) {
+        if (!this.running) return;
+        const delay = Math.min(1000 * Math.pow(2, attempt), 30000); // Exponential backoff max 30s
+        console.log(`[Reconnect] Retrying in ${delay / 1000}s...`);
+        setTimeout(() => this._connectToMinecraft(save_data, init_message, attempt + 1), delay);
+    }
+
+    // Updated helper for safe disconnection logic with auto-reconnect
+    handleSafeDisconnect(type, reason, save_data, init_message, attempt) {
+        if (this._disconnectHandled) return;
+        this._disconnectHandled = true;
+
+        const { msg } = handleDisconnection(this.name, reason);
+        console.log(`[SafeDisconnect] ${this.name} (${type}): ${msg}`);
+
+        if (this.bot) {
+            this.bot.removeAllListeners();
+            this.bot.end();
+        }
+
+        this._handleReconnect(save_data, init_message, attempt);
     }
 
     /**
@@ -319,15 +301,15 @@ export class Agent {
             await this.toolRegistry.discoverSkills();
             console.log('[INIT] ✓ ToolRegistry discovered skills');
 
-            // Reinitialize DualBrain with full context
-            this.brain = new DualBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
-            console.log('[INIT] ✓ DualBrain enhanced with Cognee + Skills');
+            // Reinitialize UnifiedBrain with full context
+            this.brain = new UnifiedBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
+            console.log('[INIT] ✓ UnifiedBrain enhanced with Cognee + Skills');
 
         } catch (err) {
             console.warn('[INIT] ⚠ External AI Services Unavailable (Cognee/Skills).');
             console.warn(`[INIT] Running in OFFLINE MODE. Error: ${err.message}`);
             // Fallback: Ensure critical components exist even if empty
-            if (!this.brain) this.brain = new DualBrain(this, this.prompter);
+            if (!this.brain) this.brain = new UnifiedBrain(this, this.prompter);
         }
 
         // Dreamer (VectorDB)
@@ -358,18 +340,6 @@ export class Agent {
         await this.deathRecovery.onSpawn();
 
         console.log('[INIT] ✅ All heavy subsystems initialized.');
-    }
-
-    // New helper for safe disconnection logic
-    handleSafeDisconnect(type, reason) {
-        if (this._disconnectHandled) return;
-        this._disconnectHandled = true;
-
-        // Log and Analyze
-        const { msg } = handleDisconnection(this.name, reason);
-        console.log(`[SafeDisconnect] ${this.name}: ${msg}`);
-
-        this.shutdown(msg);
     }
 
     async _setupEventHandlers(save_data, init_message) {

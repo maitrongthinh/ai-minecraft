@@ -24,64 +24,77 @@ export class TaskScheduler {
     constructor(agent) {
         this.agent = agent;
         this.queue = [];
-        // Map to track active tasks: key=taskName, value=taskObj
         this.activeTasks = new Map();
         this._processing = false;
 
         this._setupReflexListeners();
     }
 
-    _setupReflexListeners() {
-        // High Priority: Critical Health -> Panic/Heal
-        globalBus.subscribe(SIGNAL.HEALTH_CRITICAL, (payload) => {
-            console.log('[TaskScheduler] 🚑 REFLEX: Critical Health!', payload);
-            this.schedule('survival_reflex', 100, async () => {
-                // Should invoke SurvivalSystem or simple fallback
-                await this.agent.bot.stopDigging();
-                console.log('SURVIVAL REFLEX EXECUTED');
-                // Real implementation would be: await this.agent.survivalSystem.handleCritical(payload);
-            }, false); // Serial task
-        });
+    /**
+     * Calculate dynamic priority based on current agent state
+     */
+    calculateUtility(taskName, basePriority) {
+        const bot = this.agent.bot;
+        if (!bot) return basePriority;
 
-        // Medium Priority: Hungry -> Eat
-        globalBus.subscribe(SIGNAL.HUNGRY, (payload) => {
-            console.log('[TaskScheduler] 🍎 REFLEX: Hungry', payload);
-            this.schedule('eat_reflex', 90, async () => {
-                // await this.agent.survivalSystem.eat();
-                console.log('EAT REFLEX EXECUTED');
+        switch (taskName) {
+            case 'survival_reflex':
+            case 'combat_reflex':
+                // Dynamic Survival: Inverse scale (Health 20 -> 40, Health 5 -> 100)
+                const healthMultiplier = Math.max(0, (20 - bot.health) * 4);
+                const utility = 40 + healthMultiplier;
+                if (utility > 80) console.log(`[CORTEX] ⚠️ High Survival Utility: ${utility.toFixed(1)} (HP: ${bot.health.toFixed(1)})`);
+                return utility;
+
+            case 'eat_reflex':
+                // Hunger utility (Food 20 -> 20, Food 5 -> 90)
+                const hungerMultiplier = Math.max(0, (20 - bot.food) * 4.6);
+                return 20 + hungerMultiplier;
+
+            default:
+                return basePriority;
+        }
+    }
+
+    _setupReflexListeners() {
+        globalBus.subscribe(SIGNAL.HEALTH_CRITICAL, (payload) => {
+            const utility = this.calculateUtility('survival_reflex', 100);
+            this.schedule('survival_reflex', utility, async () => {
+                await this.agent.bot.stopDigging();
+                console.log(`[CORTEX] SURVIVAL REFLEX EXECUTED (Utility: ${utility})`);
             }, false);
         });
 
-        // Combat: Threat Detected
+        globalBus.subscribe(SIGNAL.HUNGRY, (payload) => {
+            const utility = this.calculateUtility('eat_reflex', 90);
+            this.schedule('eat_reflex', utility, async () => {
+                console.log(`[CORTEX] EAT REFLEX EXECUTED (Utility: ${utility})`);
+            }, false);
+        });
+
         globalBus.subscribe(SIGNAL.THREAT_DETECTED, (payload) => {
-            console.log('[TaskScheduler] ⚔️ REFLEX: Threat Detected', payload);
-            // Panic or Fight task
-            this.schedule('combat_reflex', 95, async () => {
-                console.log('COMBAT REFLEX EXECUTED');
+            const utility = this.calculateUtility('combat_reflex', 95);
+            this.schedule('combat_reflex', utility, async () => {
+                console.log(`[CORTEX] COMBAT REFLEX EXECUTED (Utility: ${utility})`);
             }, false);
         });
     }
 
-    /**
-     * Schedule a task for execution
-     * @param {string} name - Task identifier (e.g., 'build_wall', 'combat_reflex')
-     * @param {number} priority - 100 (Survival), 80 (User), 50 (Work), 10 (Background)
-     * @param {Function} taskFn - Async function to execute
-     * @param {boolean} canRunParallel - True if can run alongside other tasks (e.g., Chat, Vision)
-     */
     schedule(name, priority, taskFn, canRunParallel = false) {
+        // Ensure we always have a dynamic utility if not provided
+        const dynamicPriority = (name.includes('reflex')) ? priority : this.calculateUtility(name, priority);
+
         const task = {
             name,
-            priority,
+            priority: dynamicPriority,
             taskFn,
             canRunParallel,
             timestamp: Date.now()
         };
 
-        // RULE 1: Critical Interrupt (Reflexes - Priority >= 100)
-        // Survival tasks immediately interrupt physical actions
-        if (priority >= 100) {
-            console.log(`[CORTEX] ⚡ CRITICAL INTERRUPT: ${name}`);
+        // RULE 1: Immediate Interrupt for Critical Utility
+        if (dynamicPriority >= 100) {
+            console.log(`[CORTEX] ⚡ CRITICAL INTERRUPT: ${name} (Score: ${dynamicPriority})`);
             this.interruptPhysicalTasks();
             this.execute(task);
             return;
