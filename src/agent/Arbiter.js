@@ -16,8 +16,21 @@ export class Arbiter {
     }
 
     init() {
-        this.agent.bot.on('physicsTick', () => this.update());
-        this.agent.bot.on('idle', () => this.onIdle());
+        this._physicsListener = () => this.update();
+        this._idleListener = () => this.onIdle();
+
+        this.agent.bot.on('physicsTick', this._physicsListener);
+        this.agent.bot.on('idle', this._idleListener);
+    }
+
+    cleanup() {
+        if (!this.agent.bot) return;
+        console.log('[Arbiter] 🧹 Removing event listeners...');
+        if (this._physicsListener) this.agent.bot.removeListener('physicsTick', this._physicsListener);
+        if (this._idleListener) this.agent.bot.removeListener('idle', this._idleListener);
+
+        this._physicsListener = null;
+        this._idleListener = null;
     }
 
     setSurvivalMode(enabled) {

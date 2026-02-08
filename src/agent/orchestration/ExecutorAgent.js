@@ -20,9 +20,11 @@ export class ExecutorAgent {
     /**
      * Execute a complete plan
      * @param {Array} plan - Approved plan from PlannerAgent
+     * @param {Object} options - Execution options (e.g. { signal })
      * @returns {Promise<{success: boolean, completed: number, failed: Array}>}
      */
-    async executePlan(plan) {
+    async executePlan(plan, options = {}) {
+        const signal = options.signal;
         console.log(`[ExecutorAgent] Executing plan with ${plan.length} steps`);
 
         this.currentPlan = plan;
@@ -37,7 +39,12 @@ export class ExecutorAgent {
 
             console.log(`[ExecutorAgent] Step ${step.id}/${plan.length}: ${step.task}`);
 
-            const result = await this._executeStep(step);
+            if (signal && signal.aborted) {
+                console.log('[ExecutorAgent] Plan execution aborted by signal');
+                break;
+            }
+
+            const result = await this._executeStep(step, { signal });
 
             this.executionLog.push({
                 step: step.id,
@@ -84,14 +91,15 @@ export class ExecutorAgent {
      * Execute a single step with retries
      * @private
      */
-    async _executeStep(step) {
+    async _executeStep(step, options = {}) {
+        const signal = options.signal;
         let lastError = null;
 
         for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
             try {
                 // Check if interrupted
-                if (!this.agent.running) {
-                    return { success: false, message: 'Agent stopped', abort: true };
+                if (!this.agent.running || (signal && signal.aborted)) {
+                    return { success: false, message: 'Execution aborted', abort: true };
                 }
 
                 // Phase 1: Locking Check (Combat vs System2)

@@ -1,9 +1,9 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { Examples } from '../utils/examples.js';
-import { getCommandDocs } from '../agent/commands/index.js';
+// import { getCommandDocs } from '../agent/commands/index.js'; // REMOVED
 import { SkillLibrary } from "../skills/SkillLibrary.js";
 import { stringifyTurns } from '../utils/text.js';
-import { getCommand } from '../agent/commands/index.js';
+// import { getCommand } from '../agent/commands/index.js'; // REMOVED
 import settings from '../../settings.js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -146,22 +146,39 @@ export class Prompter {
         // Context Slicing DISABLED. Full state is always injected.
 
         if (prompt.includes('$STATS')) {
-            let stats = await getCommand('!stats').perform(this.agent) + '\n';
-            // ALWAYS include entities and blocks for maximum perception
-            stats += await getCommand('!entities').perform(this.agent) + '\n';
-            stats += await getCommand('!nearbyBlocks').perform(this.agent);
+            let stats = `Health: ${this.agent.bot?.health || 20}/20\nFood: ${this.agent.bot?.food || 20}/20\n`;
+            // Simplified Entity/Block scan to prevent crash
+            if (this.agent.bot?.entities) {
+                const entities = Object.values(this.agent.bot.entities)
+                    .filter(e => e.type === 'mob' && e.position.distanceTo(this.agent.bot.entity.position) < 16)
+                    .map(e => e.name || e.username || e.type)
+                    .join(', ');
+                stats += `Nearby Entities: ${entities || 'None'}\n`;
+            }
             prompt = prompt.replaceAll('$STATS', stats);
         }
         if (prompt.includes('$INVENTORY')) {
-            // ALWAYS include full inventory
-            let inventory = await getCommand('!inventory').perform(this.agent);
+            let inventory = 'Empty';
+            if (this.agent.bot?.inventory) {
+                // Phase 2 Optimization: Use Summarizer
+                try {
+                    const { InventorySummarizer } = await import('../utils/InventorySummarizer.js');
+                    inventory = InventorySummarizer.summarize(this.agent.bot);
+                } catch (e) {
+                    console.warn('InventorySummarizer failed, fallback to raw list:', e);
+                    inventory = this.agent.bot.inventory.items().map(i => `${i.name} x${i.count}`).join(', ');
+                }
+            }
             prompt = prompt.replaceAll('$INVENTORY', inventory);
         }
         if (prompt.includes('$ACTION')) {
-            prompt = prompt.replaceAll('$ACTION', this.agent.actions.currentActionLabel);
+            prompt = prompt.replaceAll('$ACTION', this.agent.actions?.currentActionLabel || 'Idle');
         }
-        if (prompt.includes('$COMMAND_DOCS'))
-            prompt = prompt.replaceAll('$COMMAND_DOCS', getCommandDocs(this.agent));
+        if (prompt.includes('$COMMAND_DOCS')) {
+            // Fallback to ToolRegistry docs if available, else empty
+            const docs = this.agent.toolRegistry ? this.agent.toolRegistry.getToolDocs() : 'No tools available.';
+            prompt = prompt.replaceAll('$COMMAND_DOCS', docs);
+        }
         if (prompt.includes('$CODE_DOCS')) {
             const code_task_content = messages.slice().reverse().find(msg =>
                 msg.role !== 'system' && msg.content.includes('!newAction(')

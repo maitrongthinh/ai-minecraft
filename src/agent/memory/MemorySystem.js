@@ -1,7 +1,6 @@
 /**
  * MemorySystem.js - Unified Memory & Perception System
  * 
- * Merges UnifiedMemory (UMAL) and legacy MemoryBank.
  * Handles RAM (Places), Graph (Relationships), and Vector (Semantic Search).
  */
 
@@ -30,18 +29,16 @@ export class MemorySystem {
         this.agent = agent;
         this.name = agent.name;
 
-        // --- Legacy History Properties ---
+        // RAM Persistence
         this.memory_fp = `./bots/${this.name}/memory.json`;
-        mkdirSync(`./bots/${this.name}/histories`, { recursive: true });
-        this.turns = []; // Chat history
-        this.memory = ''; // Long-term summary
+        this.turns = []; // Chat history (RAM)
+        this.memory = ''; // Long-term summary (RAM)
         this.errors = []; // Error tracking
         this.maxErrors = 10;
         this.max_messages = settings.max_messages || 20;
         this.summary_chunk_size = 5;
         this._saveTimer = null;
         this._savePending = false;
-        // -------------------------------
 
         // Internal RAM (Legacy MemoryBank)
         this.ram = {};
@@ -161,13 +158,12 @@ export class MemorySystem {
                     break;
                 case DATA_TYPE.EXPERIENCE:
                     if (this.cognee) await this.cognee.storeExperience(this.worldId, data.facts, data.metadata);
-                    if (this.dreamer) for (const fact of data.facts) await this.dreamer.vectorStore.add(fact, data.metadata);
                     break;
                 case DATA_TYPE.CHAT:
-                    if (this.dreamer) await this.dreamer.vectorStore.add(`${data.sender}: ${data.message}`, { type: 'chat', timestamp: Date.now() });
+                    if (this.cognee) await this.cognee.storeExperience(this.worldId, [`${data.sender}: ${data.message}`], { type: 'chat', timestamp: Date.now() });
                     break;
                 default:
-                    if (this.dreamer) await this.dreamer.vectorStore.add(typeof data === 'string' ? data : JSON.stringify(data), { type: 'generic' });
+                    if (this.cognee) await this.cognee.storeExperience(this.worldId, [typeof data === 'string' ? data : JSON.stringify(data)], { type: 'generic' });
             }
             globalBus.emitSignal(SIGNAL.MEMORY_STORED, { type, data });
         } catch (e) {
@@ -205,7 +201,6 @@ export class MemorySystem {
                 chunk.push(this.turns.shift());
 
             await this.summarizeMemories(chunk);
-            await this.appendFullHistory(chunk);
         }
 
         this.triggerBackgroundSave();
@@ -222,15 +217,6 @@ export class MemorySystem {
         }
     }
 
-    async appendFullHistory(to_store) {
-        try {
-            const string_timestamp = new Date().toLocaleString().replace(/[/:]/g, '-').replace(/ /g, '').replace(/,/g, '_');
-            const fp = `./bots/${this.name}/histories/${string_timestamp}.json`;
-            writeFileSync(fp, JSON.stringify(to_store, null, 4), 'utf8');
-        } catch (err) {
-            console.error(`[MemorySystem] Failed to append history: ${err.message}`);
-        }
-    }
 
     // Error Tracking
     addError(action, error, context = {}) {
@@ -247,7 +233,11 @@ export class MemorySystem {
     // Persistence
     triggerBackgroundSave() {
         if (this._saveTimer) clearTimeout(this._saveTimer);
-        this._saveTimer = setTimeout(() => this.persistToDisk(), 5000);
+        this._saveTimer = setTimeout(() => {
+            this.persistToDisk().catch(err => {
+                console.error('[MemorySystem] Critical Background Save Failure:', err.message);
+            });
+        }, 5000);
     }
 
     async persistToDisk() {

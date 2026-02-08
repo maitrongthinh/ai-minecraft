@@ -70,6 +70,24 @@ const argv = yargs(args)
         console.log('Starting agent');
         const agent = new Agent();
         serverProxy.setAgent(agent);
+
+        // Lifecycle: Graceful Shutdown
+        const cleanup = async () => {
+            console.log('\n[Process] 🛑 Received termination signal. Cleaning up...');
+            await agent.clean();
+            process.exit(0);
+        };
+
+        process.on('SIGINT', cleanup);
+        process.on('SIGTERM', cleanup);
+
+        // Safety: Force exit if cleanup hangs
+        process.on('uncaughtException', async (err) => {
+            console.error('[Process] 💀 Uncaught Exception:', err);
+            await agent.clean();
+            process.exit(1);
+        });
+
         await agent.start(argv.load_memory, argv.init_message, argv.count_id);
     } catch (error) {
         console.error('Failed to start agent process:');

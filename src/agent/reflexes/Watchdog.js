@@ -33,6 +33,8 @@ export class Watchdog {
 
     start() {
         if (this.timer) clearInterval(this.timer);
+        const profile = this.agent.config?.profile;
+        this.CHECK_INTERVAL = profile?.timeouts?.recovery_interval || settings.watchdog?.check_interval_ms || 3000;
         this.timer = setInterval(() => this.check(), this.CHECK_INTERVAL);
         console.log('[Watchdog] Started monitoring.');
     }
@@ -42,7 +44,13 @@ export class Watchdog {
     }
 
     check() {
-        if (!this.enabled || !this.agent.bot || !this.agent.bot.entity) return;
+        if (!this.enabled || !this.agent.bot || !this.agent.bot.entity) {
+            if (this.timer && !this.agent.running) {
+                console.log('[Watchdog] Bot deactivated, auto-stopping timer.');
+                this.stop();
+            }
+            return;
+        }
 
         // BRAIN REFACTOR Phase D: Respect agent flags (Reflex Guard)
         // Don't interrupt during precision work or when reflexes disabled

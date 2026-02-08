@@ -75,6 +75,25 @@ STRATEGIC RULES:
 4. PLAN steps logically: Wood -> Crafting Table -> Pickaxe -> Stone -> Stone Tools.
 
 Think strategically. Answer the user's request while respecting these survival constraints.
+
+CRITICAL FAILURE AVOIDANCE:
+You must respond in VALID JSON format ONLY. Do not wrap in markdown blocks. Do not add plain text.
+Structure the response exactly as follows:
+{
+    "thought": "Your internal monologue and reasoning process (Step-by-step logic)",
+    "chat": "The message you want to show to the user (keep it concise)",
+    "task": {
+        "type": "code",
+        "content": "// The javascript code to execute using the 'bot' object.\n// Example: await bot.pathfinder.goto(new GoalBlock(10, 64, 10));"
+    }
+}
+
+If no action is needed, set "task" to null.
+{
+    "thought": "I need to ask for clarification.",
+    "chat": "What kind of house do you want?",
+    "task": null
+}
 `;
 
     return basePrompt.trim();

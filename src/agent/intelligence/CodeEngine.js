@@ -8,10 +8,9 @@ import { getBotOutputSummary, sanitizeCode } from '../../utils/mcdata.js';
 /**
  * CodeEngine: Unified JS Execution & Learning System
  * 
- * Merges legacy Coder and SmartCoder. 
  * Features:
  * - Skill Library lookup (Learning Loop)
- * - Safe runtime execution via staged files
+ * - Safe runtime execution via ActionManager.safeExec
  * - Semantic recall fallback
  * - Event-driven code requests
  */
@@ -135,7 +134,12 @@ export class CodeEngine {
     async executeParsedCode(code) {
         try {
             const result = await this._stageCode(code);
-            if (!result) return { success: false, syntaxError: 'Staging failed.' };
+            if (!result || !result.func) {
+                return {
+                    success: false,
+                    syntaxError: result?.error?.message || 'Staging failed (Unknown error).'
+                };
+            }
 
             console.log('[CodeEngine] ▶️ Executing...');
 
@@ -149,7 +153,12 @@ export class CodeEngine {
                 };
             }
 
-            await result.func.main(this.agent.bot);
+            // 10s Timeout for physical action execution (Predictive Safety)
+            await this.agent.actions.safeExec(
+                'ai_interaction',
+                () => result.func.main(this.agent.bot),
+                10000
+            );
 
             const codeOutput = this.agent.bot.output?.summary || "No specific output recorded.";
             return {
@@ -159,9 +168,15 @@ export class CodeEngine {
             };
         } catch (e) {
             const codeOutput = this.agent.bot.output?.summary || "Execution error.";
+            console.error('[CodeEngine] Execution Failure:', e);
+
             return {
                 success: false,
-                executionError: e,
+                executionError: {
+                    name: e.name,
+                    message: e.message,
+                    stack: e.stack
+                },
                 syntaxError: e instanceof SyntaxError ? e.message : null,
                 codeOutput
             };
@@ -170,6 +185,15 @@ export class CodeEngine {
 
     async _stageCode(code) {
         let code_clean = this._sanitizeCode(code);
+
+        // Phase 8: AST Sanitization (DoS Prevention)
+        try {
+            const { CodeSanitizer } = await import('./CodeSanitizer.js');
+            code_clean = CodeSanitizer.sanitize(code_clean, 5000); // 5s timeout
+        } catch (e) {
+            console.warn('[CodeEngine] Sanitizer failed, proceeding with raw code:', e.message);
+        }
+
         let src_lint_copy = "import {skills, world, Vec3} from '../../utils/mcdata.js';\nasync function main(bot) {\n" + code_clean + "\n}\nexport {main};";
 
         // Dynamic evaluation in a compartment-like style or simple eval
@@ -181,6 +205,11 @@ export class CodeEngine {
             const mainFn = async (bot) => {
                 const { skills, world, Vec3 } = await import('../../utils/mcdata.js');
                 const context = { bot, skills, world, Vec3 };
+                // We must now ensure _start is accessible if Sanitizer injected it?
+                // Sanitizer wraps it: "const _start = Date.now(); ..."
+                // But new Function wrapping might scope it differently?
+                // "const {bot...} = context; return (async () => { const _start... ... })();"
+                // Yes, Sanitizer output is the body of the async function.
                 const fn = new Function('context', `const {bot, skills, world, Vec3} = context; return (async () => { ${code_clean} })();`);
                 return await fn(context);
             };
@@ -188,7 +217,14 @@ export class CodeEngine {
             return { func: { main: mainFn }, src_lint_copy };
         } catch (err) {
             console.error('[CodeEngine] Staging Error:', err);
-            return null;
+            return {
+                func: null,
+                error: {
+                    name: err.name,
+                    message: err.message,
+                    stack: err.stack
+                }
+            };
         }
     }
 

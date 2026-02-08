@@ -1,4 +1,5 @@
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
+import settings from '../../../settings.js';
 
 /**
  * SurvivalAnalysis
@@ -20,26 +21,24 @@ export class SurvivalAnalysis {
      * @returns {number} THREAT_LEVELS enum value
      */
     static getThreatLevel(bot) {
-        if (!bot || !bot.entity) return this.THREAT_LEVELS.SAFE; // Assume safe if not logged in?
+        if (!bot || !bot.entity) return this.THREAT_LEVELS.SAFE;
 
         const health = bot.health;
         const food = bot.food;
 
+        // Use tactical settings if available
+        const cautionThreshold = settings.auto_eat_start || 14;
+        const criticalThreshold = Math.floor(cautionThreshold / 2.3); // Scale critical with caution
+
         // Critical physiological state
-        if (health < 6 || food < 6) return this.THREAT_LEVELS.CRITICAL;
+        if (health < criticalThreshold || food < criticalThreshold) return this.THREAT_LEVELS.CRITICAL;
 
-        // Check for nearby monsters
-        // Note: this depends on mcdata being available or passed in? 
-        // We'll use a simple heuristic for now: check for hostile mobs in 'entities'.
-        // Ideally we pass in a helper or the context.
-        // For now, let's assume 'bot' has access to its registry or we scan nearby entities.
-
-        const nearbyHostiles = this.getNearbyHostiles(bot, 10);
+        const nearbyHostiles = this.getNearbyHostiles(bot, settings.tactical?.territorial_radius || 10);
 
         if (nearbyHostiles.length > 2) return this.THREAT_LEVELS.CRITICAL;
         if (nearbyHostiles.length > 0) return this.THREAT_LEVELS.DANGER;
 
-        if (health < 12 || food < 10) return this.THREAT_LEVELS.CAUTION;
+        if (health < 12 || food < cautionThreshold) return this.THREAT_LEVELS.CAUTION;
 
         return this.THREAT_LEVELS.SAFE;
     }
@@ -52,15 +51,13 @@ export class SurvivalAnalysis {
     static getNearbyHostiles(bot, range) {
         if (!bot.entities) return [];
 
-        // Basic list of common hostile mobs. 
-        // In a full implementation, we'd use mcData.mobs[name].category === 'hostile'
         const hostileNames = [
             'zombie', 'skeleton', 'creeper', 'spider', 'enderman', 'witch',
             'pillager', 'ravager', 'vindicator', 'evoker', 'phantom', 'drowned', 'husk'
         ];
 
         return Object.values(bot.entities).filter(e => {
-            return e.type === 'mob' &&
+            return (e.type === 'mob' || e.type === 'hostile') &&
                 hostileNames.includes(e.name) &&
                 bot.entity.position.distanceTo(e.position) <= range;
         });
@@ -79,13 +76,10 @@ export class SurvivalAnalysis {
         const food = bot.food;
 
         // Dynamic Recovery Thresholds:
-        // If no enemies nearby (SAFE), we can recover with lower health (e.g. 10).
-        // If enemies caution (CAUTION), we need more health (e.g. 16).
-
         if (threatLevel === this.THREAT_LEVELS.SAFE) {
-            return health >= 10 && food >= 10;
+            return health >= 10 && food >= (settings.auto_eat_start || 14);
         } else if (threatLevel === this.THREAT_LEVELS.CAUTION) {
-            return health >= 16 && food >= 14;
+            return health >= 16 && food >= 18;
         }
 
         // Danger/Critical -> Not safe to recover
@@ -99,15 +93,20 @@ export class SurvivalAnalysis {
      * @returns {boolean}
      */
     static shouldRetry(errorReason, failureCount) {
-        // Hard limit
-        if (failureCount >= 3) return false;
+        // Use max_retries from settings
+        const maxRetries = settings.tactical?.max_retries || 3;
+        if (failureCount >= maxRetries) return false;
 
         const fatalErrors = [
             'Invalid config',
             'Missing dependency',
             'Authentication failed',
             'Goal impossible',
-            'Inventory full', // Sometimes retryable if we dump items, but for now treat as fatal for simple tasks
+            'Inventory full',
+            'Security error',
+            'Fatal',
+            'ReferenceError',
+            'SyntaxError'
         ];
 
         if (fatalErrors.some(e => errorReason.includes(e))) {

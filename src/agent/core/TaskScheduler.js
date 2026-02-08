@@ -26,6 +26,7 @@ export class TaskScheduler {
         this.queue = [];
         this.activeTasks = new Map();
         this._processing = false;
+        this._unsubscribers = [];
 
         this._setupReflexListeners();
     }
@@ -35,21 +36,29 @@ export class TaskScheduler {
      */
     calculateUtility(taskName, basePriority) {
         const bot = this.agent.bot;
-        if (!bot) return basePriority;
+        const profile = this.agent.config?.profile;
+        if (!bot || !profile) return basePriority;
+
+        const priorities = profile.behavior?.priorities || {
+            survival_base: 40,
+            survival_multiplier: 4,
+            hunger_base: 20,
+            hunger_multiplier: 4.6
+        };
 
         switch (taskName) {
             case 'survival_reflex':
             case 'combat_reflex':
-                // Dynamic Survival: Inverse scale (Health 20 -> 40, Health 5 -> 100)
-                const healthMultiplier = Math.max(0, (20 - bot.health) * 4);
-                const utility = 40 + healthMultiplier;
+                // Dynamic Survival: Inverse scale
+                const healthMultiplier = Math.max(0, (20 - bot.health) * (priorities.survival_multiplier || 4));
+                const utility = (priorities.survival_base || 40) + healthMultiplier;
                 if (utility > 80) console.log(`[CORTEX] ⚠️ High Survival Utility: ${utility.toFixed(1)} (HP: ${bot.health.toFixed(1)})`);
                 return utility;
 
             case 'eat_reflex':
-                // Hunger utility (Food 20 -> 20, Food 5 -> 90)
-                const hungerMultiplier = Math.max(0, (20 - bot.food) * 4.6);
-                return 20 + hungerMultiplier;
+                // Hunger utility
+                const hungerMultiplier = Math.max(0, (20 - bot.food) * (priorities.hunger_multiplier || 4.6));
+                return (priorities.hunger_base || 20) + hungerMultiplier;
 
             default:
                 return basePriority;
@@ -57,27 +66,27 @@ export class TaskScheduler {
     }
 
     _setupReflexListeners() {
-        globalBus.subscribe(SIGNAL.HEALTH_CRITICAL, (payload) => {
+        this._unsubscribers.push(globalBus.subscribe(SIGNAL.HEALTH_CRITICAL, (payload) => {
             const utility = this.calculateUtility('survival_reflex', 100);
             this.schedule('survival_reflex', utility, async () => {
                 await this.agent.bot.stopDigging();
                 console.log(`[CORTEX] SURVIVAL REFLEX EXECUTED (Utility: ${utility})`);
             }, false);
-        });
+        }));
 
-        globalBus.subscribe(SIGNAL.HUNGRY, (payload) => {
+        this._unsubscribers.push(globalBus.subscribe(SIGNAL.HUNGRY, (payload) => {
             const utility = this.calculateUtility('eat_reflex', 90);
             this.schedule('eat_reflex', utility, async () => {
                 console.log(`[CORTEX] EAT REFLEX EXECUTED (Utility: ${utility})`);
             }, false);
-        });
+        }));
 
-        globalBus.subscribe(SIGNAL.THREAT_DETECTED, (payload) => {
+        this._unsubscribers.push(globalBus.subscribe(SIGNAL.THREAT_DETECTED, (payload) => {
             const utility = this.calculateUtility('combat_reflex', 95);
             this.schedule('combat_reflex', utility, async () => {
                 console.log(`[CORTEX] COMBAT REFLEX EXECUTED (Utility: ${utility})`);
             }, false);
-        });
+        }));
     }
 
     schedule(name, priority, taskFn, canRunParallel = false) {
@@ -277,6 +286,22 @@ export class TaskScheduler {
                     error: 'Zombie Task Timeout (Forced Kill)',
                     snapshot: this._captureFailureContext(task, new Error('Timeout'))
                 });
+            }
+        }
+    }
+
+    /**
+     * Graceful Shutdown
+     */
+    shutdown() {
+        console.log('[CORTEX] 🛑 Shutting down TaskScheduler...');
+        this.queue = [];
+        this.activeTasks.clear();
+
+        // Unsubscribe all listeners (Fix for Zombie Listeners)
+        if (this._unsubscribers) {
+            for (const unsub of this._unsubscribers) {
+                unsub();
             }
         }
     }

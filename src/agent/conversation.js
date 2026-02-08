@@ -1,5 +1,4 @@
 import settings from './settings.js';
-import { containsCommand } from './commands/index.js';
 import { sendBotChatToServer } from './mindserver_proxy.js';
 
 let agent;
@@ -288,7 +287,7 @@ const longDelay = 5000;
 async function _scheduleProcessInMessage(sender, received, convo) {
     if (convo.inMessageTimer)
         clearTimeout(convo.inMessageTimer);
-    let otherAgentBusy = containsCommand(received.message);
+    let otherAgentBusy = received.message.includes('!'); // Simple heuristic for legacy/mcp commands
 
     const scheduleResponse = (delay) => convo.inMessageTimer = setTimeout(() => _processInMessageQueue(sender), delay);
 

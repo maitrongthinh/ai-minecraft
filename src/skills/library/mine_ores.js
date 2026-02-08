@@ -49,8 +49,10 @@ export const metadata = {
 
 export default async function execute(agent, params) {
     const { oreType, count = 8, maxDistance = 64 } = params;
+    const { checkInventorySpace } = require('../../utils/mcdata.js');
 
     try {
+        if (agent.bot) checkInventorySpace(agent.bot);
         console.log(`[mine_ores] Mining ${count}x ${oreType}...`);
 
         if (!agent.bot) {

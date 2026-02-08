@@ -1,4 +1,5 @@
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
+import settings from '../../../settings.js';
 import { SurvivalAnalysis } from '../intelligence/SurvivalAnalysis.js';
 import { PlannerAgent } from './PlannerAgent.js';
 import { CriticAgent } from './CriticAgent.js';
@@ -30,8 +31,15 @@ export class System2Loop {
         this.currentGoal = null;
         this.currentPlan = null;
         this.failureCount = 0;
-        this.maxFailures = 3;
+
+        // Phase 3: Profile-Driven Constants
+        const profile = agent.config?.profile;
+        this.maxFailures = profile?.intelligence?.max_retries || settings.tactical?.max_retries || 3;
+        this.recoveryInterval = profile?.timeouts?.recovery_interval || settings.tactical?.recovery_interval || 5000;
+
         this.survivalMode = false;
+        this.abortController = null;
+        this.recoveryTimer = null;
 
         // Subscribe to signals
         this._setupSignals();
@@ -71,6 +79,8 @@ export class System2Loop {
         this.isRunning = true;
         this.currentGoal = goal;
         this.failureCount = 0;
+        this.abortController = new AbortController();
+        const signal = this.abortController.signal;
 
         globalBus.emitSignal(SIGNAL.SYSTEM2_START, { goal });
 
@@ -116,7 +126,9 @@ export class System2Loop {
 
             // Phase 3: Execution
             console.log('[System2Loop] Phase 3: Executing plan...');
-            const execResult = await this.executor.executePlan(this.currentPlan);
+            if (signal.aborted) throw new Error('AbortError');
+
+            const execResult = await this.executor.executePlan(this.currentPlan, { signal });
 
             if (!execResult.success) {
                 // Attempt replan with intelligent retry check
@@ -143,6 +155,10 @@ export class System2Loop {
             };
 
         } catch (error) {
+            if (error.message === 'AbortError') {
+                console.log('[System2Loop] Goal execution aborted by user.');
+                return { success: false, result: 'Aborted' };
+            }
             console.error('[System2Loop] Unexpected error:', error);
             return this._handleFailure('System error', error.message);
         }
@@ -261,10 +277,11 @@ export class System2Loop {
         console.log(`[System2Loop] Entering Survival Mode: ${reason}`);
         this.survivalMode = true;
 
-        // Schedule recovery attempt
-        setTimeout(() => {
+        // Schedule recovery attempt with configurable interval
+        if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
+        this.recoveryTimer = setTimeout(() => {
             this._attemptRecovery();
-        }, 3000);
+        }, this.recoveryInterval);
     }
 
     /**
@@ -286,8 +303,9 @@ export class System2Loop {
         } else {
             const threat = SurvivalAnalysis.getThreatLevel(this.agent.bot);
             console.log(`[System2Loop] Conditions NOT safe (Threat: ${threat}) - staying in Survival Mode`);
-            // Try again later with backoff or fixed interval
-            setTimeout(() => this._attemptRecovery(), 5000);
+            // Try again later with configurable interval
+            if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
+            this.recoveryTimer = setTimeout(() => this._attemptRecovery(), this.recoveryInterval);
         }
     }
 
@@ -299,14 +317,18 @@ export class System2Loop {
         console.log('[System2Loop] Processing Human Override...');
 
         // Abort current execution
-        if (this.isRunning) {
-            this.executor.abort();
+        if (this.isRunning && this.abortController) {
+            this.abortController.abort();
             this.isRunning = false;
         }
 
         // Exit survival mode
         this.survivalMode = false;
         this.failureCount = 0;
+        if (this.recoveryTimer) {
+            clearTimeout(this.recoveryTimer);
+            this.recoveryTimer = null;
+        }
 
         // If override has a new goal, process it
         if (payload.goal) {

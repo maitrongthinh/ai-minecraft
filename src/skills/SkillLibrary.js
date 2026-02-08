@@ -350,20 +350,23 @@ ${code}
 
     /**
      * Get summary of all skills (for DualBrain context injection)
-     * @returns {string} Skill catalog summary
+     * Lock-protected to ensure consistent view of in-memory state.
+     * @returns {Promise<string>} Skill catalog summary
      */
-    getSummary() {
-        const skillNames = Object.keys(this.skills);
-        if (skillNames.length === 0) {
-            return 'No skills available yet.';
-        }
+    async getSummary() {
+        return await this.fileLock.acquire(async () => {
+            const skillNames = Object.keys(this.skills);
+            if (skillNames.length === 0) {
+                return 'No skills available yet.';
+            }
 
-        const summaries = skillNames.map(name => {
-            const skill = this.skills[name];
-            return `- ${name}: ${skill.description} (used ${skill.success_count || 0}x)`;
+            const summaries = skillNames.map(name => {
+                const skill = this.skills[name];
+                return `- ${name}: ${skill.description} (used ${skill.success_count || 0}x)`;
+            });
+
+            return `Available skills (${skillNames.length}):\n${summaries.join('\n')}`;
         });
-
-        return `Available skills (${skillNames.length}):\n${summaries.join('\n')}`;
     }
 
     /**
@@ -445,20 +448,38 @@ ${code}
 
     /**
      * Mark a skill as failed
-     * After 3 failures, skill is blacklisted
+     * Handles intelligent classification: fatal errors (code bugs) cause immediate blacklist,
+     * while transient errors (environment) increment a counter.
      * 
      * @param {string} name - Skill name
+     * @param {Error} error - The error that occurred
      * @returns {boolean} True if skill was blacklisted
      */
-    markFailure(name) {
-        if (globalBus) globalBus.emitSignal(SIGNAL.SKILL_FAILED, { name });
+    markFailure(name, error = null) {
+        if (globalBus) globalBus.emitSignal(SIGNAL.SKILL_FAILED, { name, error: error?.message });
 
+        // Phase 5: Intelligent Classification
+        const errorMsg = error?.message || '';
+        const isFatal = error instanceof ReferenceError ||
+            error instanceof SyntaxError ||
+            error instanceof TypeError ||
+            errorMsg.includes('not defined') ||
+            errorMsg.includes('unexpected token');
+
+        if (isFatal) {
+            console.warn(`[SkillLibrary] ⛔ FATAL ERROR in skill '${name}': Blacklisting immediately. Error: ${errorMsg}`);
+            this.blacklist.set(name, 999); // Immediate blacklist
+            delete this.skills[name];
+            return true;
+        }
+
+        const maxRetries = settings.tactical?.max_retries || 3;
         const count = (this.blacklist.get(name) || 0) + 1;
         this.blacklist.set(name, count);
 
-        console.log(`[SkillLibrary] ⚠️ Skill '${name}' failure count: ${count}/3`);
+        console.log(`[SkillLibrary] ⚠️ Skill '${name}' failure count: ${count}/${maxRetries}`);
 
-        if (count >= 3) {
+        if (count >= maxRetries) {
             // Remove from active skills
             delete this.skills[name];
             console.warn(`[SkillLibrary] ⛔ Blacklisted: ${name} (too many failures)`);

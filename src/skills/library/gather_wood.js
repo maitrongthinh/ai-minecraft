@@ -13,6 +13,8 @@
 
 async function gatherWood(bot, count = 10) {
     const { Goal } = require('mineflayer-pathfinder');
+    const { checkInventorySpace } = require('../../utils/mcdata.js');
+    checkInventorySpace(bot);
     const Vec3 = require('vec3');
 
     // Find nearest log block

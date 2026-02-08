@@ -25,6 +25,30 @@ export class ActionManager {
         }
     }
 
+    /**
+     * Predictive Safety: Wrap a bot action with a per-call timeout
+     * @param {string} label - Action name
+     * @param {Function} fn - Async bot action
+     * @param {number} timeoutMillis - Max time to wait (ms)
+     */
+    async safeExec(label, fn, timeoutMillis = 10000) {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(`ActionTimeout: ${label} timed out after ${timeoutMillis}ms`));
+            }, timeoutMillis);
+        });
+
+        try {
+            const result = await Promise.race([fn(), timeoutPromise]);
+            clearTimeout(timer);
+            return result;
+        } catch (err) {
+            clearTimeout(timer);
+            throw err;
+        }
+    }
+
     async stop() {
         // 1. Force Stop Mineflayer Actions (Reflex Layer)
         if (this.agent.bot) {

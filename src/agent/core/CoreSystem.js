@@ -121,11 +121,12 @@ export class CoreSystem {
 
         // Random Walk
         const randomYaw = Math.random() * Math.PI * 2;
-        bot.look(randomYaw, 0);
+        bot.look(randomYaw, 0).catch(e => console.error('[Watchdog] Look failed:', e.message));
         bot.setControlState('forward', true);
         setTimeout(() => bot.setControlState('forward', false), 1000);
 
-        this.bus.emitSignal(SIGNAL.THREAT_DETECTED, { type: 'stuck', source: 'PhysicalWatchdog' });
+        this.bus.emitSignal(SIGNAL.THREAT_DETECTED, { type: 'stuck', source: 'PhysicalWatchdog' })
+            ?.catch(e => console.error('[Watchdog] Signal emit failed:', e.message));
     }
 
     /**
@@ -137,6 +138,16 @@ export class CoreSystem {
 
         if (this.zombieInterval) clearInterval(this.zombieInterval);
         if (this.watchdogInterval) clearInterval(this.watchdogInterval);
+        this.zombieInterval = null;
+        this.watchdogInterval = null;
+
+        // Cleanup sub-components
+        if (this.reflexSystem) this.reflexSystem.cleanup();
+        if (this.scheduler) {
+            this.scheduler.shutdown();
+            this.scheduler.interruptPhysicalTasks();
+            this.scheduler.queue = [];
+        }
 
         this.bus.clearAllListeners(); // Prevent memory leaks
         console.log('[CoreSystem] ⏏️ Kernel Halted');

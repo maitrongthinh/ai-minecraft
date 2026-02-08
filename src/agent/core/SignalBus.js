@@ -166,11 +166,19 @@ class SignalBus extends EventEmitter {
         // Execute each handler with error isolation
         for (const handler of listeners) {
             try {
-                handler(event);
+                const result = handler(event);
                 this.stats.signalsHandled++;
+
+                // Handle async handlers (Phase 4 Hardening)
+                if (result instanceof Promise) {
+                    result.catch(error => {
+                        this.stats.errors++;
+                        console.error(`[SignalBus] ❌ Async handler error for ${signal}:`, error.message);
+                    });
+                }
             } catch (error) {
                 this.stats.errors++;
-                console.error(`[SignalBus] ❌ Handler error for ${signal}:`, error.message);
+                console.error(`[SignalBus] ❌ Sync handler error for ${signal}:`, error.message);
                 // Don't rethrow - isolate the error
             }
         }

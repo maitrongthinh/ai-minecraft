@@ -14,24 +14,45 @@ export class SocialEngine {
         this.bot = agent.bot;
         this.profiles = new Map(); // PlayerName -> SocialProfile
 
-        // Whitelist for "Tử huyệt" fix
-        this.FRIENDS = ['Steve', 'Alex', 'MaiTrongThinh']; // Expanded via config eventually
-        this.ADMINS = ['Steve', 'Admin', 'Dev'];
+        // Whitelist Unified (Doomsday Hardening)
+        const security = agent.config?.profile?.security || {};
+        this.FRIENDS = security.whitelist || [];
+        this.ADMINS = ['Steve', 'Admin', 'Dev']; // System level admins
 
         this.npcGoals = [];
+        this.socialInterval = null;
 
         this.init();
     }
 
     init() {
-        if (this.bot) {
-            this.bot.on('playerJoined', (player) => this.ensureProfile(player.username));
-            this.bot.on('chat', (username, message) => this.handleChatInteraction(username, message));
-        }
+        if (!this.bot) return;
+
+        // Store listeners for cleanup (Phase 6 Fix)
+        this._joinListener = (player) => this.ensureProfile(player.username);
+        this._chatListener = (username, message) => this.handleChatInteraction(username, message);
+
+        this.bot.on('playerJoined', this._joinListener);
+        this.bot.on('chat', this._chatListener);
 
         // Task 34: Active Interaction Loop
-        setInterval(() => this.updateSocialInitiative(), 60000);
+        this.socialInterval = setInterval(() => this.updateSocialInitiative(), 60000);
         console.log('[SocialEngine] Intelligence layer ready');
+    }
+
+    cleanup() {
+        if (this.socialInterval) clearInterval(this.socialInterval);
+        this.socialInterval = null;
+
+        if (this.bot) {
+            console.log('[SocialEngine] 🧹 Removing bot listeners...');
+            if (this._joinListener) this.bot.removeListener('playerJoined', this._joinListener);
+            if (this._chatListener) this.bot.removeListener('chat', this._chatListener);
+        }
+
+        this._joinListener = null;
+        this._chatListener = null;
+        console.log('[SocialEngine] Cleaned up social system');
     }
 
     /**

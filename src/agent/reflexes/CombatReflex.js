@@ -71,7 +71,9 @@ export class CombatReflex {
         this.state = STATE.IDLE;
         this.target = null;
         this.inCombat = false;
-        this._isUpdating = false; // Add async update lock
+        this._isUpdating = false;
+        this.consecutiveFailures = 0; // Circuit Breaker counter
+        this.MAX_FAILURES = 3;
 
         // Tick control
         this.tickInterval = null;
@@ -136,6 +138,7 @@ export class CombatReflex {
 
         // Clear control states
         this.bot.clearControlStates();
+        this.consecutiveFailures = 0; // Reset circuit breaker
 
         console.log('[CombatReflex] 🛡️ Combat ended');
     }
@@ -165,8 +168,28 @@ export class CombatReflex {
         if (this.tickInterval) return;
 
         this.tickInterval = setInterval(() => {
-            this.tick().catch(e => {
+            this.tick().then(() => {
+                this.consecutiveFailures = 0; // Reset on success
+            }).catch(e => {
                 console.error('[CombatReflex] Tick error:', e.message);
+                this.consecutiveFailures++;
+
+                if (this.consecutiveFailures >= this.MAX_FAILURES) {
+                    console.error(`[CombatReflex] 💀 CIRCUIT BREAKER TRIGGERED (${this.consecutiveFailures} failures). Terminating combat loop.`);
+                    this.exitCombat();
+
+                    // Signal MindOS Specialists
+                    globalBus.emitSignal(SIGNAL.SYSTEM_ERROR, {
+                        source: 'CombatReflex',
+                        error: 'Multiple combat tick failures. Possible network disconnect.'
+                    });
+
+                    // Trigger Strategic Recall
+                    globalBus.emitSignal(SIGNAL.EMERGENCY_RECALL, {
+                        reason: 'network_failure',
+                        consecutiveFailures: this.consecutiveFailures
+                    });
+                }
             });
         }, this.TICK_RATE);
     }
@@ -622,6 +645,11 @@ export class CombatReflex {
      */
     getStats() {
         return { ...this.stats, inCombat: this.inCombat, state: this.state };
+    }
+
+    cleanup() {
+        this.exitCombat();
+        console.log('[CombatReflex] Cleaned up combat loop');
     }
 }
 

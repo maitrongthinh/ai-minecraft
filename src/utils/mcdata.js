@@ -91,7 +91,7 @@ export function isHuntable(mob) {
 
 export function isHostile(mob) {
     if (!mob || !mob.name) return false;
-    return  (mob.type === 'mob' || mob.type === 'hostile') && mob.name !== 'iron_golem' && mob.name !== 'snow_golem';
+    return (mob.type === 'mob' || mob.type === 'hostile') && mob.name !== 'iron_golem' && mob.name !== 'snow_golem';
 }
 
 // blocks that don't work with collectBlock, need to be manually collected
@@ -218,7 +218,7 @@ export function getItemCraftingRecipes(itemName) {
         }
         recipes.push([
             recipe,
-            {craftedCount : r.result.count}
+            { craftedCount: r.result.count }
         ]);
     }
     // sort recipes by if their ingredients include common items
@@ -262,7 +262,7 @@ export function getFuelSmeltOutput(fuelName) {
 }
 
 export function getItemSmeltingIngredient(itemName) {
-    return {    
+    return {
         baked_potato: 'potato',
         steak: 'raw_beef',
         cooked_chicken: 'raw_chicken',
@@ -291,7 +291,7 @@ export function getItemBlockSources(itemName) {
 }
 
 export function getItemAnimalSource(itemName) {
-    return {    
+    return {
         raw_beef: 'cow',
         raw_chicken: 'chicken',
         raw_cod: 'cod',
@@ -312,7 +312,7 @@ export function getBlockTool(blockName) {
     return getItemName(Object.keys(block.harvestTools)[0]);  // Double check first tool is always simplest
 }
 
-export function makeItem(name, amount=1) {
+export function makeItem(name, amount = 1) {
     return new Item(getItemId(name), amount);
 }
 
@@ -326,16 +326,16 @@ export function ingredientsFromPrismarineRecipe(recipe) {
     let requiredIngedients = {};
     if (recipe.inShape)
         for (const ingredient of recipe.inShape.flat()) {
-            if(ingredient.id<0) continue; //prismarine-recipe uses id -1 as an empty crafting slot
+            if (ingredient.id < 0) continue; //prismarine-recipe uses id -1 as an empty crafting slot
             const ingredientName = getItemName(ingredient.id);
-            requiredIngedients[ingredientName] ??=0;
+            requiredIngedients[ingredientName] ??= 0;
             requiredIngedients[ingredientName] += ingredient.count;
         }
     if (recipe.ingredients)
         for (const ingredient of recipe.ingredients) {
-            if(ingredient.id<0) continue;
+            if (ingredient.id < 0) continue;
             const ingredientName = getItemName(ingredient.id);
-            requiredIngedients[ingredientName] ??=0;
+            requiredIngedients[ingredientName] ??= 0;
             requiredIngedients[ingredientName] -= ingredient.count;
             //Yes, the `-=` is intended.
             //prismarine-recipe uses positive numbers for the shaped ingredients but negative for unshaped.
@@ -352,7 +352,7 @@ export function ingredientsFromPrismarineRecipe(recipe) {
  * @param {boolean} discrete - Is the action discrete?
  * @returns {{num: number, limitingResource: (T | null)}} the number of times the action can be completed and the limmiting resource; e.g `{num: 2, limitingResource: 'cobble_stone'}`
  */
-export function calculateLimitingResource(availableItems, requiredItems, discrete=true) {
+export function calculateLimitingResource(availableItems, requiredItems, discrete = true) {
     let limitingResource = null;
     let num = Infinity;
     for (const itemType in requiredItems) {
@@ -361,8 +361,8 @@ export function calculateLimitingResource(availableItems, requiredItems, discret
             num = availableItems[itemType] / requiredItems[itemType];
         }
     }
-    if(discrete) num = Math.floor(num);
-    return {num, limitingResource}
+    if (discrete) num = Math.floor(num);
+    return { num, limitingResource }
 }
 
 let loopingItems = new Set();
@@ -444,7 +444,7 @@ function craftItem(item, count, inventory, leftovers, crafted = { required: {}, 
         // Use leftovers first, then inventory
         const useFromLeft = Math.min(availableLeft, count);
         leftovers[item] = availableLeft - useFromLeft;
-        
+
         const remainingNeeded = count - useFromLeft;
         if (remainingNeeded > 0) {
             inventory[item] = availableInv - remainingNeeded;
@@ -498,7 +498,7 @@ function formatPlan(targetItem, { required, steps, leftovers }) {
 
     if (Object.keys(required).length > 0) {
         lines.push('You are missing the following items:');
-        Object.entries(required).forEach(([item, count]) => 
+        Object.entries(required).forEach(([item, count]) =>
             lines.push(`- ${count} ${item}`));
         lines.push('\nOnce you have these items, here\'s your crafting plan:');
     } else {
@@ -515,9 +515,56 @@ function formatPlan(targetItem, { required, steps, leftovers }) {
 
     if (Object.keys(leftovers).length > 0) {
         lines.push('\nYou will have leftover:');
-        Object.entries(leftovers).forEach(([item, count]) => 
+        Object.entries(leftovers).forEach(([item, count]) =>
             lines.push(`- ${count} ${item}`));
     }
 
     return lines.join('\n');
 }
+/**
+ * Check if the bot has enough inventory space
+ * @param {Bot} bot 
+ * @param {number} minSlots 
+ * @returns {boolean}
+ * @throws {Error} if full
+ */
+export function checkInventorySpace(bot, minSlots = 1) {
+    const emptySlots = bot.inventory.emptySlotCount();
+    if (emptySlots < minSlots) {
+        throw new Error(`InventoryFull: Only ${emptySlots} slots available, minimum ${minSlots} required.`);
+    }
+    return true;
+}
+
+export default {
+    initBot,
+    isHuntable,
+    isHostile,
+    mustCollectManually,
+    getItemId,
+    getItemName,
+    getBlockId,
+    getBlockName,
+    getEntityId,
+    getAllItems,
+    getAllItemIds,
+    getAllBlocks,
+    getAllBlockIds,
+    getAllBiomes,
+    getItemCraftingRecipes,
+    isSmeltable,
+    getSmeltingFuel,
+    getFuelSmeltOutput,
+    getItemSmeltingIngredient,
+    getItemBlockSources,
+    getItemAnimalSource,
+    getBlockTool,
+    makeItem,
+    ingredientsFromPrismarineRecipe,
+    calculateLimitingResource,
+    getDetailedCraftingPlan,
+    checkInventorySpace,
+    WOOD_TYPES,
+    MATCHING_WOOD_BLOCKS,
+    WOOL_COLORS
+};

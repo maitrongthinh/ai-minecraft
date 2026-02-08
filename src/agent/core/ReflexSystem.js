@@ -25,8 +25,8 @@ export class ReflexSystem {
             return;
         }
 
-        // Health, Hunger, and Damage Monitor (combined into one 'health' event listener)
-        this.agent.bot.on('health', () => {
+        // Store listeners for removal (Fix for [CRITICAL] leak)
+        this._healthListener = () => {
             // 1. Health Monitoring
             if (this.agent.bot.health < 10) {
                 globalBus.emitSignal(SIGNAL.HEALTH_CRITICAL, { health: this.agent.bot.health });
@@ -38,19 +38,11 @@ export class ReflexSystem {
             const inCombat = this.agent.bot.pvp && this.agent.bot.pvp.target;
             const food = this.agent.bot.food;
 
-            // Combat threshold: Only eat if CRITICAL or if Safe to eat
-            // Danger threshold: 14 (Can't sprint)
-            // Critical threshold: 6 (Starving)
-
             if (inCombat) {
-                // In Combat: Only eat if starving OR if we have "Gap Apple" equivalents (not implemented yet, just prioritizing survival)
-                // Or if health is critical. 
-                // Don't modify autoEat options here directly (expensive), just emit signal for Strategy
                 if (food < 10) {
                     globalBus.emitSignal(SIGNAL.HUNGRY, { food, context: 'combat' });
                 }
             } else {
-                // Normal / Idle
                 if (food < 18) { // Keep topped up when safe
                     globalBus.emitSignal(SIGNAL.HUNGRY, { food, context: 'safe' });
                 }
@@ -61,7 +53,6 @@ export class ReflexSystem {
                 this.agent.bot.lastDamageTime = Date.now();
                 this.agent.bot.lastDamageTaken = this.lastHealth - this.agent.bot.health;
 
-                // Emit threat if significant damage
                 if (this.agent.bot.lastDamageTaken > 2) {
                     globalBus.emitSignal(SIGNAL.THREAT_DETECTED, {
                         source: 'unknown_damage',
@@ -70,23 +61,36 @@ export class ReflexSystem {
                 }
             }
             this.lastHealth = this.agent.bot.health;
-        });
+        };
 
-        // Pain / Damage Monitor
-        this.agent.bot.on('entityHurt', (entity) => {
+        this._hurtListener = (entity) => {
             if (entity === this.agent.bot.entity) {
-                // We were hurt!
                 console.log('[ReflexSystem] ⚡ OUCH! Bot took damage.');
-                // Find nearest hostile?
-                // For now just emit threat signal
                 globalBus.emitSignal(SIGNAL.THREAT_DETECTED, { type: 'damage_taken', timestamp: Date.now() });
             }
-        });
+        };
 
-        // Death Monitor
-        this.agent.bot.on('death', () => {
+        this._deathListener = () => {
             globalBus.emitSignal(SIGNAL.DEATH, { timestamp: Date.now() });
-        });
+        };
+
+        // Health, Hunger, and Damage Monitor
+        this.agent.bot.on('health', this._healthListener);
+        this.agent.bot.on('entityHurt', this._hurtListener);
+        this.agent.bot.on('death', this._deathListener);
+    }
+
+    cleanup() {
+        if (!this.agent.bot) return;
+
+        console.log('[ReflexSystem] 🧹 Removing autonomic monitors...');
+        if (this._healthListener) this.agent.bot.removeListener('health', this._healthListener);
+        if (this._hurtListener) this.agent.bot.removeListener('entityHurt', this._hurtListener);
+        if (this._deathListener) this.agent.bot.removeListener('death', this._deathListener);
+
+        this._healthListener = null;
+        this._hurtListener = null;
+        this._deathListener = null;
     }
 
     _emitThrottled(signal, payload, cooldownMs = 5000) {
@@ -94,7 +98,8 @@ export class ReflexSystem {
         const last = this.cooldowns.get(signal) || 0;
 
         if (now - last > cooldownMs) {
-            globalBus.emitSignal(signal, payload);
+            globalBus.emitSignal(signal, payload)
+                ?.catch(e => console.error(`[ReflexSystem] Signal emission failed (${signal}):`, e.message));
             this.cooldowns.set(signal, now);
         }
     }
