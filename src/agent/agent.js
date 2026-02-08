@@ -217,7 +217,7 @@ export class Agent {
 
                 if (!this.world_id) this.world_id = randomUUID();
 
-                this.unifiedMemory.init();
+                // Memory is already initialized in Kernel bootloader (CoreSystem.js line 45)
                 this.bus.emitSignal(SIGNAL.BOT_SPAWNED, {
                     name: this.name,
                     world_id: this.world_id
@@ -778,16 +778,30 @@ export class Agent {
             }
         });
 
+        // Task: Automatic Memory Hooks (Hardening)
+        this.bot.on('playerCollect', (collector, item) => {
+            if (collector === this.bot.entity) {
+                this.memory.absorb('experience', {
+                    facts: [`I collected ${item.count} ${item.name}`],
+                    metadata: { type: 'collection', timestamp: Date.now() }
+                });
+            }
+        });
+
         this.bot.on('death', () => {
             this.actions.cancelResume();
             this.actions.stop();
+            this.memory.absorb('experience', {
+                facts: [`I died at ${this.bot.entity.position}`],
+                metadata: { type: 'death', timestamp: Date.now() }
+            });
         });
 
         this.bot.on('messagestr', async (message, _, jsonMsg) => {
             if (jsonMsg.translate && jsonMsg.translate.startsWith('death') && message.startsWith(this.name)) {
                 console.log('Agent died: ', message);
                 let death_pos = this.bot.entity.position;
-                this.memory_bank.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
+                this.memory.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
                 let death_pos_text = null;
                 if (death_pos) {
                     death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.x.toFixed(2)}`;
@@ -882,9 +896,12 @@ export class Agent {
                 else if (stateName === 'idle') {
                     // Idle State: Light self-maintenance or observation
                     // Phase 11: Territorial Instinct (Social Reflex)
-                    if (this.humanManager) {
+                    if (this.social) {
                         try {
-                            const intruders = this.humanManager.getNearbyUntrustedPlayers(20); // 20 blocks radius
+                            const nearby = Object.values(this.bot.entities).filter(e =>
+                                e.type === 'player' && e.username !== this.bot.username
+                            );
+                            const intruders = this.social.checkIntruders(nearby);
                             if (intruders.length > 0) {
                                 // Found stranger -> Warn them!
                                 const target = intruders[0];

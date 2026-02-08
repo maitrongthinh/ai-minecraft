@@ -189,15 +189,19 @@ export class ActionManager {
 
     getBotOutputSummary() {
         const { bot } = this.agent;
+        if (!bot) return 'No bot instance.';
         if (bot.interrupt_code && !this.timedout) return '';
-        let output = bot.output;
-        const MAX_OUT = 500;
+
+        // Ensure bot.output is a string or fallback
+        let output = bot.output || '';
+        const MAX_OUT = 1000; // Increased limit for better context
+
         if (output.length > MAX_OUT) {
             output = `Action output is very long (${output.length} chars) and has been shortened.\n
           First outputs:\n${output.substring(0, MAX_OUT / 2)}\n...skipping many lines.\nFinal outputs:\n ${output.substring(output.length - MAX_OUT / 2)}`;
         }
         else {
-            output = 'Action output:\n' + output.toString();
+            output = output.length > 0 ? 'Action output:\n' + output : 'Action completed with no output.';
         }
         bot.output = '';
         return output;

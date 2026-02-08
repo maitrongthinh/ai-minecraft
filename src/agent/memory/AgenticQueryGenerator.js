@@ -272,9 +272,9 @@ export class AgenticQueryGenerator {
             raw: []
         };
 
-        // Check if UnifiedMemory is available
-        if (!this.agent.unifiedMemory) {
-            console.warn('[AgenticQueryGenerator] UnifiedMemory not available');
+        // Check if MemorySystem is available
+        if (!this.agent.memory) {
+            console.warn('[AgenticQueryGenerator] MemorySystem not available');
             return memories;
         }
 
@@ -290,7 +290,7 @@ export class AgenticQueryGenerator {
             }
 
             try {
-                const result = await this.agent.unifiedMemory.query(query, { limit: 3 });
+                const result = await this.agent.memory.query(query, { limit: 3 });
 
                 // Cache result
                 this.queryCache.set(cacheKey, {

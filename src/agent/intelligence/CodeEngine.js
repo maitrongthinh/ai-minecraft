@@ -138,6 +138,17 @@ export class CodeEngine {
             if (!result) return { success: false, syntaxError: 'Staging failed.' };
 
             console.log('[CodeEngine] ▶️ Executing...');
+
+            // COMBAT AWARENESS: Fail physical actions if in combat and not a reflex
+            if (this.agent.combatReflex?.inCombat) {
+                console.warn('[CodeEngine] ⚔️ Combat Active! Refusing physical code execution to avoid jitter.');
+                return {
+                    success: false,
+                    executionError: new Error('Cannot execute physical tasks while in combat.'),
+                    codeOutput: "Combat active. Movement/Look commands blocked."
+                };
+            }
+
             await result.func.main(this.agent.bot);
 
             const codeOutput = this.agent.bot.output?.summary || "No specific output recorded.";

@@ -135,7 +135,7 @@ export class ContextManager {
      * @private
      */
     async _fetchRelevantMemories() {
-        if (!this.agent.unifiedMemory) {
+        if (!this.agent.memory) {
             return { relevant: [] };
         }
 
@@ -149,7 +149,7 @@ export class ContextManager {
             // Query 1: Goal-based
             if (currentGoal) {
                 queries.push(
-                    this.agent.unifiedMemory.query(
+                    this.agent.memory.query(
                         `What strategies work well for: ${currentGoal}`,
                         { limit: 2, source: 'both' }
                     )
@@ -158,7 +158,7 @@ export class ContextManager {
 
             // Query 2: Location-based
             queries.push(
-                this.agent.unifiedMemory.query(
+                this.agent.memory.query(
                     `What happened near coordinates ${Math.floor(location.x)}, ${Math.floor(location.z)}`,
                     { limit: 2, source: 'vector' }
                 )
@@ -183,13 +183,13 @@ export class ContextManager {
      * @private
      */
     async _getSummaryNodes() {
-        if (!this.agent.unifiedMemory) {
+        if (!this.agent.memory) {
             return { summaries: [] };
         }
 
         try {
             // Query Cognee for conversation summaries
-            const result = await this.agent.unifiedMemory.query(
+            const result = await this.agent.memory.query(
                 'Summarize previous conversations and key learnings',
                 { limit: 2, source: 'graph' }
             );
@@ -305,20 +305,19 @@ export class ContextManager {
      * @private
      */
     async _archiveOldMessages(messages) {
-        if (!this.agent.unifiedMemory || messages.length === 0) return;
+        if (!this.agent.memory || messages.length === 0) return;
 
         try {
             const summary = messages
                 .map(m => `${m.role}: ${m.content}`)
                 .join('\n');
 
-            await this.agent.unifiedMemory.absorb({
-                type: 'conversation_archive',
-                content: summary,
-                timestamp: Date.now()
+            await this.agent.memory.absorb('chat', {
+                sender: 'system_archive',
+                message: summary
             });
 
-            console.log(`[ContextManager] Archived ${messages.length} messages to UnifiedMemory`);
+            console.log(`[ContextManager] Archived ${messages.length} messages to MemorySystem`);
 
         } catch (error) {
             console.error('[ContextManager] Error archiving messages:', error);

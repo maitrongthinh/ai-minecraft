@@ -1,4 +1,4 @@
-import { SocialProfile } from '../npc/SocialProfile.js';
+import { SocialProfile } from './SocialProfile.js';
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
 
 /**
@@ -98,6 +98,38 @@ export class SocialEngine {
         // Auto-reply logic if trust is high? (Managed by Brain usually)
     }
 
+    async updateSocialInitiative() {
+        if (!this.bot?.entities) return;
+
+        // Periodic check for nearby people to greet/ignore
+        const nearby = Object.values(this.bot.entities).filter(e =>
+            e.type === 'player' &&
+            e.username !== this.bot.username &&
+            e.position.distanceTo(this.bot.entity.position) < 10
+        );
+
+        for (const p of nearby) {
+            const profile = this.ensureProfile(p.username);
+
+            // If Friend: Warm greeting if not seen recently
+            if (this.FRIENDS.includes(p.username)) {
+                if (!profile.lastGreeting || Date.now() - profile.lastGreeting > 300000) {
+                    this.agent.speak(`Chào bồ, ${p.username}! Bạn cần giúp gì không?`);
+                    profile.lastGreeting = Date.now();
+                }
+            }
+
+            // If unknown/intruder: Don't greet here (Handled by territorial update in agent.js)
+        }
+
+        // Trust decay over time (passive)
+        for (const [name, profile] of this.profiles) {
+            if (profile.trustScore > 0 && !this.FRIENDS.includes(name)) {
+                profile.trustScore -= 0.1; // Gentle decay
+            }
+        }
+    }
+
     /**
      * NPC Goal Management (from NPCController)
      */
@@ -106,11 +138,11 @@ export class SocialEngine {
         console.log(`[SocialEngine] 🎯 New autonomous goal: ${goal.description}`);
     }
 
-    async update() {
+    async update(delta) {
         // Periodic social updates (relationship decay, goal checking)
         for (const goal of this.npcGoals) {
             if (!goal.isCompleted()) {
-                await goal.tick(this.agent);
+                await goal.tick(this.agent, delta);
             }
         }
     }
