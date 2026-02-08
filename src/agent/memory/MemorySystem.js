@@ -6,6 +6,9 @@
  */
 
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { writeFile } from 'fs/promises';
+import settings from '../../settings.js';
 
 const SOURCE = {
     RAM: 'RAM',
@@ -25,6 +28,20 @@ const DATA_TYPE = {
 export class MemorySystem {
     constructor(agent) {
         this.agent = agent;
+        this.name = agent.name;
+
+        // --- Legacy History Properties ---
+        this.memory_fp = `./bots/${this.name}/memory.json`;
+        mkdirSync(`./bots/${this.name}/histories`, { recursive: true });
+        this.turns = []; // Chat history
+        this.memory = ''; // Long-term summary
+        this.errors = []; // Error tracking
+        this.maxErrors = 10;
+        this.max_messages = settings.max_messages || 20;
+        this.summary_chunk_size = 5;
+        this._saveTimer = null;
+        this._savePending = false;
+        // -------------------------------
 
         // Internal RAM (Legacy MemoryBank)
         this.ram = {};
@@ -156,6 +173,127 @@ export class MemorySystem {
         } catch (e) {
             console.error('[MemorySystem] Absorb fail:', e.message);
         }
+    }
+
+    // ==================== HISTORY & PERSISTENCE ====================
+
+    getHistory() {
+        return JSON.parse(JSON.stringify(this.turns));
+    }
+
+    async addChat(name, content) {
+        let role = 'assistant';
+        if (name === 'system') {
+            role = 'system';
+        } else if (name !== this.name) {
+            role = 'user';
+            content = `${name}: ${content}`;
+        }
+        this.turns.push({ role, content });
+
+        // Vector Memory Absorb
+        await this.absorb(DATA_TYPE.CHAT, { sender: name, message: content });
+
+        // Rolling Window & Summarization
+        if (this.turns.length > 50) {
+            this.turns = this.turns.slice(-50);
+        }
+
+        if (this.turns.length >= this.max_messages) {
+            let chunk = this.turns.splice(0, this.summary_chunk_size);
+            while (this.turns.length > 0 && this.turns[0].role === 'assistant')
+                chunk.push(this.turns.shift());
+
+            await this.summarizeMemories(chunk);
+            await this.appendFullHistory(chunk);
+        }
+
+        this.triggerBackgroundSave();
+    }
+
+    async summarizeMemories(turns) {
+        if (!this.agent.prompter) return;
+        console.log("[MemorySystem] Summarizing memories...");
+        const newSummary = await this.agent.prompter.promptMemSaving(turns);
+        this.memory = newSummary;
+
+        if (this.memory.length > 500) {
+            this.memory = this.memory.slice(0, 500) + '...(truncated)';
+        }
+    }
+
+    async appendFullHistory(to_store) {
+        try {
+            const string_timestamp = new Date().toLocaleString().replace(/[/:]/g, '-').replace(/ /g, '').replace(/,/g, '_');
+            const fp = `./bots/${this.name}/histories/${string_timestamp}.json`;
+            writeFileSync(fp, JSON.stringify(to_store, null, 4), 'utf8');
+        } catch (err) {
+            console.error(`[MemorySystem] Failed to append history: ${err.message}`);
+        }
+    }
+
+    // Error Tracking
+    addError(action, error, context = {}) {
+        this.errors.push({ action, error, context, timestamp: Date.now() });
+        if (this.errors.length > this.maxErrors) this.errors.shift();
+        console.log(`[MemorySystem] Reported Error: ${action} - ${error}`);
+        this.triggerBackgroundSave();
+    }
+
+    getRecentErrors(n = 3) {
+        return this.errors.slice(-n);
+    }
+
+    // Persistence
+    triggerBackgroundSave() {
+        if (this._saveTimer) clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(() => this.persistToDisk(), 5000);
+    }
+
+    async persistToDisk() {
+        if (this._savePending) return;
+        this._savePending = true;
+        try {
+            const data = JSON.stringify({
+                memory: this.memory,
+                turns: this.turns,
+                errors: this.errors,
+                ram: this.ram, // Save RAM too
+                self_prompting_state: this.agent.self_prompter?.state,
+                last_update: Date.now()
+            }, null, 2);
+            await writeFile(this.memory_fp, data, 'utf8');
+            // console.log('[MemorySystem] Saved to disk.');
+        } catch (err) {
+            console.error('[MemorySystem] Save failed:', err.message);
+        } finally {
+            this._savePending = false;
+        }
+    }
+
+    async save() { await this.persistToDisk(); }
+
+    load() {
+        try {
+            if (!existsSync(this.memory_fp)) return null;
+            const data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
+            this.memory = data.memory || '';
+            this.turns = data.turns || [];
+            this.errors = data.errors || [];
+            this.ram = data.ram || {};
+            console.log(`[MemorySystem] Loaded ${this.turns.length} turns, ${this.errors.length} errors.`);
+            return data;
+        } catch (error) {
+            console.error('[MemorySystem] Load failed:', error);
+            return null;
+        }
+    }
+
+    clear() {
+        this.turns = [];
+        this.memory = '';
+        this.errors = [];
+        this.ram = {};
     }
 
     // Agentic RAG helpers

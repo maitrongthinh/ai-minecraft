@@ -25,35 +25,51 @@ export class ReflexSystem {
             return;
         }
 
-        // Health Monitor
+        // Health, Hunger, and Damage Monitor (combined into one 'health' event listener)
         this.agent.bot.on('health', () => {
-            const health = this.agent.bot.health;
-            if (health < 10 && health < this.lastHealth) {
-                if (health < 5) {
-                    this._emitThrottled(SIGNAL.HEALTH_CRITICAL, { health });
-                } else {
-                    this._emitThrottled(SIGNAL.HEALTH_LOW, { health });
+            // 1. Health Monitoring
+            if (this.agent.bot.health < 10) {
+                globalBus.emitSignal(SIGNAL.HEALTH_CRITICAL, { health: this.agent.bot.health });
+            } else if (this.agent.bot.health < 18) {
+                globalBus.emitSignal(SIGNAL.HEALTH_LOW, { health: this.agent.bot.health });
+            }
+
+            // 2. Hunger Monitoring (Smart Eating)
+            const inCombat = this.agent.bot.pvp && this.agent.bot.pvp.target;
+            const food = this.agent.bot.food;
+
+            // Combat threshold: Only eat if CRITICAL or if Safe to eat
+            // Danger threshold: 14 (Can't sprint)
+            // Critical threshold: 6 (Starving)
+
+            if (inCombat) {
+                // In Combat: Only eat if starving OR if we have "Gap Apple" equivalents (not implemented yet, just prioritizing survival)
+                // Or if health is critical. 
+                // Don't modify autoEat options here directly (expensive), just emit signal for Strategy
+                if (food < 10) {
+                    globalBus.emitSignal(SIGNAL.HUNGRY, { food, context: 'combat' });
+                }
+            } else {
+                // Normal / Idle
+                if (food < 18) { // Keep topped up when safe
+                    globalBus.emitSignal(SIGNAL.HUNGRY, { food, context: 'safe' });
                 }
             }
-            this.lastHealth = health;
-        });
 
-        // Hunger Monitor
-        this.agent.bot.on('food', () => {
-            // Mineflayer event is 'food' or uses bot.food property
-            // Actually mineflayer emits 'health' for health/food updates usually? 
-            // Double check: Mineflayer 'health' event covers food too? No, usually separate.
-            // But let's check bot.food in the health listener too or add dedicated.
-            // Mineflayer docs: 'health' event fires when health or food changes.
+            // 3. Damage Tracking
+            if (this.agent.bot.health < this.lastHealth) {
+                this.agent.bot.lastDamageTime = Date.now();
+                this.agent.bot.lastDamageTaken = this.lastHealth - this.agent.bot.health;
 
-            const food = this.agent.bot.food;
-            if (food < 6 && food < this.lastFood) {
-                this._emitThrottled(SIGNAL.HUNGRY, { food });
-                // Warning: 'health.hungry' might not be in SIGNAL const. 
-                // SignalBus has HEALTH_LOW, HEALTH_CRITICAL.
-                // I will verify SIGNAL list later.
+                // Emit threat if significant damage
+                if (this.agent.bot.lastDamageTaken > 2) {
+                    globalBus.emitSignal(SIGNAL.THREAT_DETECTED, {
+                        source: 'unknown_damage',
+                        damage: this.agent.bot.lastDamageTaken
+                    });
+                }
             }
-            this.lastFood = food;
+            this.lastHealth = this.agent.bot.health;
         });
 
         // Pain / Damage Monitor

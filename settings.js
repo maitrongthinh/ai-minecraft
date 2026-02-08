@@ -59,6 +59,10 @@ const settings = {
 
     "log_all_prompts": false, // log ALL prompts to file
 
+    // Agent Instincts (Refactor)
+    "territorial_radius": 15, // Radius to warn intruders. Can be dynamic.
+    "auto_eat_start": 14, // Food level to start eating (14 = 7 shanks)
+
     // Single Model Configuration (MiniMax-M2 via MegaLLM)
     "models": {
         "high_iq": {

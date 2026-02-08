@@ -1,4 +1,4 @@
-import * as skills from '../library/skills.js';
+import * as skills from '../../skills/library/index.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
 

@@ -94,14 +94,36 @@ export class ExecutorAgent {
                     return { success: false, message: 'Agent stopped', abort: true };
                 }
 
-                // Try to execute via ToolRegistry
-                const result = await this._executeViaRegistry(step);
-
-                if (result.success) {
-                    return result;
+                // Phase 1: Locking Check (Combat vs System2)
+                // If we can't get the lock (held by Combat), we wait or abort
+                if (this.agent.locks && this.agent.locks.move) {
+                    const acquired = await this.agent.locks.move.acquire('system2', 2000); // 2s timeout
+                    if (!acquired) {
+                        console.warn(`[ExecutorAgent] Step ${step.task} paused/failed: Body locked by ${this.agent.locks.move.getOwner()}`);
+                        if (attempt < this.maxRetries) {
+                            await new Promise(r => setTimeout(r, 1000));
+                            continue; // Retry loop
+                        }
+                        return { success: false, message: 'Body locked by high-priority process (Combat?)', abort: false };
+                    }
                 }
 
-                lastError = result.message;
+                try {
+                    // Try to execute via ToolRegistry
+                    const result = await this._executeViaRegistry(step);
+
+                    if (result.success) {
+                        return result;
+                    }
+
+                    lastError = result.message;
+
+                } finally {
+                    // Always release lock after step execution (atomic steps)
+                    if (this.agent.locks && this.agent.locks.move) {
+                        this.agent.locks.move.release('system2');
+                    }
+                }
 
                 // Wait before retry
                 if (attempt < this.maxRetries) {
@@ -110,8 +132,8 @@ export class ExecutorAgent {
                 }
 
             } catch (error) {
-                lastError = error.message;
                 console.error(`[ExecutorAgent] Step ${step.id} error:`, error.message);
+                lastError = error.message;
             }
         }
 

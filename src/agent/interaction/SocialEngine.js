@@ -67,12 +67,51 @@ export class SocialEngine {
      */
     checkIntruders(nearbyPlayers) {
         return nearbyPlayers.filter(p => {
+            // 1. Friend/SAFE Check
             if (this.FRIENDS.includes(p.username) || this.ADMINS.includes(p.username)) return false;
 
             const profile = this.getProfile(p.username);
-            return profile.trustScore < -5 || p.entity.position.distanceTo(this.bot.entity.position) < 5;
+
+            // 2. Trust Check (If trusted, ignore)
+            if (profile.trustScore > 0) return false;
+
+            // 3. Distance Check (Hard limit 15 blocks)
+            const dist = p.entity.position.distanceTo(this.bot.entity.position);
+            if (dist > 15) return false;
+
+            // 4. Raycast / Line of Sight Check (No Wall Hacks)
+            // blocks line of sight check
+            const lineOfSight = this.bot.canSeeBlock(this.bot.blockAt(p.entity.position.offset(0, 1.6, 0)));
+            // Better: bot.canSeeEntity(p.entity) ??
+            // Mineflayer's canSeeBlock is robust for blocks. For entities, canSeeEntity is better but heavier.
+            // Let's use a custom lightweight raycast or canSeeBlock on their eye level.
+            if (!lineOfSight) return false;
+
+            // 5. FOV Check (Don't have eyes in back of head)
+            // Unless hearing? (TODO: Add Hearing System)
+            // For now, strict vision.
+            const fov = 120 * (Math.PI / 180); // 120 degrees in radians
+            const entityPos = p.entity.position.offset(0, p.entity.height, 0);
+            const rawView = this.bot.entity.yaw;
+            // Calculate angle to target
+            const delta = entityPos.minus(this.bot.entity.position);
+            const angle = Math.atan2(-delta.x, -delta.z); // Mineflayer yaw is weird
+
+            // Normalize angle diff
+            let diff = Math.abs(angle - rawView);
+            if (diff > Math.PI) diff = 2 * Math.PI - diff;
+
+            if (diff > fov / 2) {
+                // Behind or out of peripheral vision
+                // Add chance to "hear" them if close?
+                if (dist < 3) return true; // Hear them if very close
+                return false;
+            }
+
+            return true;
         });
     }
+
 
     /**
      * Unified interaction handler

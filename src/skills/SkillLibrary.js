@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { globalBus, SIGNAL } from '../agent/core/SignalBus.js'; // Phase 4.5: MindOS Integration
+import { AsyncLock } from '../../utils/AsyncLock.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +22,7 @@ export class SkillLibrary {
         this.skills = {}; // Cached in-memory for fast access
         this.skillOptimizer = skillOptimizer; // Task 11: Optimizer reference
         this.optimizingSkills = new Set(); // Task 11: Lock flags to prevent concurrent optimization
+        this.fileLock = new AsyncLock(); // Phase 1: File I/O Mutex
 
         // Phase 2: Evolution Engine support
         this.blacklist = new Map(); // skillName -> failCount (blacklist after 3 failures)
@@ -147,42 +149,45 @@ export class SkillLibrary {
      * @param {string} description - What the skill does
      * @param {string[]} tags - Keywords for search
      */
-    addSkill(name, code, description, tags = []) {
+    async addSkill(name, code, description, tags = []) {
         const skillPath = path.join(LIBRARY_DIR, `${name}.js`);
-        const existingSkill = this.skills[name];
 
-        // Preserve metadata if updating
-        const metadata = existingSkill ? {
-            success_count: existingSkill.success_count || 0,
-            created_at: existingSkill.created_at || Date.now(),
-            last_optimized: existingSkill.last_optimized || null,
-            version: (existingSkill.version || 0) + 1
-        } : {
-            success_count: 0,
-            created_at: Date.now(),
-            last_optimized: null,
-            version: 1
-        };
+        await this.fileLock.acquire(async () => {
+            const existingSkill = this.skills[name];
 
-        // Generate JSDoc-annotated file
-        const fileContent = this.generateSkillFile(name, code, description, tags, metadata);
-
-        try {
-            fs.writeFileSync(skillPath, fileContent, 'utf8');
-
-            // Update in-memory cache
-            this.skills[name] = {
-                description,
-                tags,
-                ...metadata,
-                filePath: skillPath,
-                code: fileContent
+            // Preserve metadata if updating
+            const metadata = existingSkill ? {
+                success_count: existingSkill.success_count || 0,
+                created_at: existingSkill.created_at || Date.now(),
+                last_optimized: existingSkill.last_optimized || null,
+                version: (existingSkill.version || 0) + 1
+            } : {
+                success_count: 0,
+                created_at: Date.now(),
+                last_optimized: null,
+                version: 1
             };
 
-            console.log(`[SkillLibrary] Skill '${name}' saved to ${skillPath} (v${metadata.version})`);
-        } catch (error) {
-            console.error(`[SkillLibrary] Failed to save skill '${name}':`, error);
-        }
+            // Generate JSDoc-annotated file
+            const fileContent = this.generateSkillFile(name, code, description, tags, metadata);
+
+            try {
+                await fs.promises.writeFile(skillPath, fileContent, 'utf8');
+
+                // Update in-memory cache
+                this.skills[name] = {
+                    description,
+                    tags,
+                    ...metadata,
+                    filePath: skillPath,
+                    code: fileContent
+                };
+
+                console.log(`[SkillLibrary] Skill '${name}' saved to ${skillPath} (v${metadata.version})`);
+            } catch (error) {
+                console.error(`[SkillLibrary] Failed to save skill '${name}':`, error);
+            }
+        });
     }
 
     /**
@@ -220,30 +225,34 @@ ${code}
         const skill = this.skills[name];
         if (!skill) return;
 
-        skill.success_count = (skill.success_count || 0) + 1;
+        // Atomic update via Mutex
+        await this.fileLock.acquire(async () => {
+            // Read fresh state just in case (though in-memory is source of truth here for simplistic counter)
+            skill.success_count = (skill.success_count || 0) + 1;
 
-        // Update metadata in file
-        const updatedContent = this.updateMetadataInFile(skill.code, {
-            success_count: skill.success_count,
-            last_used: Date.now()
+            // Update metadata in file
+            const updatedContent = this.updateMetadataInFile(skill.code, {
+                success_count: skill.success_count,
+                last_used: Date.now()
+            });
+
+            try {
+                await fs.promises.writeFile(skill.filePath, updatedContent, 'utf8');
+                this.skills[name].code = updatedContent;
+                console.log(`[SkillLibrary] Skill '${name}' success count: ${skill.success_count}`);
+            } catch (err) {
+                console.warn(`[SkillLibrary] Failed to update skill '${name}' metadata:`, err.message);
+            }
         });
 
-        try {
-            fs.writeFileSync(skill.filePath, updatedContent, 'utf8');
-            this.skills[name].code = updatedContent;
-            console.log(`[SkillLibrary] Skill '${name}' success count: ${skill.success_count}`);
-
-            // Task 11: Auto-trigger optimization after 10 successful uses
-            if (skill.success_count >= 10 && this.skillOptimizer) {
-                // Task 36: Ensure non-blocking execution using setImmediate
-                setImmediate(() => {
-                    this.autoOptimizeSkill(name).catch(err => {
-                        console.error(`[SkillLibrary] Auto-optimization error:`, err.message);
-                    });
+        // Task 11: Auto-trigger optimization after 10 successful uses
+        // OUTSIDE lock to avoid blocking
+        if (skill.success_count >= 10 && this.skillOptimizer) {
+            setImmediate(() => {
+                this.autoOptimizeSkill(name).catch(err => {
+                    console.error(`[SkillLibrary] Auto-optimization error:`, err.message);
                 });
-            }
-        } catch (err) {
-            console.warn(`[SkillLibrary] Failed to update skill '${name}' metadata:`, err.message);
+            });
         }
     }
 

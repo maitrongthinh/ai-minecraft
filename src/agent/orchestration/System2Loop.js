@@ -1,4 +1,5 @@
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
+import { SurvivalAnalysis } from '../intelligence/SurvivalAnalysis.js';
 import { PlannerAgent } from './PlannerAgent.js';
 import { CriticAgent } from './CriticAgent.js';
 import { ExecutorAgent } from './ExecutorAgent.js';
@@ -118,12 +119,12 @@ export class System2Loop {
             const execResult = await this.executor.executePlan(this.currentPlan);
 
             if (!execResult.success) {
-                // Attempt replan
-                if (this.failureCount < this.maxFailures) {
+                // Attempt replan with intelligent retry check
+                if (SurvivalAnalysis.shouldRetry(execResult.failed.map(f => f.error).join('; '), this.failureCount)) {
                     console.log('[System2Loop] Execution failed, attempting replan...');
                     return this._attemptReplan(goal, execResult.failed);
                 }
-                return this._handleFailure('Execution failed', `${execResult.failed.length} steps failed`);
+                return this._handleFailure('Execution failed', `${execResult.failed.length} steps failed (Non-retryable or max retries exceeded)`);
             }
 
             // Success!
@@ -206,12 +207,14 @@ export class System2Loop {
         // Execute new plan
         const execResult = await this.executor.executePlan(this.currentPlan);
 
-        if (!execResult.success && this.failureCount < this.maxFailures) {
+        // Intelligent Retry Check
+        const execFailureReason = execResult.failed.map(f => f.error).join('; ');
+        if (!execResult.success && SurvivalAnalysis.shouldRetry(execFailureReason, this.failureCount)) {
             return this._attemptReplan(goal, execResult.failed);
         }
 
         if (!execResult.success) {
-            return this._handleFailure('Replan execution failed', 'Max retries exceeded');
+            return this._handleFailure('Replan execution failed', 'Max retries exceeded or fatal error');
         }
 
         return {
@@ -271,10 +274,8 @@ export class System2Loop {
     async _attemptRecovery() {
         console.log('[System2Loop] Attempting recovery from Survival Mode...');
 
-        // Check if conditions are safe
-        const botState = this._getBotState();
-
-        if (botState.health > 10 && botState.food > 8) {
+        // Dynamic Check using SurvivalAnalysis
+        if (SurvivalAnalysis.isSafeToRecover(this.agent.bot)) {
             console.log('[System2Loop] Conditions safe - exiting Survival Mode');
             this.survivalMode = false;
             this.failureCount = 0;
@@ -283,24 +284,11 @@ export class System2Loop {
                 previousGoal: this.currentGoal
             });
         } else {
-            console.log('[System2Loop] Conditions not safe - staying in Survival Mode');
-            // Try again later
+            const threat = SurvivalAnalysis.getThreatLevel(this.agent.bot);
+            console.log(`[System2Loop] Conditions NOT safe (Threat: ${threat}) - staying in Survival Mode`);
+            // Try again later with backoff or fixed interval
             setTimeout(() => this._attemptRecovery(), 5000);
         }
-    }
-
-    /**
-     * Get basic bot state
-     * @private
-     */
-    _getBotState() {
-        if (!this.agent.bot) {
-            return { health: 20, food: 20 };
-        }
-        return {
-            health: this.agent.bot.health || 20,
-            food: this.agent.bot.food || 20
-        };
     }
 
     /**
