@@ -254,8 +254,14 @@ export class CodeEngine {
     }
 
     async _saveSkill(code, context) {
-        if (!this.agent.brain) return;
+        // Dependency Check: Brain might not be ready during early init or mock tests
+        if (!this.agent.brain) {
+            console.warn('[CodeEngine] ⚠️ Cannot save skill: Agent Brain not ready.');
+            return;
+        }
+
         try {
+            console.log('[CodeEngine] 🧠 analyzing new skill for library...');
             const prompt = [
                 ...context,
                 { role: 'assistant', content: "```javascript\n" + code + "\n```" },
@@ -264,12 +270,15 @@ export class CodeEngine {
 
             const response = await this.agent.brain.chat(prompt);
             const meta = JsonSanitizer.parse(response);
+
             if (meta?.name) {
                 this.library.addSkill(meta.name, code, meta.description, meta.tags);
+                // Emit signal for other systems (e.g. Dashboard)
+                globalBus.emitSignal(SIGNAL.SKILL_LEARNED, { name: meta.name, description: meta.description });
                 console.log(`[CodeEngine] 🎓 Learned new skill: ${meta.name}`);
             }
         } catch (e) {
-            console.error("[CodeEngine] Learning failed:", e);
+            console.error("[CodeEngine] Learning failed:", e.message);
         }
     }
 }

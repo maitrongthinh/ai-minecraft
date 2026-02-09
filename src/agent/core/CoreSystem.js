@@ -147,15 +147,23 @@ export class CoreSystem {
         // Swing arm (Visual Status: Error/Stuck)
         bot.swingArm();
 
+        // Safe Timeout Wrapper
+        const safeTimeout = (fn, ms) => {
+            const id = setTimeout(fn, ms);
+            this.activeTimers.add(id);
+            // Cleanup on finish
+            setTimeout(() => this.activeTimers.delete(id), ms + 10);
+        };
+
         // Random Jump
         bot.setControlState('jump', true);
-        setTimeout(() => bot.setControlState('jump', false), 500);
+        safeTimeout(() => bot.setControlState('jump', false), 500);
 
         // Random Walk
         const randomYaw = Math.random() * Math.PI * 2;
         bot.look(randomYaw, 0).catch(e => console.error('[Watchdog] Look failed:', e.message));
         bot.setControlState('forward', true);
-        setTimeout(() => bot.setControlState('forward', false), 1000);
+        safeTimeout(() => bot.setControlState('forward', false), 1000);
 
         this.bus.emitSignal(SIGNAL.THREAT_DETECTED, { type: 'stuck', source: 'PhysicalWatchdog' })
             ?.catch(e => console.error('[Watchdog] Signal emit failed:', e.message));
@@ -168,15 +176,30 @@ export class CoreSystem {
         console.log('[CoreSystem] 🛑 Shutting down Kernel...');
         this.isRunning = false;
 
+        // Initialized in constructor to avoid undefined access
+        if (!this.activeTimers) this.activeTimers = new Set();
+
+        // Clear floating timers
+        for (const timerId of this.activeTimers) {
+            clearTimeout(timerId);
+        }
+        this.activeTimers.clear();
+
+        // Cleanup sub-components
+        if (this.reflexSystem) this.reflexSystem.cleanup();
+        if (this.memory && typeof this.memory.shutdown === 'function') this.memory.shutdown();
+
+        // Clear safeguards
         if (this.zombieInterval) clearInterval(this.zombieInterval);
         if (this.watchdogInterval) clearInterval(this.watchdogInterval);
         this.zombieInterval = null;
         this.watchdogInterval = null;
 
-        // Cleanup sub-components
-        // Cleanup sub-components
-        if (this.reflexSystem) this.reflexSystem.cleanup();
-        if (this.memory && typeof this.memory.shutdown === 'function') this.memory.shutdown();
+        // Clear floating timers
+        for (const timerId of this.activeTimers) {
+            clearTimeout(timerId);
+        }
+        this.activeTimers.clear();
 
         if (this.scheduler) {
             this.scheduler.shutdown();
