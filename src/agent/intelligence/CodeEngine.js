@@ -200,18 +200,32 @@ export class CodeEngine {
         // For Mindcraft environment:
         try {
             const wrappedCode = `(async () => {\n${code_clean}\n})()`;
-            // Note: In high-security production, use a proper sandbox.
-            // For this refactor, we maintain the same dynamic capability as before.
+
+            // SECURITY UPDATE: Use Node.js VM for sandbox execution
             const mainFn = async (bot) => {
                 const { skills, world, Vec3 } = await import('../../utils/mcdata.js');
-                const context = { bot, skills, world, Vec3 };
-                // We must now ensure _start is accessible if Sanitizer injected it?
-                // Sanitizer wraps it: "const _start = Date.now(); ..."
-                // But new Function wrapping might scope it differently?
-                // "const {bot...} = context; return (async () => { const _start... ... })();"
-                // Yes, Sanitizer output is the body of the async function.
-                const fn = new Function('context', `const {bot, skills, world, Vec3} = context; return (async () => { ${code_clean} })();`);
-                return await fn(context);
+                const vm = await import('vm');
+
+                const sandbox = {
+                    bot,
+                    skills,
+                    world,
+                    Vec3,
+                    console, // Allow logging
+                    setTimeout,
+                    clearTimeout,
+                    setInterval,
+                    clearInterval
+                };
+
+                vm.createContext(sandbox);
+
+                // Execute with timeout to prevent synchronous infinite loops
+                // Note: deeply nested async loops might still persist, but this catches tight loops
+                return await vm.runInContext(wrappedCode, sandbox, {
+                    timeout: 5000,
+                    displayErrors: true
+                });
             };
 
             return { func: { main: mainFn }, src_lint_copy };

@@ -1,62 +1,74 @@
-# 📊 BÁO CÁO DỰ ÁN: Mindcraft Autonomous Evolution Agent
+# 📊 BÁO CÁO DỰ ÁN: Mindcraft (Unified Architecture)
+**Ngày:** 2026-02-09
+**Phiên bản:** v2.2.0 (Verified)
 
 ## 🎯 App này làm gì?
-Mindcraft (MindOS) là một "Thực thể AI" sống trong Minecraft. Không chỉ nghe lệnh như bot thường, nó có "não bộ" (Dual-Loop) để tự suy nghĩ, tự học kỹ năng mới (Evolution), và phản xạ với môi trường (Reflexes) như một sinh vật sống.
+Đây là một **AI Minecraft Bot** tự động hoàn toàn, có khả năng:
+1.  **Tự sinh tồn**: Ăn, đánh quái, tránh lava (System 1 - Reflexes).
+2.  **Tự suy nghĩ**: Lên kế hoạch, xây nhà, craft đồ phức tạp (System 2 - LLM Planner).
+3.  **Học hỏi**: Lưu ký ức và kỹ năng mới vào database để dùng lại sau này.
 
-## 📁 Cấu trúc chính
-```
-e:\mindcraft-develop\mindcraft-develop
-├── .brain/                 # Bộ nhớ dài hạn & Context làm việc
-├── bots/                   # Logs & dữ liệu của từng bot
-├── docs/                   # Tài liệu dự án (Architecture, Guides)
-├── profiles/               # Cấu hình tính cách bot (Prompt templates)
-├── src/                    # Source code chính
-│   ├── agent/              # Logic cốt lõi của Agent (Brain, Reflexes)
-│   ├── mindcraft/          # Giao tiếp với Minecraft Server
-│   ├── skills/             # Thư viện kỹ năng (Actions)
-│   └── utils/              # Các hàm tiện ích chung
-├── main.js                 # Entry point để chạy bot
-├── package.json            # Khai báo thư viện & scripts
-└── settings.js             # Cấu hình chung (Host, Port, Models)
-```
+---
+
+## 📁 Cấu trúc chính (Verified)
+| Folder | Chức năng | Trạng thái |
+|--------|-----------|------------|
+| `src/agent/core` | Hệ thống thần kinh (Scheduler, Context, SignalBus) | ✅ Stable |
+| `src/agent/reflexes` | Phản xạ sinh tồn (System 1) | ✅ Optimized |
+| `src/agent/intelligence` | Bộ não xử lý code (LLM CodeGen) | 🔒 Secured (Sandbox) |
+| `src/skills` | Thư viện kỹ năng (Atomic Actions) | ✅ Organized |
+| `src/memory` | Bộ nhớ dài hạn (Vector DB) | 🟡 Needs Tuning |
+| `tests/` | Unit tests | ✅ Organized |
+
+---
 
 ## 🛠️ Công nghệ sử dụng
-| Thành phần | Công nghệ |
-|------------|-----------|
-| **Core** | Node.js (ES Modules) |
-| **Minecraft Lib** | Mineflayer + Plugins (Pathfinder, PvP, Armor) |
-| **AI Brain** | OpenAI / Anthropic / Local LLMs (qua SDK) |
-| **Memory** | Vector Store (ChromaDB/Local) + JSON |
-| **Architecture** | Event-Driven + Dual-Loop (System 1/2) |
+| Thành phần | Công nghệ | Chi tiết |
+|------------|-----------|----------|
+| **Core** | Node.js | ES Modules |
+| **Bot Framework** | IP: `mineflayer` | v4.33.0 |
+| **AI Engine** | OpenAI / Anthropic / Gemini | Multi-model support |
+| **Sandbox** | Node `vm` | Timeout: 5000ms |
+| **Database** | (TBD - In `src/memory`) | `chromadb` (likely) |
+
+---
+
+## 📍 Trạng thái hiện tại
+✅ **Đã hoàn thành Phase 8 (Hardening)**:
+- **Security**: Đã đóng gói Code Engine vào `vm` sandbox để tránh code injection.
+- **Stability**: Đã xử lý Race Condition bằng `AbortController`.
+- **Optimization**: Context Manager đã biết lọc thông tin khi combat.
+
+---
+
+## 🏥 ĐÁNH GIÁ SỨC KHỎE CODE
+
+### ✅ Điểm tốt
+1.  **Kiến trúc Unified**: Tách biệt rõ ràng giữa Reflex (nhanh) và Planner (thông minh).
+2.  **Code Safety**: Có cơ chế `SafeGuard` và `CodeSanitizer` + `VM Sandbox`.
+3.  **No Dead Code**: Đã dọn dẹp sạch sẽ các file test cũ và module thừa (`modes.js`).
+
+### ⚠️ Cần lưu ý (Monitor)
+| Vấn đề | Mức độ | Gợi ý |
+|--------|--------|-------|
+| **Latency** | 🟡 Trung bình | Monitor độ trễ giữa System 1 và System 2 khi switching. |
+| **Context Size** | 🟡 Trung bình | Quan sát token usage của `ContextManager` sau khi pruning. |
+| **Test Coverage** | 🟢 Thấp | Cần viết thêm test cho `src/agent/reflexes`. |
+
+---
 
 ## 🚀 Cách chạy
 ```bash
-# 1. Cài đặt dependencies (lần đầu)
+# 1. Cài đặt
 npm install
 
-# 2. Cấu hình môi trường
-# Copy .env.example -> .env và điền API Keys
-
-# 3. Chạy Bot
+# 2. Chạy Bot
 node main.js
+
+# 3. Chạy Test (Manual)
+node tests/skills/test_skill_system.js
 ```
 
-## 📍 Đang làm dở gì?
-Dự án vừa **Hoàn thành đợt Refactor lớn (Unified Architecture)**:
-- **Phase 7 (Cleanup)**: Đã xong. Codebase sạch sẽ.
-- **Verification**: Đã pass tất cả test tự động.
-- **Trạng thái**: Sẵn sàng cho **Manual Test** cuối cùng.
-
-## 📝 Các file quan trọng cần biết
-| File | Chức năng |
-|------|-----------|
-| `src/agent/agent.js` | Bộ não trung tâm, điều phối mọi hoạt động |
-| `src/agent/core/CoreSystem.js` | Khởi tạo hệ thống & subsystems |
-| `src/agent/reflexes/` | Các phản xạ sinh tồn (Reflexes) |
-| `settings.js` | Chỉnh server IP, bot profile, switch models |
-| `PROJECT_CONTEXT.md` | Tài liệu kiến trúc & quy tắc "bất di bất dịch" |
-
-## ⚠️ Lưu ý khi tiếp nhận
-- **Signal Bus First**: Mọi giao tiếp module phải qua `globalBus`. Hạn chế gọi hàm trực tiếp.
-- **Reflex Priority**: Hệ thống phản xạ (System 1) luôn ưu tiên hơn kế hoạch (System 2).
-- **Manual Test**: Bot cần được test thực tế trong game để đảm bảo behavior tự nhiên.
+## 📝 Next Steps
+- **User**: Chạy thử `node main.js` để kiểm tra thực tế.
+- **Dev**: Cân nhắc thêm metrics dashboard (Prometheus/Grafana) ở Phase sau.

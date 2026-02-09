@@ -32,7 +32,7 @@ export class ContextManager {
         try {
             // Tier 1: Immediate Context (Base)
             // Filtered internally based on state if needed, but usually cheap enough
-            const tier1 = this._buildImmediateContext();
+            const tier1 = this._buildImmediateContext(state);
 
 
             // === ADAPTIVE SWITCHING ===
@@ -99,7 +99,7 @@ export class ContextManager {
      * Tier 1: Immediate Context (always fast, no async)
      * @private
      */
-    _buildImmediateContext() {
+    _buildImmediateContext(state = 'default') {
         const bot = this.agent.bot;
         const context = {
             timestamp: Date.now(),
@@ -127,6 +127,41 @@ export class ContextManager {
             currentTask: this.agent.scheduler?.currentTask?.name || null
         };
 
+        // Phase 8: Context Pruning
+        return this._pruneContext(context, state);
+    }
+
+    /**
+     * Prune context based on current state to save tokens
+     * @param {Object} context - Full context object
+     * @param {string} state - Current agent state (combat, crafting, etc)
+     */
+    _pruneContext(context, state) {
+        if (state === 'combat') {
+            // In combat, we don't need full inventory or chat history
+            // We need hotbar and nearby threats
+            return {
+                timestamp: context.timestamp,
+                botState: context.botState,
+                // Only keep hotbar items (slots 36-44) and offhand (45)
+                hotbar: context.inventory.filter(i => (i.slot >= 36 && i.slot <= 45)),
+                // Only keep hostile mobs or players
+                threats: context.nearbyMobs.filter(e => e.type !== 'item' && e.type !== 'experience_orb'),
+                // Minimal chat
+                recentChat: context.recentChat.slice(-2)
+            };
+        }
+
+        if (state === 'navigation') {
+            // Navigation needs position and surroundings, less inventory
+            return {
+                ...context,
+                inventory: [], // Hide full inventory
+                recentChat: context.recentChat.slice(-3)
+            };
+        }
+
+        // Default: keeps everything (for planning/coding)
         return context;
     }
 

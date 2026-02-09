@@ -158,6 +158,14 @@ export class TaskScheduler {
                 if (this.agent.actions) {
                     this.agent.actions.stop();
                 }
+
+                // Signal the task to abort via controller
+                if (task.controller) {
+                    task.controller.abort();
+                }
+
+                task.cancelled = true; // Mark as cancelled
+
                 this.activeTasks.delete(name);
                 console.log(`[CORTEX] 🛑 Interrupted task: ${name}`);
             }
@@ -206,15 +214,28 @@ export class TaskScheduler {
      * @param {Object} task - Task object to execute
      */
     async execute(task) {
+        // Create an AbortController for this task
+        const controller = new AbortController();
+        task.controller = controller; // Attach controller to task for external access if needed
+
         this.activeTasks.set(task.name, task);
         const startTime = Date.now();
 
         try {
             console.log(`[CORTEX] ▶️ Starting: ${task.name} (priority: ${task.priority})`);
-            await task.taskFn();
+
+            // Pass the signal to the task function
+            // Task functions should ideally accept { signal } or check it
+            await task.taskFn({ signal: controller.signal });
+
             const duration = Date.now() - startTime;
             console.log(`[CORTEX] ✅ Completed: ${task.name} (${duration}ms)`);
         } catch (error) {
+            if (error.name === 'AbortError' || task.cancelled) {
+                console.warn(`[CORTEX] 🛑 Task '${task.name}' was aborted/cancelled.`);
+                return; // Graceful exit
+            }
+
             console.error(`[CORTEX] ❌ Task '${task.name}' crashed:`, error.message);
 
             // Phase 2: Capture failure context for Evolution Engine

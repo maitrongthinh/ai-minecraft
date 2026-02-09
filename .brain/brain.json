@@ -6,7 +6,7 @@
     "project": {
         "name": "Mindcraft Autonomous Evolution Agent",
         "type": "AI Agent",
-        "status": "V1.0 Stable (Unified Architecture)"
+        "status": "V2.2.0 Hardened (Unified Architecture)"
     },
     "tech_stack": {
         "frontend": {
@@ -20,20 +20,26 @@
         },
         "database": {
             "type": "Vector Store (ChromaDB/Local) + JSON"
+        },
+        "security": {
+            "sandbox": "Node.js VM (timeout: 5000ms)",
+            "linting": "CodeSanitizer (AST-based)"
         }
     },
     "features": [
         "Dual-Loop Architecture (Reflexes + Planner)",
         "Event-Driven Core (SignalBus)",
-        "Evolutionary Coding (SmartCoder)",
+        "Evolutionary Coding (SmartCoder with Sandbox)",
         "Unified Memory (Short/Long term + Spatial)",
-        "Modular Skill Library"
+        "Modular Skill Library",
+        "Context Pruning (Optimization)"
     ],
     "knowledge_items": {
         "patterns": [
             "SignalBus Pattern for decouling",
             "Reflex Priority (System 1 overrides System 2)",
-            "Sandbox Execution for AI Code"
+            "Sandbox Execution for AI Code",
+            "AbortController for Task Interruption"
         ],
         "gotchas": [
             "Always use globalBus for cross-module talk",

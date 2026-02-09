@@ -22,7 +22,8 @@
 *   **Skills:** Hệ thống Skill Module hóa (`src/skills/library`) thay thế hardcoded behavior.
 *   **Configuration:** Chuẩn hóa Profile (`StandardProfileSchema`) và Environment (`.env`).
 *   **Infrastructure:** SignalBus, UnifiedMemory, SmartCoder hoạt động ổn định.
-*   **Security:** Fix các lỗi bảo mật (dependency imports, settings mutation).
+*   **Security:** Fix các lỗi bảo mật (dependency imports, settings mutation). **NEW:** VM Sandbox cho CodeEngine.
+*   **Stability:** Race Condition handling với `AbortController`.
 
 ### 🚧 Đang Phát Triển (In Progress)
 *   **Advanced Social:** Phối hợp nhóm (Swarm Intelligence).
