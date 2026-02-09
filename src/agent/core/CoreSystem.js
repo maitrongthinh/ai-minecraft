@@ -25,7 +25,10 @@ export class CoreSystem {
 
         // Initialize Components directly
         this.scheduler = new TaskScheduler(agent);
-        this.contextManager = new ContextManager(agent);
+
+        const maxTokens = agent.config?.profile?.model_config?.max_context_window || 8000;
+        this.contextManager = new ContextManager(agent, maxTokens);
+
         this.reflexSystem = new ReflexSystem(agent);
         this.memory = new MemorySystem(agent);
 

@@ -46,10 +46,11 @@ export class CodeEngine {
     /**
      * Main entry point for code generation
      */
-    async generateCode(agent_history) {
+    async generateCode(agent_history, options = {}) { // Added options for signal
         const messages = agent_history.getHistory();
         const lastMessage = messages[messages.length - 1];
         const intent = lastMessage.content;
+        const { signal } = options;
 
         this.referenceCode = null;
 
@@ -58,7 +59,7 @@ export class CodeEngine {
             const skill = await this.library.search(intent);
             if (skill) {
                 console.log(`[CodeEngine] 🧠 Found skill match: ${skill.name}`);
-                const result = await this.executeParsedCode(skill.code);
+                const result = await this.executeParsedCode(skill.code, { signal }); // Pass signal
                 if (result.success) {
                     this.library.markSuccess(skill.name);
                     return `Executed cached skill '${skill.name}':\n${result.summary}`;
@@ -83,10 +84,10 @@ export class CodeEngine {
             }
         }
 
-        return await this._generateAndLearn(agent_history);
+        return await this._generateAndLearn(agent_history, { signal }); // Pass signal
     }
 
-    async _generateAndLearn(agent_history) {
+    async _generateAndLearn(agent_history, { signal } = {}) {
         this.agent.bot.modes.pause('unstuck');
         lockdown();
 
@@ -101,7 +102,7 @@ export class CodeEngine {
 
         const MAX_ATTEMPTS = 3;
         for (let i = 0; i < MAX_ATTEMPTS; i++) {
-            if (this.agent.bot.interrupt_code) return null;
+            if (this.agent.bot.interrupt_code || signal?.aborted) return null; // Check signal
 
             const res = await this.agent.prompter.promptCoding(JSON.parse(JSON.stringify(messages)));
             const codeMatch = res.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
@@ -112,7 +113,7 @@ export class CodeEngine {
             }
 
             const code = codeMatch[1];
-            const result = await this.executeParsedCode(code);
+            const result = await this.executeParsedCode(code, { signal }); // Pass signal
 
             if (result.success) {
                 await this._saveSkill(code, messages); // Learning Loop
@@ -131,7 +132,7 @@ export class CodeEngine {
         return "Failed to generate working code after multiple attempts.";
     }
 
-    async executeParsedCode(code) {
+    async executeParsedCode(code, { signal } = {}) {
         try {
             const result = await this._stageCode(code);
             if (!result || !result.func) {
@@ -157,7 +158,8 @@ export class CodeEngine {
             await this.agent.actions.safeExec(
                 'ai_interaction',
                 () => result.func.main(this.agent.bot),
-                10000
+                10000,
+                signal // Pass signal to safeExec
             );
 
             const codeOutput = this.agent.bot.output?.summary || "No specific output recorded.";

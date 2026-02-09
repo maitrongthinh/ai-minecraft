@@ -31,21 +31,38 @@ export class ActionManager {
      * @param {Function} fn - Async bot action
      * @param {number} timeoutMillis - Max time to wait (ms)
      */
-    async safeExec(label, fn, timeoutMillis = 10000) {
+    async safeExec(label, fn, timeoutMillis = 10000, signal = null) {
+        if (signal?.aborted) throw new Error(`ActionAborted: ${label} aborted before start`);
+
         let timer;
+        let abortHandler;
+
         const timeoutPromise = new Promise((_, reject) => {
             timer = setTimeout(() => {
                 reject(new Error(`ActionTimeout: ${label} timed out after ${timeoutMillis}ms`));
             }, timeoutMillis);
         });
 
+        const abortPromise = new Promise((_, reject) => {
+            if (signal) {
+                abortHandler = () => reject(new Error(`ActionAborted: ${label} aborted by signal`));
+                signal.addEventListener('abort', abortHandler);
+            }
+        });
+
         try {
-            const result = await Promise.race([fn(), timeoutPromise]);
-            clearTimeout(timer);
+            const raceCandidates = [fn(), timeoutPromise];
+            if (signal) raceCandidates.push(abortPromise);
+
+            const result = await Promise.race(raceCandidates);
             return result;
         } catch (err) {
-            clearTimeout(timer);
             throw err;
+        } finally {
+            clearTimeout(timer);
+            if (signal && abortHandler) {
+                signal.removeEventListener('abort', abortHandler);
+            }
         }
     }
 

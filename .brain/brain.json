@@ -6,7 +6,7 @@
     "project": {
         "name": "Mindcraft Autonomous Evolution Agent",
         "type": "AI Agent",
-        "status": "V2.2.0 Hardened (Unified Architecture)"
+        "status": "V2.2.1 Audited & Hardened"
     },
     "tech_stack": {
         "frontend": {
@@ -30,21 +30,24 @@
         "Dual-Loop Architecture (Reflexes + Planner)",
         "Event-Driven Core (SignalBus)",
         "Evolutionary Coding (SmartCoder with Sandbox)",
-        "Unified Memory (Short/Long term + Spatial)",
+        "Unified Memory (Short/Long term + Spatial + Self-Healing)",
         "Modular Skill Library",
-        "Context Pruning (Optimization)"
+        "Context Pruning (Optimization)",
+        "Task Amnesia Prevention (Memory Hooks)"
     ],
     "knowledge_items": {
         "patterns": [
             "SignalBus Pattern for decouling",
             "Reflex Priority (System 1 overrides System 2)",
             "Sandbox Execution for AI Code",
-            "AbortController for Task Interruption"
+            "AbortController for Task Interruption",
+            "Centralized Timer Management"
         ],
         "gotchas": [
             "Always use globalBus for cross-module talk",
             "Avoid direct console.log in production loop",
-            "Test files belong in tests/"
+            "Test files belong in tests/",
+            "Check dependencies (like brain) before use"
         ]
     }
 }
