@@ -155,10 +155,13 @@ export class CodeEngine {
             }
 
             // 10s Timeout for physical action execution (Predictive Safety)
+            // Audit Fix: Parameterize timeout
+            const timeout = this.agent.config?.profile?.timeouts?.code_execution || 10000;
+
             await this.agent.actions.safeExec(
                 'ai_interaction',
                 () => result.func.main(this.agent.bot),
-                10000,
+                timeout,
                 signal // Pass signal to safeExec
             );
 

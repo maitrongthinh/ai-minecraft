@@ -101,7 +101,8 @@ export class CoreSystem {
         const zombieThreshold = intervals.zombie_threshold || 60000;
         const watchdogCheck = intervals.watchdog_check || 3000;
 
-        if (settings.watchdog && settings.watchdog.enabled) {
+        const config = this.agent.config || settings;
+        if (config.watchdog && config.watchdog.enabled) {
             this.zombieInterval = setInterval(() => {
                 if (this.scheduler) {
                     // Pass 'true' to indicate soft reset instead of kill

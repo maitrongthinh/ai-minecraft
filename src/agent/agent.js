@@ -940,19 +940,25 @@ export class Agent {
         console.log(`[Agent] 🧹 Cleaning up agent ${this.name}...`);
         this.running = false;
 
-        // 1. Core System Shutdown (Inside CoreSystem, we call reflexSystem.cleanup and scheduler.shutdown)
-        if (this.core) {
-            this.core.shutdown();
-        }
+        const safeCleanup = (label, fn) => {
+            try {
+                if (fn) fn();
+            } catch (err) {
+                console.warn(`[Agent] Cleanup warning (${label}): ${err.message}`);
+            }
+        };
 
-        // 2. Subsystem Cleanup (Intervals/Loops)
-        if (this.watchdog) this.watchdog.stop();
-        if (this.healthMonitor) this.healthMonitor.stop();
-        if (this.vision_interpreter) this.vision_interpreter.cleanup();
+        // 1. Core System Shutdown
+        if (this.core) safeCleanup('Core', () => this.core.shutdown());
 
-        if (this.arbiter) this.arbiter.cleanup();
-        if (this.social) this.social.cleanup();
-        if (this.combat) this.combat.cleanup();
+        // 2. Subsystem Cleanup (Safe Wrapping)
+        safeCleanup('Watchdog', () => this.watchdog?.stop());
+        safeCleanup('HealthMonitor', () => this.healthMonitor?.stop());
+        safeCleanup('Vision', () => this.vision_interpreter?.cleanup());
+        safeCleanup('Arbiter', () => this.arbiter?.cleanup());
+        safeCleanup('Social', () => this.social?.cleanup());
+        // CRITICAL FIX: this.combat -> this.combatReflex
+        safeCleanup('CombatReflex', () => this.combatReflex?.cleanup());
 
         // 3. Bot Teardown
         if (this.bot) {
