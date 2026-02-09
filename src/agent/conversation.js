@@ -1,4 +1,4 @@
-import settings from './settings.js';
+import settings from '../../settings.js';
 import { sendBotChatToServer } from './mindserver_proxy.js';
 
 let agent;

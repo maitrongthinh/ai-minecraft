@@ -1,5 +1,5 @@
 import translate from 'google-translate-api-x';
-import settings from '../agent/settings.js';
+import settings from '../../settings.js';
 
 
 

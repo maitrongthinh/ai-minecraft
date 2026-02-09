@@ -63,6 +63,13 @@ export const StandardProfileSchema = {
     behavior: {
         alert_cooldown: 10000, // Ms between alerts
         save_interval: 60000,  // Background persistence freq
+        auto_eat_start: 14,
+        banned_food: ["rotten_flesh", "spider_eye"],
+        self_preservation: {
+            low_health_threshold: 6, // 3 hearts
+            critical_health_threshold: 4, // 2 hearts
+            panic_distance: 10
+        },
         priorities: {
             survival_base: 40,
             survival_multiplier: 4,
@@ -74,6 +81,14 @@ export const StandardProfileSchema = {
     timeouts: {
         recovery_interval: 5000,
         task_ttl: 60000 // Zombie task threshold
+    },
+
+    // System Internals (Audit Fix)
+    system_intervals: {
+        zombie_check: 10000,      // Check every 10s
+        zombie_threshold: 60000,  // Kill if > 60s
+        watchdog_check: 3000,     // Check physics every 3s
+        memory_save: 60000        // Background save every 60s
     },
 
     // Mission Specifics

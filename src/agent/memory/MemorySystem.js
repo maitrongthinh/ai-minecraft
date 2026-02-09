@@ -7,7 +7,7 @@
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { writeFile } from 'fs/promises';
-import settings from '../../settings.js';
+import settings from '../../../settings.js';
 
 const SOURCE = {
     RAM: 'RAM',
@@ -206,6 +206,9 @@ export class MemorySystem {
         this.triggerBackgroundSave();
     }
 
+    // Legacy method alias for Agent.js (this.history.add)
+    async add(name, content) { return this.addChat(name, content); }
+
     async summarizeMemories(turns) {
         if (!this.agent.prompter) return;
         console.log("[MemorySystem] Summarizing memories...");
@@ -233,11 +236,23 @@ export class MemorySystem {
     // Persistence
     triggerBackgroundSave() {
         if (this._saveTimer) clearTimeout(this._saveTimer);
+        const interval = this.agent.config.profile?.system_intervals?.memory_save || 60000;
+
         this._saveTimer = setTimeout(() => {
             this.persistToDisk().catch(err => {
                 console.error('[MemorySystem] Critical Background Save Failure:', err.message);
             });
-        }, 5000);
+        }, 5000); // Debounce
+    }
+
+    shutdown() {
+        if (this._saveTimer) {
+            clearTimeout(this._saveTimer);
+            this._saveTimer = null;
+        }
+        // Force save on shutdown? Maybe dangerous if corrupted.
+        // Let's just clear the timer as requested.
+        console.log('[MemorySystem] 🛑 Shutdown: Timer cleared.');
     }
 
     async persistToDisk() {

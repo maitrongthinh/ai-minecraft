@@ -4,6 +4,9 @@ import { MemorySystem } from '../memory/MemorySystem.js';
 import { TaskScheduler } from './TaskScheduler.js';
 import { ContextManager } from './ContextManager.js';
 import { ReflexSystem } from './ReflexSystem.js';
+import { SocialEngine } from '../interaction/SocialEngine.js';
+import { CodeEngine } from '../intelligence/CodeEngine.js';
+import { ScenarioManager } from '../tasks/ScenarioManager.js';
 import settings from '../../../settings.js';
 
 /**
@@ -26,6 +29,11 @@ export class CoreSystem {
         this.reflexSystem = new ReflexSystem(agent);
         this.memory = new MemorySystem(agent);
 
+        // Subsystems (initialized in async method)
+        this.social = null;
+        this.intelligence = null;
+        this.scenarios = null;
+
         // Safeguard Timers (still null initially)
         this.zombieInterval = null;
         this.watchdogInterval = null;
@@ -43,7 +51,12 @@ export class CoreSystem {
 
         // 2. Initialize Subsystems
         await this.memory.init();
-        this.reflexSystem.init(); // Sync init (listeners)
+        // Unified Subsystem Initialization
+        this.social = new SocialEngine(this.agent);
+        this.intelligence = new CodeEngine(this.agent);
+        this.scenarios = new ScenarioManager(null, this.agent);
+
+        console.log('[CoreSystem] ✓ Subsystems (Social, Code, Scenarios) Loaded');
 
         // 3. Initialize Scheduler
         // this.scheduler already initialized in constructor
@@ -52,9 +65,26 @@ export class CoreSystem {
         this.startSafeguards();
 
         this.isRunning = true;
-        console.log('[CoreSystem] ✅ Kernel Initialized');
+        console.log('[CoreSystem] ✅ Kernel Initialized (Waiting for Bot Connection...)');
 
         return true;
+    }
+
+    /**
+     * Phase 5: Safe Initialization
+     * Connects valid bot instance to subsystems
+     */
+    connectBot(bot) {
+        if (!bot) {
+            console.error('[CoreSystem] ❌ Cannot connect null bot!');
+            return;
+        }
+        console.log('[CoreSystem] 🔗 Connecting Bot Instance to Subsystems...');
+
+        // Connect Reflexes (Safe Init)
+        this.reflexSystem.connect(bot);
+
+        console.log('[CoreSystem] ✅ Bot Connected Successfully');
     }
 
     /**
@@ -63,23 +93,25 @@ export class CoreSystem {
     startSafeguards() {
         // 1. Zombie Task Killer (Soft Reset Mode)
         // Checks every 10s for tasks running > 60s without updates
+        const intervals = this.agent.config.profile?.system_intervals || {};
+        const zombieCheck = intervals.zombie_check || 10000;
+        const zombieThreshold = intervals.zombie_threshold || 60000;
+        const watchdogCheck = intervals.watchdog_check || 3000;
+
         if (settings.watchdog && settings.watchdog.enabled) {
             this.zombieInterval = setInterval(() => {
                 if (this.scheduler) {
                     // Pass 'true' to indicate soft reset instead of kill
-                    // But scheduler.checkZombieTasks needs update to handle this if we want soft reset
-                    // For now, we heavily discourage killing. 
-                    // Let's use the requested logic: Log warning only.
-                    this.scheduler.checkZombieTasks(60000);
+                    this.scheduler.checkZombieTasks(zombieThreshold);
                 }
-            }, 10000);
-            console.log('[CoreSystem] 🛡️ Zombie Task Killer ENABLED (Soft Mode)');
+            }, zombieCheck);
+            console.log(`[CoreSystem] 🛡️ Zombie Task Killer ENABLED (Check: ${zombieCheck}ms, Threshold: ${zombieThreshold}ms)`);
 
             // 2. Physical Watchdog (Soft Reset Mode)
             this.watchdogInterval = setInterval(() => {
                 this.checkPhysicalState();
-            }, settings.watchdog.check_interval_ms || 3000);
-            console.log('[CoreSystem] 🛡️ Physical Watchdog ENABLED');
+            }, watchdogCheck);
+            console.log(`[CoreSystem] 🛡️ Physical Watchdog ENABLED (Check: ${watchdogCheck}ms)`);
         } else {
             console.log('[CoreSystem] 🛡️ Watchdogs DISABLED (Configuration)');
         }
@@ -142,7 +174,10 @@ export class CoreSystem {
         this.watchdogInterval = null;
 
         // Cleanup sub-components
+        // Cleanup sub-components
         if (this.reflexSystem) this.reflexSystem.cleanup();
+        if (this.memory && typeof this.memory.shutdown === 'function') this.memory.shutdown();
+
         if (this.scheduler) {
             this.scheduler.shutdown();
             this.scheduler.interruptPhysicalTasks();

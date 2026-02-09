@@ -1,4 +1,4 @@
-import * as world from '../library/world.js';
+import * as world from '../../skills/library/world.js';
 import * as mc from '../../utils/mcdata.js';
 
 
@@ -84,13 +84,13 @@ export function blockSatisfied(target_name, block) {
 }
 
 
-export function itemSatisfied(bot, item, quantity=1) {
+export function itemSatisfied(bot, item, quantity = 1) {
     let qualifying = [item];
-    if (item.includes('pickaxe') || 
-            item.includes('axe') || 
-            item.includes('shovel') ||
-            item.includes('hoe') ||
-            item.includes('sword')) {
+    if (item.includes('pickaxe') ||
+        item.includes('axe') ||
+        item.includes('shovel') ||
+        item.includes('hoe') ||
+        item.includes('sword')) {
         let material = item.split('_')[0];
         let type = item.split('_')[1];
         if (material === 'wooden') {
@@ -120,7 +120,7 @@ export function itemSatisfied(bot, item, quantity=1) {
 
 export function rotateXZ(x, z, orientation, sizex, sizez) {
     if (orientation === 0) return [x, z];
-    if (orientation === 1) return [z, sizex-x-1];
-    if (orientation === 2) return [sizex-x-1, sizez-z-1];
-    if (orientation === 3) return [sizez-z-1, x];
+    if (orientation === 1) return [z, sizex - x - 1];
+    if (orientation === 2) return [sizex - x - 1, sizez - z - 1];
+    if (orientation === 3) return [sizez - z - 1, x];
 }

@@ -117,40 +117,44 @@ export class ExecutorAgent {
                 }
 
                 try {
-                    // Try to execute via ToolRegistry
+
+                    // 1. Pre-condition Check for fatal errors
+                    if (!this.agent.bot || !this.agent.bot.entity) {
+                        console.warn('[ExecutorAgent] 🛑 Bot disconnected or dead. Aborting task.');
+                        executionResult = { success: false, message: 'Bot disconnected or dead', abort: true };
+                        break; // Fatal error, do not retry
+                    }
+
+                    // 2. Execution via ToolRegistry or Fallback
                     const result = await this._executeViaRegistry(step);
 
                     if (result.success) {
-                        return result;
+                        executionResult = result;
+                        break; // Success, exit retry loop
                     }
 
-                    lastError = result.message;
-
+                    // All retries failed
+                    return {
+                        success: false,
+                        message: lastError || 'Unknown error after retries',
+                        abort: false
+                    };
+                } catch (error) {
+                    console.warn(`[ExecutorAgent] execution error: ${error.message}`);
+                    lastError = error.message;
                 } finally {
-                    // Always release lock after step execution (atomic steps)
-                    if (this.agent.locks && this.agent.locks.move) {
+                    if (this.agent.locks && this.agent.locks.move && this.agent.locks.move.getOwner() === 'system2') {
                         this.agent.locks.move.release('system2');
                     }
                 }
-
-                // Wait before retry
-                if (attempt < this.maxRetries) {
-                    console.log(`[ExecutorAgent] Retry ${attempt + 1}/${this.maxRetries} for ${step.task}`);
-                    await new Promise(r => setTimeout(r, 1000));
-                }
-
-            } catch (error) {
-                console.error(`[ExecutorAgent] Step ${step.id} error:`, error.message);
-                lastError = error.message;
+            } catch (panic) {
+                console.error('[ExecutorAgent] Critical Loop Error', panic);
+                lastError = panic.message;
             }
+            await new Promise(r => setTimeout(r, 1000));
         }
 
-        // All retries failed
-        return {
-            success: false,
-            message: lastError || 'Unknown error after retries',
-            abort: false
-        };
+        return { success: false, message: lastError || "Failed", abort: false };
     }
 
     /**
@@ -158,14 +162,10 @@ export class ExecutorAgent {
      * @private
      */
     async _executeViaRegistry(step) {
-        // Check if skill exists in ToolRegistry
-        if (this.agent.toolRegistry) {
-            const skill = this.agent.toolRegistry.findSkill(step.task);
-
-            if (skill) {
-                console.log(`[ExecutorAgent] Using ToolRegistry: ${step.task}`);
-                return await this.agent.toolRegistry.executeSkill(step.task, step.params);
-            }
+        const skill = this.agent.toolRegistry.getSkill(step.task);
+        if (skill) {
+            console.log(`[ExecutorAgent] Using ToolRegistry: ${step.task}`);
+            return await this.agent.toolRegistry.executeSkill(step.task, step.params);
         }
 
         // Fallback: Try command-based execution

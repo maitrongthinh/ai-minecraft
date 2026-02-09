@@ -1,61 +1,70 @@
-import { readFileSync , writeFileSync, existsSync} from 'fs';
-import { executeCommand } from '../commands/index.js';
-import { getPosition } from '../library/world.js';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+// import { executeCommand } from '../commands/index.js'; // REMOVED (Audit Fix)
+import { getPosition } from '../../skills/library/world.js';
 import { ConstructionTaskValidator, Blueprint } from './construction_tasks.js';
 import { CookingTaskInitiator } from './cooking_tasks.js';
+
+// Polyfill for missing executeCommand
+async function executeCommand(agent, command) {
+    console.log(`[ScenarioManager] Executing system command: ${command}`);
+    if (agent && agent.handleMessage) {
+        return await agent.handleMessage('system', command);
+    }
+    return false;
+}
 
 const PROGRESS_FILE = './hells_kitchen_progress.json';
 
 const hellsKitchenProgressManager = {
-  readProgress: function() {
-    try {
-      if (existsSync(PROGRESS_FILE)) {
-        const data = readFileSync(PROGRESS_FILE, 'utf8');
-        return JSON.parse(data);
-      }
-    } catch (err) {
-      console.error('Error reading progress file:', err);
+    readProgress: function () {
+        try {
+            if (existsSync(PROGRESS_FILE)) {
+                const data = readFileSync(PROGRESS_FILE, 'utf8');
+                return JSON.parse(data);
+            }
+        } catch (err) {
+            console.error('Error reading progress file:', err);
+        }
+        return { taskId: null, agent0Complete: false, agent1Complete: false };
+    },
+
+    writeProgress: function (progress) {
+        try {
+            writeFileSync(PROGRESS_FILE, JSON.stringify(progress), 'utf8');
+        } catch (err) {
+            console.error('Error writing progress file:', err);
+        }
+    },
+
+    resetTask: function (taskId) {
+        const progress = { taskId, agent0Complete: false, agent1Complete: false };
+        this.writeProgress(progress);
+        return progress;
+    },
+
+    updateAgentProgress: function (taskId, agentId, isComplete) {
+        const progress = this.readProgress();
+
+        // If it's a different task, reset first
+        if (progress.taskId !== taskId) {
+            progress.taskId = taskId;
+            progress.agent0Complete = false;
+            progress.agent1Complete = false;
+        }
+
+        // Update the specific agent's status
+        if (agentId === 0) progress.agent0Complete = isComplete;
+        if (agentId === 1) progress.agent1Complete = isComplete;
+
+        this.writeProgress(progress);
+        return progress;
+    },
+
+    isTaskComplete: function (taskId) {
+        const progress = this.readProgress();
+        if (progress.taskId !== taskId) return false;
+        return progress.agent0Complete && progress.agent1Complete;
     }
-    return { taskId: null, agent0Complete: false, agent1Complete: false };
-  },
-  
-  writeProgress: function(progress) {
-    try {
-      writeFileSync(PROGRESS_FILE, JSON.stringify(progress), 'utf8');
-    } catch (err) {
-      console.error('Error writing progress file:', err);
-    }
-  },
-  
-  resetTask: function(taskId) {
-    const progress = { taskId, agent0Complete: false, agent1Complete: false };
-    this.writeProgress(progress);
-    return progress;
-  },
-  
-  updateAgentProgress: function(taskId, agentId, isComplete) {
-    const progress = this.readProgress();
-    
-    // If it's a different task, reset first
-    if (progress.taskId !== taskId) {
-      progress.taskId = taskId;
-      progress.agent0Complete = false;
-      progress.agent1Complete = false;
-    }
-    
-    // Update the specific agent's status
-    if (agentId === 0) progress.agent0Complete = isComplete;
-    if (agentId === 1) progress.agent1Complete = isComplete;
-    
-    this.writeProgress(progress);
-    return progress;
-  },
-  
-  isTaskComplete: function(taskId) {
-    const progress = this.readProgress();
-    if (progress.taskId !== taskId) return false;
-    return progress.agent0Complete && progress.agent1Complete;
-  }
 };
 
 
@@ -78,10 +87,10 @@ function checkItemPresence(data, agent) {
     try {
         // Special handling for hells_kitchen tasks
         if (data.task_id && data.task_id.endsWith('hells_kitchen') && Array.isArray(data.target) && data.target.length === 2) {
-            
+
             // Get agent ID and target for this agent
             const agentId = agent.count_id;
-            
+
             if (agentId === 0 || agentId === 1) {
                 // Use only the corresponding element from the target list
                 const targetForThisAgent = data.target[agentId];
@@ -89,21 +98,21 @@ function checkItemPresence(data, agent) {
                     ...data,
                     target: targetForThisAgent
                 };
-                
+
                 // Check if this agent has their required item
                 const agentResult = checkItemForSingleAgent(modifiedData, agent);
-                
+
                 // Update the file-based progress tracker
                 const progress = hellsKitchenProgressManager.updateAgentProgress(
-                    data.task_id, 
-                    agentId, 
+                    data.task_id,
+                    agentId,
                     agentResult.success
                 );
-                
+
                 // // Log the current state
                 // console.log(`Agent ${agentId} has item: ${agentResult.success}`);
                 // console.log(`Task state: Agent0=${progress.agent0Complete}, Agent1=${progress.agent1Complete}`);
-                
+
                 // Return combined result - success only if both agents have their items
                 return {
                     success: progress.agent0Complete && progress.agent1Complete,
@@ -112,10 +121,10 @@ function checkItemPresence(data, agent) {
                 };
             }
         }
-        
+
         // Non-hells_kitchen tasks use the standard check
         return checkItemForSingleAgent(data, agent);
-        
+
     } catch (error) {
         console.error('Error checking item presence:', error);
         return {
@@ -133,12 +142,12 @@ function checkItemPresence(data, agent) {
  */
 function checkItemForSingleAgent(data, agent) {
     function isTargetDictionaryWithQuantities(target) {
-        return typeof target === 'object' && 
-               !Array.isArray(target) && 
-               target !== null &&
-               Object.values(target).every(value => typeof value === 'number');
+        return typeof target === 'object' &&
+            !Array.isArray(target) &&
+            target !== null &&
+            Object.values(target).every(value => typeof value === 'number');
     }
-    
+
     function normalizeTargets(target) {
         if (typeof target === 'string') {
             return { [target]: 1 };
@@ -152,7 +161,7 @@ function checkItemForSingleAgent(data, agent) {
         }
         throw new Error('Invalid target format');
     }
-    
+
     function normalizeQuantities(targets, quantities) {
         if (quantities === undefined) {
             return Object.keys(targets).reduce((acc, key) => {
@@ -169,13 +178,13 @@ function checkItemForSingleAgent(data, agent) {
         }
         throw new Error('Invalid number_of_target format');
     }
-    
+
     // First normalize targets to always have a consistent format
     const targets = normalizeTargets(data.target);
-    
+
     // Determine the required quantities
-    const requiredQuantities = isTargetDictionaryWithQuantities(data.target) 
-        ? data.target 
+    const requiredQuantities = isTargetDictionaryWithQuantities(data.target)
+        ? data.target
         : normalizeQuantities(targets, data.number_of_target);
 
     // Count items in inventory
@@ -217,7 +226,7 @@ class CookingCraftingTaskValidator {
     constructor(data, agent) {
         this.data = data;
         this.agent = agent;
-    } 
+    }
     validate() {
         const result = checkItemPresence(this.data, this.agent);
         let score = 0;
@@ -225,7 +234,7 @@ class CookingCraftingTaskValidator {
             score = 1;
         }
         return {
-            "valid": result.success, 
+            "valid": result.success,
             "score": score,
         };
     }
@@ -327,17 +336,17 @@ export class Task {
 
                 if (this.name.toLowerCase().startsWith('andy')) {
                     add_string = '\nIn the end, all the food items should be given to you by other bots. Make sure to talk to all the agents using startConversation command to coordinate the task instead of talking to just one agent. You can even end current conversation with any agent using endConversation command and then talk to a new agent using startConversation command.';
-                } 
+                }
                 else {
                     add_string = '\nIn the end, all the food items should be given to one single bot whose name starts with andy or Andy. Make sure to talk to all the agents using startConversation command to coordinate the task instead of talking to just one agent. You can even end current conversation with any agent using endConversation command and then talk to a new agent using startConversation command.';
-                }   
-            } 
+                }
+            }
             else {
                 if (this.data.task_id && this.data.task_id.endsWith('hells_kitchen')) {
                     add_string = '';
-                } 
+                }
                 else {
-                add_string = '\nIn the end, all the food items should be given to one single bot.';
+                    add_string = '\nIn the end, all the food items should be given to one single bot.';
                 }
             }
         }
@@ -372,25 +381,25 @@ export class Task {
                 this.agent.bot.chat(`/clear ${agent}`);
             }
             // this.agent.bot.chat(`/clear @a`);
-            return {"message": 'Task successful', "score": res.score};
+            return { "message": 'Task successful', "score": res.score };
         }
         let other_names = this.available_agents.filter(n => n !== this.name);
         const elapsedTime = (Date.now() - this.taskStartTime) / 1000;
 
         if (elapsedTime >= 30 && this.available_agents.length !== this.data.agent_count) {
             console.log('No other agents found. Task unsuccessful.');
-            return {"message": 'No other agents found', "score": 0};
+            return { "message": 'No other agents found', "score": 0 };
         }
-        
+
         if (this.taskTimeout) {
             if (elapsedTime >= this.taskTimeout) {
                 console.log('Task timeout reached. Task unsuccessful.');
                 if (res) {
-                    return {"message": 'Task timeout reached', "score": res.score};
+                    return { "message": 'Task timeout reached', "score": res.score };
                 } else {
-                    return {"message": 'Task timeout reached', "score": 0};
+                    return { "message": 'Task timeout reached', "score": 0 };
                 }
-                
+
             }
         }
         return false;
@@ -414,7 +423,7 @@ export class Task {
 
         if (this.data === null)
             return;
-        
+
         if (this.task_type === 'cooking') {
             this.initiator = new CookingTaskInitiator(this.data, this.agent.bot);
         } else {
@@ -436,7 +445,7 @@ export class Task {
         if (this.data.initial_inventory) {
             console.log("Setting inventory...");
             let initialInventory = {};
-            
+
             initialInventory = this.data.initial_inventory[this.agent.count_id.toString()] || {};
             console.log("Initial inventory for agent", this.agent.count_id, ":", initialInventory);
             console.log("")
@@ -448,7 +457,7 @@ export class Task {
                     throw new Error(`Number of human players ${this.human_count} does not match the number of usernames provided. ${this.data.usernames.length}`);
                     return;
                 }
-                
+
                 const starting_idx = this.data.agent_count;
                 for (let i = 0; i < this.data.human_count; i++) {
                     const username = this.data.usernames[i];
@@ -507,7 +516,7 @@ export class Task {
         }
         await this.setAgentGoal();
     }
-    
+
     async teleportBots() {
         console.log('\n\nTeleporting bots');
         function getRandomOffset(range) {
@@ -566,9 +575,9 @@ export class Task {
             }
         }
 
-        if (this.data.type === 'construction'){
+        if (this.data.type === 'construction') {
             //Ensures construction is cleaned out first. -> relies on cheats which are turned off?
-            if (this.blueprint){
+            if (this.blueprint) {
                 console.log('Cleaning out construction blueprint');
                 const result = this.blueprint.autoDelete();
                 const commands = result.commands;
@@ -586,9 +595,21 @@ export class Task {
                     bot.chat(command);
                 }
             }
-            else{
+            else {
                 console.log('no construction blueprint?')
             }
         }
+    }
+}
+
+export class ScenarioManager {
+    constructor(world, agent) {
+        this.agent = agent;
+        this.world = world;
+        this.tasks = [];
+    }
+
+    async update(delta) {
+        // Placeholder for scenario updates
     }
 }

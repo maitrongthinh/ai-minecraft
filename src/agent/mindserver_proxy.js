@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 import convoManager from './conversation.js';
-import { setSettings } from './settings.js';
+import settings from '../../settings.js';
 import { getFullState } from './library/full_state.js';
 
 // agent's individual connection to the mindserver
@@ -90,7 +90,7 @@ class MindServerProxy {
                 if (response.error) {
                     return reject(new Error(response.error));
                 }
-                setSettings(response.settings);
+                Object.assign(settings, response.settings);
                 this.socket.emit('connect-agent-process', name);
                 resolve();
             });

@@ -1,4 +1,4 @@
-import { 
+import {
     getPosition,
     getBiomeName,
     getNearbyPlayerNames,
@@ -6,7 +6,7 @@ import {
     getNearbyEntityTypes,
     getBlockAtPosition,
     getFirstBlockAboveHead
-} from "./world.js";
+} from "../../skills/library/world.js";
 import convoManager from '../conversation.js';
 
 export function getFullState(agent) {

@@ -3,6 +3,7 @@
  * 
  * Phase 3: Gladiator Update
  * Phase 4.5: MindOS Integration (SignalBus)
+ * Phase 5: Flexibility Refactor (CombatUtils)
  * 
  * Combat controller with 50ms tick loop.
  * Handles: weapon switching, critical hits, emergency healing, retreat.
@@ -11,11 +12,9 @@
  */
 
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
-
-
 import { PRIORITY } from '../core/TaskScheduler.js';
 import { MovementTactics } from './MovementTactics.js';
-import { SocialProfile } from './SocialProfile.js';
+import { CombatUtils } from '../../utils/CombatUtils.js';
 
 // Combat States
 const STATE = {
@@ -23,43 +22,6 @@ const STATE = {
     ENGAGE: 'ENGAGE',
     RETREAT: 'RETREAT'
 };
-
-// Weapon DPS table (attack damage * attack speed)
-const WEAPON_DPS = {
-    // Swords (fast attack speed: 1.6)
-    'netherite_sword': 12.8,  // 8 * 1.6
-    'diamond_sword': 11.2,    // 7 * 1.6
-    'iron_sword': 9.6,        // 6 * 1.6
-    'stone_sword': 8.0,       // 5 * 1.6
-    'golden_sword': 6.4,      // 4 * 1.6
-    'wooden_sword': 6.4,      // 4 * 1.6
-
-    // Axes (slow but high damage)
-    'netherite_axe': 10.0,    // 10 * 1.0
-    'diamond_axe': 9.0,       // 9 * 1.0
-    'iron_axe': 9.0,          // 9 * 1.0
-    'stone_axe': 9.0,         // 9 * 1.0
-    'golden_axe': 7.0,        // 7 * 1.0
-    'wooden_axe': 7.0,        // 7 * 1.0
-
-    // Ranged
-    'bow': 10.0,              // Estimated with power
-    'crossbow': 9.0,
-    'trident': 9.0
-};
-
-// Food healing values
-const FOOD_PRIORITY = [
-    'enchanted_golden_apple',  // 4 hunger + Absorption
-    'golden_apple',            // 4 hunger + Absorption
-    'golden_carrot',           // 6 hunger
-    'cooked_beef',             // 8 hunger
-    'cooked_porkchop',         // 8 hunger
-    'cooked_mutton',           // 6 hunger
-    'cooked_chicken',          // 6 hunger
-    'bread',                   // 5 hunger
-    'apple',                   // 4 hunger
-];
 
 export class CombatReflex {
     constructor(agent) {
@@ -137,7 +99,7 @@ export class CombatReflex {
         globalBus.emitSignal(SIGNAL.COMBAT_ENDED, { reason: 'manual_exit' });
 
         // Clear control states
-        this.bot.clearControlStates();
+        if (this.bot) this.bot.clearControlStates();
         this.consecutiveFailures = 0; // Reset circuit breaker
 
         console.log('[CombatReflex] 🛡️ Combat ended');
@@ -480,57 +442,33 @@ export class CombatReflex {
     }
 
     /**
-     * Get best weapon from inventory
+     * Get best weapon using CombatUtils
      */
     _getBestWeapon(mode) {
-        const items = this.bot.inventory.items();
-        let bestWeapon = null;
-        let bestDPS = 0;
-
-        const isRange = mode === 'range';
-
-        for (const item of items) {
-            const dps = WEAPON_DPS[item.name] || 0;
-
-            if (isRange) {
-                // Only consider ranged weapons
-                if (['bow', 'crossbow', 'trident'].includes(item.name)) {
-                    if (dps > bestDPS) {
-                        bestDPS = dps;
-                        bestWeapon = item;
-                    }
-                }
-            } else {
-                // Melee weapons (swords and axes)
-                if (item.name.includes('sword') || item.name.includes('axe')) {
-                    if (dps > bestDPS) {
-                        bestDPS = dps;
-                        bestWeapon = item;
-                    }
-                }
-            }
-        }
-
-        return bestWeapon;
+        return CombatUtils.getBestWeapon(this.bot, mode);
     }
 
     /**
-     * Get best food from inventory
+     * Get best food using CombatUtils
      */
     _getBestFood() {
         const items = this.bot.inventory.items();
+        let bestFood = null;
+        let bestScore = -999;
+        const currentHeatlt = this.bot.health;
 
-        for (const foodName of FOOD_PRIORITY) {
-            const food = items.find(i => i.name === foodName);
-            if (food) return food;
+        for (const item of items) {
+            const score = CombatUtils.getFoodScore(item, currentHeatlt);
+            if (score > bestScore) {
+                bestScore = score;
+                bestFood = item;
+            }
         }
 
-        // Fallback: any food
-        return items.find(i =>
-            i.name.includes('cooked') ||
-            i.name.includes('apple') ||
-            i.name.includes('bread')
-        );
+        // Don't poison self unless dying
+        if (bestScore < 0 && this.bot.health > 4) return null;
+
+        return bestFood;
     }
 
     /**

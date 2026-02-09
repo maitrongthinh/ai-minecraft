@@ -1,4 +1,4 @@
-import { getPosition } from "../library/world.js";
+import { getPosition } from "../../skills/library/world.js";
 
 export class CookingTaskInitiator {
     constructor(data, bot) {
@@ -10,7 +10,7 @@ export class CookingTaskInitiator {
         let bot = this.bot;
 
         //// Setting up the cooking world using minecraft cheats ////
-        
+
         // Only run the setup if the agent is the first one
 
         // Clear and prepare the base area
@@ -31,7 +31,7 @@ export class CookingTaskInitiator {
         // Region management system
         const isOverlapping = (newXMin, newXMax, newZMin, newZMax, occupiedRegions) => {
             for (const region of occupiedRegions) {
-                if (newXMin < region.xMax && newXMax > region.xMin && 
+                if (newXMin < region.xMax && newXMax > region.xMin &&
                     newZMin < region.zMax && newZMax > region.zMin) {
                     return true;
                 }
@@ -44,7 +44,7 @@ export class CookingTaskInitiator {
             const minXStart = position.x - 25;
             const maxZStart = position.z + 25 - depth;
             const minZStart = position.z - 25;
-            
+
             let attempts = 0;
             while (attempts < 10000) {
                 const xStart = Math.floor(minXStart + Math.random() * (maxXStart - minXStart + 1));
@@ -53,7 +53,7 @@ export class CookingTaskInitiator {
                 const xMax = xStart + width - 1;
                 const zMin = zStart;
                 const zMax = zStart + depth - 1;
-                
+
                 if (!isOverlapping(xMin, xMax, zMin, zMax, occupiedRegions)) {
                     return { xStart, zStart };
                 }
@@ -76,7 +76,7 @@ export class CookingTaskInitiator {
         ];
 
         // Expand the regions of each type to make sure they don't overlap
-        
+
         for (let i = 0; i < regionsToPlace.length; i++) {
             const region = regionsToPlace[i];
             const { width, depth } = region;
@@ -85,17 +85,17 @@ export class CookingTaskInitiator {
         }
 
         const occupiedRegions = [{
-            xMin : botX - 1,
-            xMax : botX + 1,
-            zMin : botZ - 1,
-            zMax : botZ + 1
+            xMin: botX - 1,
+            xMax: botX + 1,
+            zMin: botZ - 1,
+            zMax: botZ + 1
         }];
         const regionPositions = {};
 
         // Calculate positions for all regions
         for (const region of regionsToPlace) {
             const { xStart, zStart } = findValidPosition(region.width, region.depth, occupiedRegions);
-            
+
             occupiedRegions.push({
                 xMin: xStart,
                 xMax: xStart + region.width - 1,
@@ -128,7 +128,7 @@ export class CookingTaskInitiator {
 
 
         await this.buildHouse(regionPositions.house.xStart, regionPositions.house.zStart);
-        
+
         console.log("House built!");
 
         // Add a chest with cooking items near the bot
@@ -154,35 +154,35 @@ export class CookingTaskInitiator {
         //     // Place the chest
         //     await bot.chat(`/setblock ${x} ${y} ${z} chest`);
 
-            const cookingItems = [
-                ['minecraft:milk_bucket', 1],     // Non-stackable
-                ['minecraft:egg', 16],            // Stacks to 16
-                ['minecraft:dandelion', 64],    // Stacks to 64
-                ['minecraft:sugar', 64],
-                ['minecraft:cocoa_beans', 64],
-                ['minecraft:apple', 64],
-                ['minecraft:milk_bucket', 1],
-                ['minecraft:milk_bucket', 1],
-                ['minecraft:salmon', 64],
-                ['minecraft:cod', 64],
-                ['minecraft:kelp', 64],
-                ['minecraft:dried_kelp', 64],
-                ['minecraft:sweet_berries', 64],
-                ['minecraft:honey_bottle', 1],     // Non-stackable
-                ['minecraft:glow_berries', 64],
-                ['minecraft:bowl', 64],
-                ['minecraft:milk_bucket', 1],
-                ['minecraft:milk_bucket', 1],
-                ['minecraft:milk_bucket', 1],
-                ['minecraft:milk_bucket', 1],
-                ['minecraft:cooked_salmon', 64],
-                ['minecraft:cooked_cod', 64],
-                ['minecraft:gold_ingot', 64],
-                ['minecraft:oak_planks', 64],
-                ['minecraft:iron_ingot', 64],
-                ['minecraft:milk_bucket', 1],
-                ['minecraft:milk_bucket', 1],
-            ];
+        const cookingItems = [
+            ['minecraft:milk_bucket', 1],     // Non-stackable
+            ['minecraft:egg', 16],            // Stacks to 16
+            ['minecraft:dandelion', 64],    // Stacks to 64
+            ['minecraft:sugar', 64],
+            ['minecraft:cocoa_beans', 64],
+            ['minecraft:apple', 64],
+            ['minecraft:milk_bucket', 1],
+            ['minecraft:milk_bucket', 1],
+            ['minecraft:salmon', 64],
+            ['minecraft:cod', 64],
+            ['minecraft:kelp', 64],
+            ['minecraft:dried_kelp', 64],
+            ['minecraft:sweet_berries', 64],
+            ['minecraft:honey_bottle', 1],     // Non-stackable
+            ['minecraft:glow_berries', 64],
+            ['minecraft:bowl', 64],
+            ['minecraft:milk_bucket', 1],
+            ['minecraft:milk_bucket', 1],
+            ['minecraft:milk_bucket', 1],
+            ['minecraft:milk_bucket', 1],
+            ['minecraft:cooked_salmon', 64],
+            ['minecraft:cooked_cod', 64],
+            ['minecraft:gold_ingot', 64],
+            ['minecraft:oak_planks', 64],
+            ['minecraft:iron_ingot', 64],
+            ['minecraft:milk_bucket', 1],
+            ['minecraft:milk_bucket', 1],
+        ];
 
         //     // Fill the chest with random cooking items
         //     for (let slot = 0; slot < cookingItems.length; slot++) { // Chest has 27 slots
@@ -214,12 +214,12 @@ export class CookingTaskInitiator {
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // Summon new animals
-        
+
         await this.summonAnimals(animals, 8);
         console.log("summoned animals!");
     }
 
-    async plantCrops (xStart, zStart, crop_and_age, till=true) {
+    async plantCrops(xStart, zStart, crop_and_age, till = true) {
         const position = getPosition(this.bot);
         for (let i = 0; i < 6; i++) {
             for (let j = 0; j < 6; j++) {
@@ -234,7 +234,7 @@ export class CookingTaskInitiator {
         await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    async plantSugarCane (patches) {
+    async plantSugarCane(patches) {
         const position = getPosition(this.bot);
         for (const patch of patches) {
             const xCenter = patch.xStart + 1;
@@ -260,7 +260,7 @@ export class CookingTaskInitiator {
         }
     }
 
-    async summonAnimals (animals, amount) {
+    async summonAnimals(animals, amount) {
         const position = getPosition(this.bot);
         for (const animal of animals) {
             for (let i = 0; i < amount; i++) {
@@ -277,7 +277,7 @@ export class CookingTaskInitiator {
         }
     }
 
-    async buildHouse (xStart, zStart) {
+    async buildHouse(xStart, zStart) {
         const position = getPosition(this.bot);
         const startX = xStart;
         const startY = position.y;
@@ -296,24 +296,24 @@ export class CookingTaskInitiator {
                         }
                         continue;
                     }
-                    
+
                     if (x === startX || x === startX + depth ||
                         z === startZ || z === startZ + width ||
                         y === startY + height) {
-                        
+
                         const isWindow = (
-                            (x === startX || x === startX + depth) && 
+                            (x === startX || x === startX + depth) &&
                             (z === startZ + 3 || z === startZ + width - 3) &&
                             (y === startY + 2 || y === startY + 3)
                         ) || (
-                            (z === startZ || z === startZ + width) && 
-                            (x === startX + 3 || x === startX + depth - 3) &&
-                            (y === startY + 2 || y === startY + 3)
-                        );
-                        
-                        const isDoor = x === startX + depth && 
-                                        z === startZ + Math.floor(width / 2) &&
-                                        (y === startY + 1 || y === startY + 2);
+                                (z === startZ || z === startZ + width) &&
+                                (x === startX + 3 || x === startX + depth - 3) &&
+                                (y === startY + 2 || y === startY + 3)
+                            );
+
+                        const isDoor = x === startX + depth &&
+                            z === startZ + Math.floor(width / 2) &&
+                            (y === startY + 1 || y === startY + 2);
 
                         if (!isWindow && !isDoor) {
                             await this.bot.chat(`/setblock ${x} ${y} ${z} stone_bricks`);

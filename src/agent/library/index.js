@@ -1,5 +1,5 @@
 import * as skills from './skills.js';
-import * as world from './world.js';
+import * as world from '../../skills/library/world.js';
 
 
 export function docHelper(functions, module_name) {

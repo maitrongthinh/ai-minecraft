@@ -1,7 +1,4 @@
 import { MemorySystem } from './memory/MemorySystem.js';
-import { SocialEngine } from './interaction/SocialEngine.js';
-import { CodeEngine } from './intelligence/CodeEngine.js';
-import { ScenarioManager } from './tasks/ScenarioManager.js';
 import { TaskScheduler, PRIORITY } from './core/TaskScheduler.js';
 import { StateStack, STATE_PRIORITY } from './StateStack.js';
 import { globalBus, SIGNAL } from './core/SignalBus.js';
@@ -18,7 +15,7 @@ import { Watchdog } from './reflexes/Watchdog.js';
 import { MinecraftWiki } from '../tools/MinecraftWiki.js';
 import { ActionLogger } from '../utils/ActionLogger.js';
 import { randomUUID } from 'crypto';
-import settings from '../../../settings.js';
+import settings from '../../settings.js';
 import { HealthMonitor } from '../process/HealthMonitor.js';
 import { MentalSnapshot } from '../utils/MentalSnapshot.js';
 import { ToolRegistry } from './core/ToolRegistry.js';
@@ -26,6 +23,7 @@ import { System2Loop } from './orchestration/System2Loop.js';
 import EvolutionEngine from './core/EvolutionEngine.js';
 import { CoreSystem } from './core/CoreSystem.js';
 import { CombatReflex } from './reflexes/CombatReflex.js';
+import { SelfPreservationReflex } from './reflexes/SelfPreservationReflex.js';
 import { RetryHelper } from '../utils/RetryHelper.js';
 import { AsyncMutex } from '../utils/AsyncLock.js';
 import { BOT_STATE } from './core/BotState.js';
@@ -36,7 +34,6 @@ import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { CogneeMemoryBridge } from '../memory/CogneeMemoryBridge.js';
 import { Arbiter } from './Arbiter.js';
 import { initBot } from '../utils/mcdata.js';
-import { initModes } from './modes.js';
 import { StandardProfileSchema } from '../utils/StandardProfileSchema.js';
 import { Prompter } from '../models/prompter.js';
 
@@ -76,9 +73,9 @@ export class Agent {
 
         // Consolidate Unified Modules (Phase 2 Refactor)
         this.memory = this.core.memory; // Bridged from Kernel
-        this.social = new SocialEngine(this);
-        this.intelligence = new CodeEngine(this);
-        this.scenarios = new ScenarioManager(null, this);
+        this.social = this.core.social;
+        this.intelligence = this.core.intelligence;
+        this.scenarios = this.core.scenarios;
         // Core Bridges
         this.scheduler = this.core.scheduler;
         this.bus = globalBus;
@@ -104,6 +101,7 @@ export class Agent {
 
         // Reflexes & Optimization
         this.combatReflex = new CombatReflex(this);
+        this.selfPreservation = new SelfPreservationReflex(this);
         this.toolRegistry = new ToolRegistry(this);
         this.system2 = new System2Loop(this);
         this.evolution = new EvolutionEngine(this);
@@ -244,7 +242,6 @@ export class Agent {
             }
         });
 
-        initModes(this);
 
         this.bot.on('login', () => {
             console.log(this.name, 'logged in!');
@@ -259,6 +256,12 @@ export class Agent {
             try {
                 if (!this.running) return;
                 console.log(`[INIT] ${this.name} spawned.Stabilizing...`);
+
+                // Phase 5: Safe Initialization
+
+                // Phase 5: Safe Initialization
+                this.core.connectBot(this.bot);
+
                 await new Promise((resolve) => setTimeout(resolve, 2000));
 
                 this.clearBotLogs();
@@ -426,8 +429,8 @@ export class Agent {
             if (settings.only_chat_with.length > 0 && !settings.only_chat_with.includes(username)) return;
 
             try {
-                // Priority: Individual Profile -> Global Settings
-                const ignoreMsgs = this.prompter.profile.ignore_messages || settings.ignore_messages || [];
+                // Priority: Profile Only (Settings deprecated)
+                const ignoreMsgs = this.prompter.profile.ignore_messages || [];
                 if (ignoreMsgs.some((m) => message.startsWith(m))) return;
 
                 this.shut_up = false;
@@ -466,8 +469,8 @@ export class Agent {
         // Set up auto-eat (Prefer profile settings)
         this.bot.autoEat.options = {
             priority: 'foodPoints',
-            startAt: this.prompter.profile.auto_eat_start || settings.auto_eat_start || 14,
-            bannedFood: this.prompter.profile.banned_food || settings.banned_food || []
+            startAt: this.config.profile?.behavior?.auto_eat_start || 14,
+            bannedFood: this.config.profile?.behavior?.banned_food || []
         };
 
         try {
@@ -636,12 +639,12 @@ export class Agent {
                         try {
                             // Execute via CodeEngine (which now has Sanitizer!)
                             console.log('[Agent] Executing Code Task...');
-                            const result = await this.intelligence.execute(planObj.task.content);
+                            const execResult = await this.intelligence.execute(planObj.task.content);
 
-                            if (result.success) {
-                                this.history.add('system', `Code Execution Success: ${result.result}`);
+                            if (execResult.success) {
+                                this.history.add('system', `Code Execution Success: ${execResult.result}`);
                             } else {
-                                this.history.add('system', `Code Execution Failed: ${result.error}`);
+                                this.history.add('system', `Code Execution Failed: ${execResult.error}`);
                             }
                         } catch (err) {
                             console.error('[Agent] Task Execution Error:', err);
@@ -838,19 +841,27 @@ export class Agent {
             if (!this.running) return;
 
             try {
-                // 1. Brain Update (State Stack)
-                if (this.brain && this.brain.update) {
-                    await this.brain.update(now - lastTick);
+                // Phase 3: Reflex Update (High Frequency - 50ms)
+                if (this.combatReflex) this.combatReflex.tick();
+                if (this.selfPreservation) await this.selfPreservation.tick();
+
+                // Throttle Brain Update (1-2s)
+                if (now - (this.lastBrainUpdate || 0) > 2000) {
+                    this.lastBrainUpdate = now;
+
+                    // 1. Brain Update (State Stack)
+                    if (this.brain && this.brain.update) {
+                        try {
+                            await this.brain.update(now - lastTick);
+                        } catch (e) {
+                            console.error('[Agent] Brain update failed:', e);
+                        }
+                    }
+
+                    if (this.social) {
+                        this._territorialUpdate();
+                    }
                 }
-
-                // 2. Legacy Mode Update
-                await this._processLegacyModes();
-
-                // 3. Social Territorial Check
-                if (this.social) {
-                    this._territorialUpdate();
-                }
-
             } catch (err) {
                 console.error('[Agent] Heartbeat error:', err);
                 this.errorCount++;
@@ -884,7 +895,8 @@ export class Agent {
     async _territorialUpdate() {
         if (!this.social) return;
         try {
-            const radius = settings.tactical?.territorial_radius || 15;
+            // Refactor: Use Profile Configuration
+            const radius = this.config.profile?.security?.territorial_radius || 15;
             const nearby = Object.values(this.bot.entities).filter(e =>
                 e.type === 'player' &&
                 e.username !== this.bot.username &&
@@ -899,7 +911,7 @@ export class Agent {
 
                 // Debounce warning
                 const now = Date.now();
-                const cooldown = settings.tactical?.alert_cooldown || 10000;
+                const cooldown = this.config.profile?.behavior?.alert_cooldown || 10000;
                 if (now - (this._lastTerritorialWarn || 0) > cooldown) {
                     console.log(`[SocialReflex] Detected intruder: ${target.username}`);
                     this.bot.lookAt(target.position.offset(0, 1.6, 0));
@@ -971,65 +983,8 @@ export class Agent {
         await this.clean();
     }
 
-    // Backwards compatibility wrapper
-    async cleanKill(msg = 'Killing agent process...', code = 1) {
-        console.warn('Deprecated cleanKill called. Using shutdown() instead.');
-        await this.shutdown(msg);
-    }
+    // Duplicated legacy methods removed
 
-    async handleMessage(source, message) {
-        if (!message) return;
-
-        // Phase 6: Unified Brain Routing
-        const conversation_id = source;
-
-        // Add to history (Unified Memory)
-        await this.history.add(source, message);
-
-        // Process via Unified Brain
-        if (this.brain) {
-            // CRITICAL: Concurrency Hardening
-            // We acquire locks BEFORE thinking to prevent Reflexes (like Combat)
-            // from jumping in mid-thought and creating state inconsistency.
-            // We use a generous timeout (30s) for the Brain to "think".
-            const lockTimeout = 30000;
-            const lookLock = await this.locks.look.acquire('brain_thinking', lockTimeout);
-            const moveLock = await this.locks.move.acquire('brain_thinking', lockTimeout);
-
-            try {
-                // Predictive Safety Check: Prevent non-critical commands during combat
-                const isCombat = this.combatReflex && this.combatReflex.inCombat;
-                const isRiskyCommand = message.toLowerCase().includes('toss') ||
-                    message.toLowerCase().includes('drop') ||
-                    message.toLowerCase().includes('give');
-
-                if (isCombat && isRiskyCommand) {
-                    console.warn(`[Agent] 🛡️ Blocked risky command during combat: "${message}"`);
-                    await this.history.add(this.name, "I'm busy fighting! I can't do that right now or I might lose my equipment.");
-                    return;
-                }
-
-                const response = await this.brain.process({
-                    source,
-                    message,
-                    conversation_id
-                });
-
-                if (response && response.response) {
-                    await this.history.add(this.name, response.response);
-                }
-            } catch (err) {
-                console.error('[Agent] Brain process error:', err);
-                await this.history.add('system', `Brain Error: ${err.message}`);
-            } finally {
-                // Always release locks, even if brain fails
-                if (lookLock) this.locks.look.release('brain_thinking');
-                if (moveLock) this.locks.move.release('brain_thinking');
-            }
-        } else {
-            console.error('[Agent] No Brain attached!');
-        }
-    }
 
     async checkTaskDone() {
         if (this.task && this.task.data) {

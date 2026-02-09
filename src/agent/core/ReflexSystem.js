@@ -14,29 +14,35 @@ export class ReflexSystem {
         this.cooldowns = new Map();
     }
 
-    init() {
-        console.log('[ReflexSystem] Initializing autonomic functions...');
-        this._setupMonitors();
-    }
-
-    _setupMonitors() {
-        if (!this.agent.bot) {
-            console.warn('[ReflexSystem] Bot not ready, skipping monitors');
+    /**
+     * Phase 5: Safe Initialization
+     * Only attach listeners when bot is actually ready
+     */
+    connect(bot) {
+        if (!bot) {
+            console.warn('[ReflexSystem] Cannot connect to null bot');
             return;
         }
+        // Fix for [CRITICAL] leak: Ensure old listeners are removed first
+        this.cleanup();
 
+        console.log('[ReflexSystem] 🔗 Attaching autonomic monitors to bot...');
+        this._setupMonitors(bot);
+    }
+
+    _setupMonitors(bot) {
         // Store listeners for removal (Fix for [CRITICAL] leak)
         this._healthListener = () => {
             // 1. Health Monitoring
-            if (this.agent.bot.health < 10) {
-                globalBus.emitSignal(SIGNAL.HEALTH_CRITICAL, { health: this.agent.bot.health });
-            } else if (this.agent.bot.health < 18) {
-                globalBus.emitSignal(SIGNAL.HEALTH_LOW, { health: this.agent.bot.health });
+            if (bot.health < 10) {
+                globalBus.emitSignal(SIGNAL.HEALTH_CRITICAL, { health: bot.health });
+            } else if (bot.health < 18) {
+                globalBus.emitSignal(SIGNAL.HEALTH_LOW, { health: bot.health });
             }
 
             // 2. Hunger Monitoring (Smart Eating)
-            const inCombat = this.agent.bot.pvp && this.agent.bot.pvp.target;
-            const food = this.agent.bot.food;
+            const inCombat = bot.pvp && bot.pvp.target;
+            const food = bot.food;
 
             if (inCombat) {
                 if (food < 10) {
@@ -49,22 +55,22 @@ export class ReflexSystem {
             }
 
             // 3. Damage Tracking
-            if (this.agent.bot.health < this.lastHealth) {
-                this.agent.bot.lastDamageTime = Date.now();
-                this.agent.bot.lastDamageTaken = this.lastHealth - this.agent.bot.health;
+            if (bot.health < this.lastHealth) {
+                bot.lastDamageTime = Date.now();
+                bot.lastDamageTaken = this.lastHealth - bot.health;
 
-                if (this.agent.bot.lastDamageTaken > 2) {
+                if (bot.lastDamageTaken > 2) {
                     globalBus.emitSignal(SIGNAL.THREAT_DETECTED, {
                         source: 'unknown_damage',
-                        damage: this.agent.bot.lastDamageTaken
+                        damage: bot.lastDamageTaken
                     });
                 }
             }
-            this.lastHealth = this.agent.bot.health;
+            this.lastHealth = bot.health;
         };
 
         this._hurtListener = (entity) => {
-            if (entity === this.agent.bot.entity) {
+            if (entity === bot.entity) {
                 console.log('[ReflexSystem] ⚡ OUCH! Bot took damage.');
                 globalBus.emitSignal(SIGNAL.THREAT_DETECTED, { type: 'damage_taken', timestamp: Date.now() });
             }
@@ -75,9 +81,9 @@ export class ReflexSystem {
         };
 
         // Health, Hunger, and Damage Monitor
-        this.agent.bot.on('health', this._healthListener);
-        this.agent.bot.on('entityHurt', this._hurtListener);
-        this.agent.bot.on('death', this._deathListener);
+        bot.on('health', this._healthListener);
+        bot.on('entityHurt', this._hurtListener);
+        bot.on('death', this._deathListener);
     }
 
     cleanup() {

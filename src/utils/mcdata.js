@@ -1,5 +1,5 @@
 import minecraftData from 'minecraft-data';
-import settings from '../agent/settings.js';
+import settings from '../../settings.js';
 import { createBot } from 'mineflayer';
 import prismarine_items from 'prismarine-item';
 import { pathfinder } from 'mineflayer-pathfinder';
@@ -536,6 +536,17 @@ export function checkInventorySpace(bot, minSlots = 1) {
     return true;
 }
 
+export function sanitizeCode(code) {
+    // Basic sanitization: remove potential infinite loops or malicious patterns if possible
+    // For now, it just trims the code
+    if (!code) return '';
+    return code.trim();
+}
+
+export function getBotOutputSummary(bot) {
+    return `Health: ${bot.health}/20, Hunger: ${bot.food}/20`;
+}
+
 export default {
     initBot,
     isHuntable,
@@ -564,6 +575,8 @@ export default {
     calculateLimitingResource,
     getDetailedCraftingPlan,
     checkInventorySpace,
+    getBotOutputSummary,
+    sanitizeCode,
     WOOD_TYPES,
     MATCHING_WOOD_BLOCKS,
     WOOL_COLORS

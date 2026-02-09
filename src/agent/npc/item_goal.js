@@ -1,5 +1,5 @@
 import * as skills from '../library/skills.js';
-import * as world from '../library/world.js';
+import * as world from '../../skills/library/world.js';
 import * as mc from '../../utils/mcdata.js';
 import { itemSatisfied } from './utils.js';
 
@@ -39,7 +39,7 @@ class ItemNode {
         for (let [key, value] of Object.entries(recipe)) {
             if (this.manager.nodes[key] === undefined)
                 this.manager.nodes[key] = new ItemWrapper(this.manager, this.wrapper, key);
-            this.recipe.push({node: this.manager.nodes[key], quantity: value});
+            this.recipe.push({ node: this.manager.nodes[key], quantity: value });
             size += value;
         }
         if (size > 4) {
@@ -50,7 +50,7 @@ class ItemNode {
         return this;
     }
 
-    setCollectable(source=null, tool=null) {
+    setCollectable(source = null, tool = null) {
         this.type = 'block';
         if (source)
             this.source = source;
@@ -75,8 +75,8 @@ class ItemNode {
         if (this.manager.nodes['coal'] === undefined)
             this.manager.nodes['coal'] = new ItemWrapper(this.manager, this.wrapper, 'coal');
         this.recipe = [
-            {node: this.manager.nodes[source_item], quantity: 1},
-            {node: this.manager.nodes['coal'], quantity: 1}
+            { node: this.manager.nodes[source_item], quantity: 1 },
+            { node: this.manager.nodes['coal'], quantity: 1 }
         ];
         return this;
     }
@@ -90,7 +90,7 @@ class ItemNode {
     getChildren() {
         let children = [...this.recipe];
         if (this.prereq) {
-            children.push({node: this.prereq, quantity: 1});
+            children.push({ node: this.prereq, quantity: 1 });
         }
         return children;
     }
@@ -104,13 +104,13 @@ class ItemNode {
         return true;
     }
 
-    isDone(quantity=1) {
+    isDone(quantity = 1) {
         if (this.manager.goal.name === this.name)
             return false;
         return itemSatisfied(this.manager.agent.bot, this.name, quantity);
     }
 
-    getDepth(q=1) {
+    getDepth(q = 1) {
         if (this.isDone(q)) {
             return 0;
         }
@@ -121,7 +121,7 @@ class ItemNode {
         return depth + 1;
     }
 
-    getFails(q=1) {
+    getFails(q = 1) {
         if (this.isDone(q)) {
             return 0;
         }
@@ -132,11 +132,11 @@ class ItemNode {
         return fails + this.fails;
     }
 
-    getNext(q=1) {
+    getNext(q = 1) {
         if (this.isDone(q))
             return null;
         if (this.isReady())
-            return {node: this, quantity: q};
+            return { node: this, quantity: q };
         for (let child of this.getChildren()) {
             let res = child.node.getNext(child.quantity);
             if (res)
@@ -145,7 +145,7 @@ class ItemNode {
         return null;
     }
 
-    async execute(quantity=1) {
+    async execute(quantity = 1) {
         if (!this.isReady()) {
             this.fails += 1;
             return;
@@ -159,7 +159,7 @@ class ItemNode {
             let to_smelt_quantity = Math.min(quantity, inventory[to_smelt_name] || 1);
             await skills.smeltItem(this.manager.agent.bot, to_smelt_name, to_smelt_quantity);
         } else if (this.type === 'hunt') {
-            for (let i=0; i<quantity; i++) {
+            for (let i = 0; i < quantity; i++) {
                 res = await skills.attackNearest(this.manager.agent.bot, this.source);
                 if (!res || this.manager.agent.bot.interrupt_code)
                     break;
@@ -253,7 +253,7 @@ class ItemWrapper {
         return false;
     }
 
-    getBestMethod(q=1) {
+    getBestMethod(q = 1) {
         let best_cost = -1;
         let best_method = null;
         for (let method of this.methods) {
@@ -266,25 +266,25 @@ class ItemWrapper {
         return best_method
     }
 
-    isDone(q=1) {
+    isDone(q = 1) {
         if (this.methods.length === 0)
             return false;
         return this.getBestMethod(q).isDone(q);
     }
 
-    getDepth(q=1) {
+    getDepth(q = 1) {
         if (this.methods.length === 0)
             return 0;
         return this.getBestMethod(q).getDepth(q);
     }
 
-    getFails(q=1) {
+    getFails(q = 1) {
         if (this.methods.length === 0)
             return 0;
         return this.getBestMethod(q).getFails(q);
     }
 
-    getNext(q=1) {
+    getNext(q = 1) {
         if (this.methods.length === 0)
             return null;
         return this.getBestMethod(q).getNext(q);
@@ -300,7 +300,7 @@ export class ItemGoal {
         this.failed = [];
     }
 
-    async executeNext(item_name, item_quantity=1) {
+    async executeNext(item_name, item_quantity = 1) {
         if (this.nodes[item_name] === undefined)
             this.nodes[item_name] = new ItemWrapper(this, null, item_name);
         this.goal = this.nodes[item_name];
@@ -316,7 +316,7 @@ export class ItemGoal {
 
         // Prevent unnecessary attempts to obtain blocks that are not nearby
         if (next.type === 'block' && !world.getNearbyBlockTypes(this.agent.bot).includes(next.source) ||
-                next.type === 'hunt' && !world.getNearbyEntityTypes(this.agent.bot).includes(next.source)) {
+            next.type === 'hunt' && !world.getNearbyEntityTypes(this.agent.bot).includes(next.source)) {
             next.fails += 1;
 
             // If the bot has failed to obtain the block before, explore

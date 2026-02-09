@@ -59,32 +59,8 @@ const settings = {
 
     "log_all_prompts": false, // log ALL prompts to file
 
-    // Agent Instincts (Refactor)
-    "territorial_radius": 15, // Radius to warn intruders. Can be dynamic.
-    "auto_eat_start": 14, // Food level to start eating (14 = 7 shanks)
-    "banned_food": ["rotten_flesh", "spider_eye", "poisonous_potato", "pufferfish", "chicken"],
-    "ignore_messages": [
-        "Set own game mode to",
-        "Set the time to",
-        "Set the difficulty to",
-        "Teleported ",
-        "Set the weather to",
-        "Gamerule "
-    ],
+    "log_all_prompts": false, // log ALL prompts to file
 
-    // Tactical Intelligence Config (Utility AI & EQS)
-    "tactical": {
-        "territorial_radius": 15,
-        "alert_cooldown": 10000,
-        "max_retries": 3,
-        "recovery_interval": 5000,
-        "weights": {
-            "health": 5,
-            "hunger": 2,
-            "threat": 10,
-            "time": 1
-        }
-    },
 
     // Single Model Configuration (MiniMax-M2 via MegaLLM)
     "models": {
