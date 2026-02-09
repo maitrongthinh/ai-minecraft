@@ -41,7 +41,7 @@ export class MentalSnapshot {
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
             fs.writeFileSync(this.filepath, JSON.stringify(snapshot, null, 2));
-            console.log(`[MentalSnapshot] 🧠 Brain saved to ${this.filepath}`);
+            console.info(`[MentalSnapshot] 🧠 Brain saved to ${this.filepath}`);
         } catch (err) {
             console.error('[MentalSnapshot] Failed to save snapshot:', err.message);
         }
@@ -57,13 +57,13 @@ export class MentalSnapshot {
                 if (this.agent.stateStack && Array.isArray(snapshot.stateStack)) {
                     // Logic to restore state... 
                     // this.agent.stateStack.restore(snapshot.stateStack);
-                    console.log(`[MentalSnapshot] Restored ${snapshot.stateStack.length} states.`);
+                    console.info(`[MentalSnapshot] Restored ${snapshot.stateStack.length} states.`);
                 }
 
                 // Restore Spatial Memory
                 if (this.agent.spatial && Array.isArray(snapshot.spatial)) {
                     this.agent.spatial.memory = new Map(snapshot.spatial);
-                    console.log(`[MentalSnapshot] Restored ${snapshot.spatial.length} visual memories.`);
+                    console.info(`[MentalSnapshot] Restored ${snapshot.spatial.length} visual memories.`);
                 }
 
                 return true;

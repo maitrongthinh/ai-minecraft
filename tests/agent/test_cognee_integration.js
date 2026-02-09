@@ -5,7 +5,7 @@
  * - Task 6: CogneeMemoryBridge integrated into agent
  * - Task 7: DualBrain queries Cognee before planning
  * 
- * Run: node src/agent/test_cognee_integration.js
+ * Run: node tests/agent/test_cognee_integration.js
  */
 
 console.log('='.repeat(60));
@@ -15,7 +15,7 @@ console.log('='.repeat(60) + '\n');
 // Test 1: Check imports
 console.log('[1/5] Checking imports...');
 try {
-    const agentPath = './agent.js';
+    const agentPath = '../../src/agent/agent.js';
     const fs = await import('fs');
     const agentCode = fs.readFileSync('src/agent/agent.js', 'utf8');
 

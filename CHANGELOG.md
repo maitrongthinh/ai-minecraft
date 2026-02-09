@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.0] - 2026-02-09
+### Added
+- **ReflexSystem**: Replaced legacy modes with high-priority survival reflexes (System 1).
+- **SkillLibrary**: Modular skill system for complex actions (System 2).
+- **Unified Logic**: Centralized initialization in `CoreSystem.js`.
+
+### Changed
+- **Architecture**: Shifted from Hybrid to fully Unified (Dual-Loop + Event-Driven).
+- **Cleanup**: Removed `modes.js`, legacy fallbacks, and test files from `src/`.
+- **Logging**: Reduced console noise in production code.
+
+### Fixed
+- **Redundant Declarations**: Fixed duplicate `Agent` class and variable redeclarations.
+- **Import Errors**: Resolved missing exports in `mcdata.js` and `ScenarioManager.js`.
+
 ## [2.0.0] - 2026-02-05
 ### Added
 - **DualBrain Architecture**: Split AI into Strategy (Planning) and Reflex (Fast) layers.

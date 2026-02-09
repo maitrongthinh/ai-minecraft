@@ -53,7 +53,7 @@ export class MinecraftWiki {
     async fetchPage(term) {
         const cacheKey = term.toLowerCase();
         if (this.cache.has(cacheKey)) {
-            console.log(`[Wiki] Cache hit for: ${term}`);
+            console.debug(`[Wiki] Cache hit for: ${term}`);
             return this.cache.get(cacheKey).data;
         }
 
@@ -64,7 +64,7 @@ export class MinecraftWiki {
         }
         this.lastRequestTime = Date.now();
 
-        console.log(`[Wiki] Fetching: ${term}...`);
+        console.debug(`[Wiki] Fetching: ${term}...`);
         try {
             // Search redirect
             const searchUrl = `${this.baseUrl}/w/Special:Search?search=${encodeURIComponent(term)}`;

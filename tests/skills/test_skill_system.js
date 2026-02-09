@@ -1,10 +1,10 @@
 /**
  * Test: Task 9 & 10 - SkillLibrary & SkillOptimizer
  * 
- * Run: node src/skills/test_skill_system.js
+ * Run: node tests/skills/test_skill_system.js
  */
 
-import { SkillLibrary } from './SkillLibrary.js';
+import { SkillLibrary } from '../../src/skills/SkillLibrary.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -126,7 +126,7 @@ if (searchResult && searchResult.name === 'test_mining') {
 // Test 6: SkillOptimizer existence check
 console.log('[6/6] Checking SkillOptimizer...');
 try {
-    const { SkillOptimizer } = await import('./SkillOptimizer.js');
+    const { SkillOptimizer } = await import('../../src/skills/SkillOptimizer.js');
     console.log('  ✓ SkillOptimizer module exists');
     console.log('  ✓ Ready for optimization tasks\n');
 } catch (err) {

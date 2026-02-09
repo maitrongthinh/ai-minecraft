@@ -1,36 +1,44 @@
 {
     "meta": {
         "schema_version": "1.1.0",
-        "awf_version": "4.1.2",
-        "created_at": "2026-02-06T16:05:00Z"
+        "awf_version": "3.3.0"
     },
     "project": {
-        "name": "mindcraft-develop",
-        "type": "AI Agent / Minecraft Bot",
-        "status": "Active Development"
+        "name": "Mindcraft Autonomous Evolution Agent",
+        "type": "AI Agent",
+        "status": "V1.0 Stable (Unified Architecture)"
     },
     "tech_stack": {
-        "language": "JavaScript (Node.js)",
-        "core_libraries": [
-            "mineflayer",
-            "vec3",
-            "minecraft-protocol"
-        ],
-        "ai_engine": "LLM (OpenAI/Gemini/Anthropic)",
-        "architecture": "MindOS V1.0 (Dual-Loop Event-Driven)"
+        "frontend": {
+            "framework": "Dashboard EJS",
+            "lib": "Bootstrap/Tailwind"
+        },
+        "backend": {
+            "framework": "Node.js (ES Modules)",
+            "lib": "Mineflayer",
+            "ai_sdk": "OpenAI / Anthropic / Google / DeepSeek"
+        },
+        "database": {
+            "type": "Vector Store (ChromaDB/Local) + JSON"
+        }
     },
-    "architecture_summary": "Bio-inspired 4-layer architecture: 1. Input (Sensors), 2. Kernel (SignalBus, Memory), 3. Intelligence (System 1/2), 4. Action. Features self-evolution via Code Generation.",
     "features": [
-        "Dual-Loop Brain (Fast Reflexes vs Slow Planning)",
-        "Event-Driven SignalBus",
-        "Unified Memory (RAM + Vector + Graph)",
-        "Self-Evolution (Runtime Code Generation)",
-        "Visual Status (Head Nodding/Shaking)"
+        "Dual-Loop Architecture (Reflexes + Planner)",
+        "Event-Driven Core (SignalBus)",
+        "Evolutionary Coding (SmartCoder)",
+        "Unified Memory (Short/Long term + Spatial)",
+        "Modular Skill Library"
     ],
-    "documentation_map": {
-        "readme": "README.md",
-        "architecture": "docs/architecture/SYSTEM_ARCHITECTURE.md",
-        "guide": "docs/guides/DEVELOPER_GUIDE.md",
-        "concepts": "docs/concepts/SELF_EVOLUTION.md"
+    "knowledge_items": {
+        "patterns": [
+            "SignalBus Pattern for decouling",
+            "Reflex Priority (System 1 overrides System 2)",
+            "Sandbox Execution for AI Code"
+        ],
+        "gotchas": [
+            "Always use globalBus for cross-module talk",
+            "Avoid direct console.log in production loop",
+            "Test files belong in tests/"
+        ]
     }
 }

@@ -17,19 +17,17 @@
 ## 2. TRẠNG THÁI HIỆN TẠI (Current Status - Feb 2026)
 
 ### ✅ Đã Hoàn Thành (Completed)
-*   **Core Kernel:** `SignalBus` (Hệ thần kinh) hoạt động ổn định 100%.
-*   **Memory System:** `UnifiedMemory` (Vector + RAM) đã tích hợp.
-*   **Evolution Engine:** `SmartCoder` có khả năng generate skill mới.
-*   **Infrastructure:** Chuyển đổi toàn bộ sang `.env`, loại bỏ `keys.json` hardcoded.
-*   **Documentation:** Overhaul toàn bộ tài liệu (README, Arch, Dev Guide).
+*   **Unified Architecture:** Chuyển đổi từ Hybrid sang Unified (Dual-Loop + Event-Driven).
+*   **Core Logic:** `CoreSystem` chịu trách nhiệm khởi tạo tập trung. `ReflexSystem` thay thế `Modes`.
+*   **Skills:** Hệ thống Skill Module hóa (`src/skills/library`) thay thế hardcoded behavior.
+*   **Configuration:** Chuẩn hóa Profile (`StandardProfileSchema`) và Environment (`.env`).
+*   **Infrastructure:** SignalBus, UnifiedMemory, SmartCoder hoạt động ổn định.
+*   **Security:** Fix các lỗi bảo mật (dependency imports, settings mutation).
 
 ### 🚧 Đang Phát Triển (In Progress)
-*   **Validation:** Chạy thử nghiệm thực tế nhiều giờ (Long-run tests).
-*   **Multi-Agent:** Thử nghiệm phối hợp nhiều bot.
+*   **Advanced Social:** Phối hợp nhóm (Swarm Intelligence).
+*   **Expansion:** Mở rộng Skill Library (Farming, Building complex structures).
 
-### 🐛 Vấn Đề Đã Biết (Known Issues)
-*   `ECONNREFUSED` nếu không bật LAN server.
-*   Xung đột cổng (Port Conflicts) nếu chạy nhiều instance (đã có hướng dẫn fix trong FAQ).
 
 ---
 
@@ -65,6 +63,8 @@ graph TD
 1.  **Signal First:** Mọi giao tiếp giữa các module PHẢI qua `globalBus`. Không gọi hàm trực tiếp (Direct Call) giữa các hệ thống ngang hàng.
 2.  **Sandbox Always:** Code do AI sinh ra PHẢI chạy trong môi trường Sandbox/VM.
 3.  **Fail Gracefully:** Nếu một Task thất bại, Bot không được crash. Nó phải log lỗi và chuyển sang trạng thái `Idle`.
+4.  **Reflex Priority:** Reflex (System 1) luôn có quyền override Plan (System 2) trong tình huống nguy hiểm (Low HP, Combat).
+5.  **Skill Modularity:** Mọi hành động phức tạp (Complex Action) phải được viết thành Skill trong `src/skills/library/`.
 
 ---
 
