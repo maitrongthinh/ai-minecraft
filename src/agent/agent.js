@@ -5,7 +5,7 @@ import { globalBus, SIGNAL } from './core/SignalBus.js';
 import convoManager from './conversation.js';
 import { handleTranslation } from '../utils/translator.js';
 import { addBrowserViewer } from './vision/browser_viewer.js';
-import { sendThoughtToServer, sendOutputToServer } from './mindserver_proxy.js';
+import { serverProxy, sendThoughtToServer, sendOutputToServer } from './mindserver_proxy.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { UnifiedBrain } from '../brain/UnifiedBrain.js';
@@ -28,6 +28,7 @@ import { RetryHelper } from '../utils/RetryHelper.js';
 import { AsyncMutex } from '../utils/AsyncLock.js';
 import { BOT_STATE } from './core/BotState.js';
 import { ActionManager } from './action_manager.js';
+import { ActionAPI } from './core/ActionAPI.js';
 import { SkillLibrary } from '../skills/SkillLibrary.js';
 import { SkillOptimizer } from '../skills/SkillOptimizer.js';
 import { VisionInterpreter } from './vision/vision_interpreter.js';
@@ -36,8 +37,25 @@ import { Arbiter } from './Arbiter.js';
 import { initBot } from '../utils/mcdata.js';
 import { StandardProfileSchema } from '../utils/StandardProfileSchema.js';
 import { Prompter } from '../models/prompter.js';
+import { UtilityEngine } from './intelligence/UtilityEngine.js';
+import { SelfPrompter } from './self_prompter.js';
+import { Task } from './tasks/ScenarioManager.js';
 
 export class Agent {
+    constructor() {
+        this.name = 'Agent';
+        this.running = false;
+        this.state = BOT_STATE.BOOTING;
+        this.actions = new ActionManager(this); // Instantiate early
+        this.actionAPI = new ActionAPI(this);
+        this.history = { getHistory: () => [], add: () => { }, save: () => { } };
+        this.prompter = null;
+        this.core = null;
+        this.bot = null;
+        this.self_prompter = new SelfPrompter(this);
+        this.isReady = false; // Readiness flag
+    }
+
     async start(load_mem = false, init_message = null, count_id = 0) {
         this.last_sender = null;
         this.count_id = count_id;
@@ -54,10 +72,37 @@ export class Agent {
             const profilePath = settings.profiles.find(p => p.includes(settings.base_profile)) || settings.profiles[0];
             if (profilePath) {
                 console.log(`[MindOS] Loading profile: ${profilePath}`);
-                profileData = await import('../../' + profilePath.replace('./', '')).then(m => m.default || m);
+                // Fix: JSON Import Attribute Requirement -> Use fs.readFileSync
+                // profileData = await import('../../' + profilePath.replace('./', '')).then(m => m.default || m);
+                const fs = await import('fs');
+                const path = await import('path');
+                const p = path.resolve(process.cwd(), profilePath);
+                profileData = JSON.parse(fs.readFileSync(p, 'utf8'));
             }
         } catch (err) {
             console.error(`[MindOS] ⚠️ Failed to load profile. Falling back to Standard Schema. Error: ${err.message}`);
+        }
+
+        // Resolving model aliases from settings (high_iq and fast)
+        for (const alias of ['high_iq', 'fast']) {
+            if (profileData && profileData.model === alias && settings.models?.[alias]) {
+                console.log(`[MindOS] Resolving model alias '${alias}' -> '${settings.models[alias].model}'`);
+                const modelConfig = { ...settings.models[alias] };
+
+                // Dynamic API Key Resolution (User Request: choose enum env key name)
+                if (modelConfig.apiKeyEnv) {
+                    const envKey = modelConfig.apiKeyEnv;
+                    const resolvedKey = process.env[envKey];
+                    if (resolvedKey) {
+                        modelConfig.params = { ...modelConfig.params, apiKey: resolvedKey };
+                        console.log(`[MindOS] ✓ API Key resolved from env: ${envKey}`);
+                    } else {
+                        console.warn(`[MindOS] ⚠️ API Key Environment Variable '${envKey}' not found.`);
+                    }
+                }
+
+                Object.assign(profileData, modelConfig);
+            }
         }
 
         // Merge with Profile (Priority: Profile > Settings > Schema)
@@ -73,9 +118,11 @@ export class Agent {
 
         // Consolidate Unified Modules (Phase 2 Refactor)
         this.memory = this.core.memory; // Bridged from Kernel
+        this.unifiedMemory = this.memory; // Phase 3: Unified Memory interface
         this.social = this.core.social;
         this.intelligence = this.core.intelligence;
         this.scenarios = this.core.scenarios;
+        this.contextManager = this.core.contextManager;
         // Core Bridges
         this.scheduler = this.core.scheduler;
         this.bus = globalBus;
@@ -83,16 +130,15 @@ export class Agent {
         // Nervous System
         this.brain = new UnifiedBrain(this, this.prompter);
 
-        this.name = (this.prompter.getName() || '').trim();
-        console.log(`[MindOS] Agent ${this.name} waking up...`);
-
-        if (!validateNameFormat(this.name).success) {
-            this.shutdown('Invalid name format');
-            return;
-        }
-
         // Feature Modules
         this.history = this.memory; // Legacy compatibility (Unified Phase 4)
+
+        // Finalize Name and Memory Path
+        this.name = (this.prompter.getName() || '').trim();
+        this.memory.updateName(this.name);
+
+        console.log(`[MindOS] Agent ${this.name} waking up...`);
+
         this.arbiter = new Arbiter(this);
         this.planner = new PlannerAgent(this);
         this.wiki = new MinecraftWiki(this);
@@ -130,12 +176,15 @@ export class Agent {
         // Post-Init
         this.intelligence.initialPrompt = settings.initial_prompt;
         convoManager.initAgent(this);
+        this.convoManager = convoManager;
+        this.task = settings.task ? new Task(this, settings.task) : null;
 
         await this.prompter.initExamples();
         this.mentalSnapshot.load();
 
         let save_data = load_mem ? this.history.load() : null;
-        this._connectToMinecraft(save_data, init_message);
+        this.isReady = true; // Mark as ready before connecting
+        void this._connectToMinecraft(save_data, init_message);
     }
 
     async update(delta) {
@@ -143,7 +192,7 @@ export class Agent {
 
         // Phase 2: State Guard
         // Do not run main brain loop if not READY
-        if (this.state !== BOT_STATE.READY) return;
+        if (!this.isReady || this.state !== BOT_STATE.READY) return;
 
         try {
             // High Frequency Reflex Update (50ms)
@@ -190,32 +239,6 @@ export class Agent {
         }
     }
 
-    _territorialUpdate() {
-        const bot = this.bot;
-        if (!bot || !bot.entities) return;
-
-        const intruders = Object.values(bot.entities).filter(e => {
-            if (e.type !== 'player' || e.username === bot.username) return false;
-
-            // Phase 6 fix: Use profile-driven whitelist
-            const whitelist = this.config.profile?.security?.whitelist || [];
-            if (whitelist.length > 0 && !whitelist.includes(e.username)) return false;
-
-            // Dynamic Territory Check
-            const radius = this.config.profile?.security?.territorial_radius || 15;
-
-            return bot.entity.position.distanceTo(e.position) < radius;
-        });
-
-        const dangerousIntruders = this.social.checkIntruders(intruders);
-        if (dangerousIntruders.length > 0) {
-            const target = dangerousIntruders[0];
-            if (!this._lastAlertTime || Date.now() - this._lastAlertTime > 10000) {
-                this.speak(`Stop right there, ${target.username} !This is my territory.`);
-                this._lastAlertTime = Date.now();
-            }
-        }
-    }
 
     /**
      * Internal helper to manage Minecraft connection and auto-reconnect
@@ -235,6 +258,10 @@ export class Agent {
 
         this.bot.once('kicked', (reason) => this.handleSafeDisconnect('Kicked', reason, save_data, init_message, attempt));
         this.bot.once('end', (reason) => this.handleSafeDisconnect('Disconnected', reason, save_data, init_message, attempt));
+
+        // Fix: Bind Arbiter now that bot exists
+        if (this.arbiter) this.arbiter.bindBot(this.bot);
+
         this.bot.on('error', (err) => {
             log(this.name, `[LoginGuard] Connection Error: ${String(err)} `);
             if (String(err).includes('Duplicate') || String(err).includes('ECONNREFUSED')) {
@@ -258,8 +285,6 @@ export class Agent {
                 console.log(`[INIT] ${this.name} spawned.Stabilizing...`);
 
                 // Phase 5: Safe Initialization
-
-                // Phase 5: Safe Initialization
                 this.core.connectBot(this.bot);
 
                 await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -275,17 +300,10 @@ export class Agent {
                     world_id: this.world_id
                 });
 
-                await this._setupEventHandlers(save_data, init_message);
-                // this.startEvents(); // REPLACED BY STATE MACHINE
-
-                // Transition to LOADING state
-                this.state = BOT_STATE.LOADING;
-
                 // CRITICAL: We await heavy subsystems BEFORE starting event listeners
                 // to prevent race conditions (e.g. death event before DeathRecovery is ready)
                 await this._initHeavySubsystems(this.count_id, !!save_data);
 
-                await this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
 
                 console.log('[INIT] Agent is online and listening. State: READY');
@@ -385,13 +403,13 @@ export class Agent {
 
         // Task initialization
         if (!load_mem) {
-            if (settings.task) {
-                this.task.initBotTask();
-                this.task.setAgentGoal();
+            if (this.task) {
+                void this.task.initBotTask();
+                void this.task.setAgentGoal();
             }
         } else {
-            if (settings.task) {
-                this.task.setAgentGoal();
+            if (this.task) {
+                void this.task.setAgentGoal();
             }
         }
 
@@ -536,7 +554,6 @@ export class Agent {
         }
         convoManager.endAllConversations();
     }
-
     // MAIN REFACTOR: Correct Message Logic & DUAL BRAIN Integration
     async handleMessage(source, message, max_responses = null) {
         if (!this.running) return false;
@@ -570,34 +587,33 @@ export class Agent {
         const history = this.history.getHistory();
         const processResult = await this.brain.process(message, history, {
             is_chat: !self_prompt, // If self-prompt, it's NOT simple chat, it's planning
-            self_prompt: self_prompt
+            self_prompt: self_prompt,
+            source: source
         });
+
+        // 2. UPDATE HISTORY (Move before early returns)
+        if (processResult.input && processResult.input !== message) {
+            console.log('Processed message from', source, ':', processResult.input);
+        }
+        await this.history.add(source, processResult.input);
+        this.history.save();
 
         if (processResult.type === 'command') {
             return true;
         }
 
-        // 2. UPDATE HISTORY
-        // Add the processed (translated) input
-        if (processResult.input && processResult.input !== message) {
-            console.log('Processed message from', source, ':', processResult.input);
-        }
-        // Only add if not self-prompt (Agent adds its own output later, and system prompts loop differently?)
-        // Actually, original code added 'processedMessage' from 'source'.
-        // If self_prompt is true, source is 'system' or 'BotName'.
-        // If source is 'BotName', it's a thought loop.
-        // We should add it.
-        await this.history.add(source, processResult.input);
-        this.history.save();
-
         // 3. HANDLE RESPONSE
-        const response = processResult.result;
-        if (!response) return false;
+        const response = typeof processResult.result === 'string' ? processResult.result : '';
+        if (!response && processResult.type !== 'plan') return false;
 
-        // Add Bot Response to History
-        this.history.add(this.name, response);
-        this.routeResponse(source, response);
-        this.history.save();
+        // Add Bot Response to History when non-empty.
+        if (response) {
+            this.history.add(this.name, response);
+            if (!self_prompt || this._shouldEmitSelfPromptChat(response)) {
+                this.routeResponse(source, response);
+            }
+            this.history.save();
+        }
 
         // 4. AUTONOMOUS LOOP (Planning Mode)
         // If type was 'plan', we might want to continue thinking/acting
@@ -606,17 +622,24 @@ export class Agent {
             if (max_responses === null) max_responses = settings.max_commands === -1 ? Infinity : settings.max_commands;
             if (max_responses === -1) max_responses = Infinity;
 
-            const checkInterrupt = () => this.self_prompter.shouldInterrupt(self_prompt) || this.shut_up || convoManager.responseScheduledFor(source);
+            const checkInterrupt = () => (this.self_prompter ? this.self_prompter.shouldInterrupt(self_prompt) : false) || this.shut_up || convoManager.responseScheduledFor(source);
             const requestId = randomUUID();
             this.latestRequestId = requestId;
 
-            // Start loop at 1 (since 0 was the process() call)
-            for (let i = 1; i < max_responses; i++) {
+            // Execute the plan already produced by brain.process first.
+            let planObj = processResult.plan || null;
+            for (let i = 0; i < max_responses; i++) {
                 if (checkInterrupt()) break;
                 if (this.latestRequestId !== requestId) break;
+                if (this.brain && typeof this.brain.isProviderDegraded === 'function' && this.brain.isProviderDegraded()) {
+                    console.warn('[Agent] Brain provider is degraded. Skipping follow-up plan loop.');
+                    break;
+                }
 
-                // Plan Next Step
-                let planObj = await this.brain.plan(this.history.getHistory());
+                // Plan next step only after consuming the initial process plan.
+                if (i > 0 || !planObj) {
+                    planObj = await this.brain.plan(this.history.getHistory());
+                }
                 if (!planObj) break;
 
                 // 1. Process Thought (Monologue)
@@ -626,13 +649,18 @@ export class Agent {
                 }
 
                 // 2. Process Chat (Public Output)
-                if (planObj.chat) {
+                // Skip duplicate chat for i=0 because processResult.result was already routed above.
+                if (planObj.chat && i > 0) {
                     this.history.add(this.name, planObj.chat);
-                    this.routeResponse(source, planObj.chat);
+                    if (!self_prompt || this._shouldEmitSelfPromptChat(planObj.chat)) {
+                        this.routeResponse(source, planObj.chat);
+                    }
                 }
 
                 // 3. Execute Task (The "Body" Connection)
                 if (planObj.task) {
+                    planObj.task = this._diversifyRepeatedTask(planObj.task, self_prompt);
+                    planObj.task = this._sanitizeTaskForRuntime(planObj.task);
                     console.log(`[Agent] Received Task: ${planObj.task.type}`);
 
                     if (planObj.task.type === 'code' && planObj.task.content) {
@@ -642,9 +670,16 @@ export class Agent {
                             const execResult = await this.intelligence.execute(planObj.task.content);
 
                             if (execResult.success) {
-                                this.history.add('system', `Code Execution Success: ${execResult.result}`);
+                                const successDetail = execResult.summary || execResult.result || 'completed';
+                                this.history.add('system', `Code Execution Success: ${successDetail}`);
                             } else {
-                                this.history.add('system', `Code Execution Failed: ${execResult.error}`);
+                                const failDetail =
+                                    execResult.executionError?.message ||
+                                    execResult.syntaxError ||
+                                    execResult.error ||
+                                    execResult.codeOutput ||
+                                    'unknown';
+                                this.history.add('system', `Code Execution Failed: ${failDetail}`);
                             }
                         } catch (err) {
                             console.error('[Agent] Task Execution Error:', err);
@@ -658,7 +693,7 @@ export class Agent {
             }
         }
 
-        return false;
+        return response || (processResult.type === 'plan' ? '[AUTONOMOUS_STEP]' : false);
     }
 
     async routeResponse(to_player, message) {
@@ -676,18 +711,290 @@ export class Agent {
         }
     }
 
+    _shouldEmitSelfPromptChat(message) {
+        if (!message || typeof message !== 'string') return false;
+
+        const normalized = message
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Suppress noisy autonomous question loops.
+        const banPhrases = [
+            'what kind of house',
+            'what type of house',
+            'do you want me to build',
+            'starting my journey',
+            'journey to beat minecraft',
+            'logical progression',
+            'systematic progression',
+            'progression toward beating minecraft'
+        ];
+        if (normalized.includes('?') || banPhrases.some(p => normalized.includes(p))) {
+            return false;
+        }
+        if (normalized.length > 120 || normalized.includes('beat minecraft')) {
+            return false;
+        }
+
+        const now = Date.now();
+        if (!this._selfPromptChatState) {
+            this._selfPromptChatState = { last: '', at: 0, lastDangerAt: 0 };
+        }
+
+        const isDangerLoopMessage =
+            normalized.includes('finding shelter') ||
+            normalized.includes('hostile mobs') ||
+            normalized.includes('emergency') ||
+            normalized.includes('urgent');
+        if (isDangerLoopMessage && now - this._selfPromptChatState.lastDangerAt < 60000) {
+            return false;
+        }
+        if (isDangerLoopMessage) {
+            this._selfPromptChatState.lastDangerAt = now;
+        }
+
+        if (normalized === this._selfPromptChatState.last && now - this._selfPromptChatState.at < 30000) {
+            return false;
+        }
+
+        if (now - this._selfPromptChatState.at < 15000) {
+            return false;
+        }
+
+        this._selfPromptChatState.last = normalized;
+        this._selfPromptChatState.at = now;
+        return true;
+    }
+
+    _diversifyRepeatedTask(task, self_prompt) {
+        if (!self_prompt || !task || task.type !== 'code' || !task.content) {
+            return task;
+        }
+
+        const signature = String(task.content).replace(/\s+/g, ' ').trim().slice(0, 240);
+        const semantic =
+            signature.includes('find_shelter') ? 'find_shelter' :
+                signature.includes('gather_wood') ? 'gather_wood' :
+                    signature.includes('craft_items') ? 'craft_items' :
+                        signature.includes('mine_ores') ? 'mine_ores' :
+                            signature.includes('ensure_item') ? 'ensure_item' :
+                                signature;
+        if (!this._taskLoopGuard) {
+            this._taskLoopGuard = { last: '', count: 0 };
+        }
+
+        if (this._taskLoopGuard.last === semantic) {
+            this._taskLoopGuard.count++;
+        } else {
+            this._taskLoopGuard.last = semantic;
+            this._taskLoopGuard.count = 0;
+        }
+
+        if (this._taskLoopGuard.count < 1) {
+            return task;
+        }
+
+        this._taskLoopGuard.count = 0;
+        this._taskLoopGuard.last = '';
+        this.history.add('system', 'Loop guard: switching to deterministic recovery action.');
+
+        return {
+            type: 'code',
+            content: `
+await actions.eat_if_hungry({ threshold: 16, retries: 1 });
+const inv = bot.inventory.items();
+const logCount = inv
+  .filter(i => i.name.includes('_log') || i.name.endsWith('_stem') || i.name.endsWith('_hyphae'))
+  .reduce((s, i) => s + i.count, 0);
+const plankCount = inv
+  .filter(i => i.name.includes('_planks'))
+  .reduce((s, i) => s + i.count, 0);
+const isNight = bot.time.timeOfDay > 13000 && bot.time.timeOfDay < 23000;
+const recentShelter = bot._lastShelterState &&
+  Math.abs(bot.entity.position.x - bot._lastShelterState.x) < 3 &&
+  Math.abs(bot.entity.position.y - bot._lastShelterState.y) < 3 &&
+  Math.abs(bot.entity.position.z - bot._lastShelterState.z) < 3 &&
+  (Date.now() - bot._lastShelterState.ts) < 45000;
+
+if (isNight) {
+  if (recentShelter) {
+    try {
+      await actions.craft_first_available(
+        ['oak_planks','birch_planks','spruce_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','bamboo_planks'],
+        8,
+        { retries: 1 }
+      );
+    } catch {}
+    try { await actions.ensure_item('stick', 4, { retries: 1 }); } catch {}
+  } else {
+    try { await skills.find_shelter(bot, { retries: 1 }); } catch {}
+  }
+  await actions.collect_drops({ radius: 8, maxItems: 2, continueOnError: true });
+  return;
+}
+
+if (logCount + plankCount < 10) {
+  try {
+    await actions.gather_nearby('log', 2, {
+      maxDistance: 32,
+      retries: 1,
+      moveRetries: 1,
+      collectDrops: true,
+      continueOnError: true
+    });
+  } catch {}
+
+  const afterLogs = bot.inventory.items()
+    .filter(i => i.name.includes('_log') || i.name.endsWith('_stem') || i.name.endsWith('_hyphae'))
+    .reduce((s, i) => s + i.count, 0);
+
+  if (afterLogs <= logCount) {
+    const p = bot.entity.position.floored();
+    const dirs = [[6,0],[-6,0],[0,6],[0,-6]];
+    const d = dirs[Math.floor(Math.random() * dirs.length)];
+    try {
+      await actions.move_to({ x: p.x + d[0], y: p.y, z: p.z + d[1] }, { minDistance: 2, retries: 0, timeoutMs: 12000 });
+    } catch {}
+    try {
+      await skills.gather_wood(bot, { count: 3, maxPerRun: 2, retries: 1, maxDistance: 48, maxRuntimeMs: 30000 });
+    } catch {}
+  }
+} else {
+  try {
+    await actions.craft_first_available(
+      ['oak_planks','birch_planks','spruce_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','bamboo_planks'],
+      8,
+      { retries: 1 }
+    );
+  } catch {}
+  try { await actions.ensure_item('crafting_table', 1, { retries: 1 }); } catch {}
+  try { await actions.ensure_item('stick', 4, { retries: 1 }); } catch {}
+}
+await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
+`.trim()
+        };
+    }
+
+    _sanitizeTaskForRuntime(task) {
+        if (!task || task.type !== 'code' || !task.content) {
+            return task;
+        }
+
+        const code = String(task.content);
+        const normalized = code.toLowerCase();
+        const unsupportedPatterns = [
+            'movement_skills',
+            'world.inspect',
+            'world.inspectblocks',
+            'world.findnearby',
+            'goalxz',
+            'moverandomly',
+            'skills.movement_skills'
+        ];
+        const hasUnsupportedPattern = unsupportedPatterns.some(pattern => normalized.includes(pattern));
+        const hasBrokenGatherResourceUsage =
+            normalized.includes('gather_resources') &&
+            (normalized.includes('oak_log') ||
+                normalized.includes('resource: undefined') ||
+                normalized.includes('resource:undefined'));
+        const hasBrokenCraftItemsUsage =
+            normalized.includes('craft_items') &&
+            (normalized.includes('item: undefined') ||
+                normalized.includes('item:undefined') ||
+                normalized.includes('item: \"undefined\"') ||
+                normalized.includes("item: 'undefined'"));
+
+        if (!hasUnsupportedPattern && !hasBrokenGatherResourceUsage && !hasBrokenCraftItemsUsage) {
+            return task;
+        }
+
+        if (hasBrokenCraftItemsUsage) {
+            this.history.add('system', 'Task sanitizer: replaced broken craft_items call with deterministic crafting fallback.');
+            return {
+                type: 'code',
+                content: `
+await actions.eat_if_hungry({ threshold: 16, retries: 1 });
+try {
+  await actions.craft_first_available(
+    ['oak_planks','birch_planks','spruce_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','bamboo_planks'],
+    4,
+    { retries: 1 }
+  );
+} catch {}
+try { await actions.ensure_item('crafting_table', 1, { retries: 1 }); } catch {}
+try { await actions.ensure_item('stick', 4, { retries: 1 }); } catch {}
+await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
+`.trim()
+            };
+        }
+
+        this.history.add('system', 'Task sanitizer: replaced unsupported API pattern with deterministic resource-scout task.');
+
+        return {
+            type: 'code',
+            content: `
+await actions.eat_if_hungry({ threshold: 16, retries: 1 });
+const base = bot.entity.position.floored();
+const probes = [[12,0],[-12,0],[0,12],[0,-12],[18,18],[-18,18],[18,-18],[-18,-18]];
+let gathered = 0;
+for (const [dx, dz] of probes) {
+  try {
+    await actions.move_to(
+      { x: base.x + dx, y: base.y, z: base.z + dz },
+      { minDistance: 2, retries: 0, timeoutMs: 14000 }
+    );
+  } catch {}
+
+  try {
+    const run = await skills.gather_wood(bot, { count: 3, maxPerRun: 2, retries: 1, maxDistance: 56, maxRuntimeMs: 30000 });
+    if (run && run.gathered > 0) {
+      gathered += run.gathered;
+      break;
+    }
+  } catch {}
+
+  try {
+    const quick = await actions.gather_nearby('log', 2, {
+      maxDistance: 40,
+      retries: 1,
+      moveRetries: 1,
+      collectDrops: true,
+      continueOnError: true
+    });
+    if (quick && quick.gathered > 0) {
+      gathered += quick.gathered;
+      break;
+    }
+  } catch {}
+}
+if (gathered <= 0) {
+  try { await skills.gather_resources(bot, { resource: 'wood', count: 2, maxDistance: 56 }); } catch {}
+}
+await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
+`.trim()
+        };
+    }
+
     async openChat(message) {
         // ... (Translation logic same as before) ...
         let to_translate = message;
 
         let finalMessage = message;
         try {
-            finalMessage = (await handleTranslation(to_translate)).trim() + " " + remaining;
+            const translationRes = await handleTranslation(to_translate);
+            if (translationRes && typeof translationRes === 'string') {
+                finalMessage = translationRes.trim();
+            }
         } catch (err) {
             console.warn('Translation failed, using original:', err);
         }
 
-        finalMessage = finalMessage.replaceAll('\n', ' ');
+        if (typeof finalMessage === 'string') {
+            finalMessage = finalMessage.replaceAll('\n', ' ');
+        } else {
+            finalMessage = String(finalMessage).replaceAll('\n', ' ');
+        }
 
         if (settings.only_chat_with.length > 0) {
             for (let username of settings.only_chat_with) {
@@ -766,7 +1073,11 @@ export class Agent {
             if (jsonMsg.translate && jsonMsg.translate.startsWith('death') && message.startsWith(this.name)) {
                 console.log('Agent died: ', message);
                 let death_pos = this.bot.entity.position;
-                this.memory.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
+                this.memory.setPlace('last_death_position', {
+                    x: death_pos.x,
+                    y: death_pos.y,
+                    z: death_pos.z
+                });
                 let death_pos_text = null;
                 if (death_pos) {
                     death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.x.toFixed(2)} `;
@@ -806,13 +1117,13 @@ export class Agent {
             if (this.bot.pathfinder) this.bot.pathfinder.stop();
             if (this.bot.modes) this.bot.modes.unPauseAll();
             setTimeout(() => {
-                if (this.isIdle()) {
+                if (this.isReady && this.isIdle() && typeof this.actions.resumeAction === 'function') {
                     this.actions.resumeAction();
                 }
             }, 1000);
         });
 
-        this.npc.init();
+        // this.npc.init(); // REMOVED: Legacy dead code
 
         this.bot.emit('idle');
 
@@ -859,7 +1170,7 @@ export class Agent {
                     }
 
                     if (this.social) {
-                        this._territorialUpdate();
+                        // this._territorialUpdate(); // Handled by separate trigger or social engine
                     }
                 }
             } catch (err) {
@@ -933,6 +1244,7 @@ export class Agent {
 
 
     isIdle() {
+        if (!this.actions) return true;
         return !this.actions.executing;
     }
 
@@ -963,8 +1275,8 @@ export class Agent {
         // 3. Bot Teardown
         if (this.bot) {
             try {
-                this.bot.removeAllListeners();
-                this.bot.quit();
+                if (typeof this.bot.removeAllListeners === 'function') this.bot.removeAllListeners();
+                if (typeof this.bot.quit === 'function') this.bot.quit();
                 console.log(`[Agent] ⏏️ Bot listeners removed and connection closed.`);
             } catch (err) {
                 console.error(`[Agent] Cleanup error (bot): ${err.message}`);
@@ -972,9 +1284,13 @@ export class Agent {
         }
 
         // 4. Persistence
-        if (this.history) {
-            this.history.add('system', 'Agent clean cleanup performed.');
-            await this.history.save();
+        if (this.history && typeof this.history.add === 'function') {
+            try {
+                this.history.add('system', 'Agent clean cleanup performed.');
+                await this.history.save();
+            } catch (err) {
+                console.warn(`[Agent] Cleanup warning (history): ${err.message}`);
+            }
         }
 
         this.state = 'OFFLINE';
@@ -987,6 +1303,10 @@ export class Agent {
         if (this.updateTimer) clearTimeout(this.updateTimer);
 
         await this.clean();
+    }
+
+    async cleanKill(reason = 'Forced shutdown') {
+        await this.shutdown(reason);
     }
 
     // Duplicated legacy methods removed
@@ -1016,20 +1336,20 @@ export class Agent {
                 brain: !!this.brain,
                 memory: {
                     unified: !!this.unifiedMemory,
-                    ram: !!this.memory_bank,
+                    ram: !!this.memory,
                     graph: !!this.cogneeMemory,
                     vector: !!this.dreamer
                 },
                 kernel: {
                     signalBus: !!this.bus,
-                    contextManager: !!this.contextManager,
+                    contextManager: !!this.core?.contextManager,
                     toolRegistry: !!this.toolRegistry,
                     system2: !!this.system2,
                     evolution: !!this.evolution
                 },
                 reflexes: {
                     combat: !!this.combatReflex,
-                    death: !!this.deathReflex,
+                    death: !!this.deathRecovery,
                     watchdog: !!this.watchdog
                 }
             },
@@ -1044,7 +1364,7 @@ export class Agent {
     }
 
     killAll() {
-        serverProxy.shutdown();
+        if (serverProxy) serverProxy.shutdown();
         this.shutdown('Task Finished');
     }
 

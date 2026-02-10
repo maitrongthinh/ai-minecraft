@@ -1,172 +1,127 @@
-# 🏗️ MindOS System Architecture (Technical Bible)
-## Kiến Trúc Hệ Thống MindOS (Tài Liệu Kỹ Thuật)
+﻿# MindOS Technical Architecture (Production-Oriented)
 
-> **Version:** 1.0 (Evolution Edition)
-> **Architecture Pattern:** Event-Driven, Dual-Loop Cognitive System (Kiến trúc Nhận thức Vòng lặp Kép Hướng Sự kiện)
+Version: 2026-02-10
+Status: Active runtime reference
 
----
+## 1. Architectural style
+MindOS uses an event-driven, multi-loop architecture:
+- Fast loop: reflex and safety actions.
+- Slow loop: planning, critique, and execution refinement.
+- Meta loop: evolution from failures into reusable skills.
 
-## 1. High-Level Overview / Tổng Quan
+The central integration point is `SignalBus`, while task execution authority is managed by `TaskScheduler`.
 
-MindOS breaks away from the monolithic "while-loop" bot design. Instead, it operates as a distributed system of independent modules communicating via a central **Nervous System (SignalBus)**. This allows the bot to handle high-frequency events (combat) without blocking low-frequency reasoning (planning).
+## 2. Layered model
 
-MindOS phá vỡ thiết kế bot "vòng lặp while" nguyên khối. Thay vào đó, nó hoạt động như một hệ thống phân tán gồm các module độc lập giao tiếp qua **Hệ Thần Kinh Trung Ương (SignalBus)**. Điều này cho phép bot xử lý các sự kiện tần suất cao (chiến đấu) mà không chặn suy luận tần suất thấp (lập kế hoạch).
+## Layer A: Runtime host
+- `src/agent/agent.js`
+- Owns lifecycle state, Minecraft connection, subsystem wiring, and shutdown.
 
-### The Four Layers of MindOS / Bốn Tầng Của MindOS
+## Layer B: Kernel
+- `src/agent/core/CoreSystem.js`
+- `src/agent/core/SignalBus.js`
+- `src/agent/core/TaskScheduler.js`
 
-1.  **Layer 1: The Nervous System (Kernel):** `SignalBus`, `TaskScheduler`. The communication backbone.
-2.  **Layer 2: The Body (System 1):** `ReflexSystem`, `ActionManager`. Millisecond reactions.
-3.  **Layer 3: The Mind (System 2):** `StrategyPlanner`, `Arbiter`, `Dreamer` (Memory). Reasoning & Strategy.
-4.  **Layer 4: The Evolution (Meta):** `SmartCoder`, `SkillLibrary`. Self-improvement & Code Generation.
+Responsibilities:
+- initialize core memory/scheduler/reflex listeners
+- provide priority-based task arbitration
+- run safeguards (zombie checks, stuck watchdog hooks)
 
----
+## Layer C: Cognition
+- `src/brain/UnifiedBrain.js`
+- `src/agent/orchestration/System2Loop.js`
+- `src/agent/Arbiter.js`
 
-## 2. Core Components / Thành Phần Cốt Lõi
+Responsibilities:
+- handle chat vs planning routing
+- enforce strategic objective context
+- manage degrade/recover behavior for slow-loop failures
 
-### 2.1. The SignalBus (The Nervous System)
-*Location: `src/agent/core/SignalBus.js`*
+## Layer D: Body and reflex
+- `src/agent/action_manager.js`
+- `src/agent/core/ActionAPI.js`
+- `src/agent/reflexes/*.js`
 
-The **SignalBus** is the single source of truth for state changes. It replaces direct function calls between modules, preventing "Spaghetti Code".
+Responsibilities:
+- deterministic action execution with timeout/interruption
+- retry-capable primitive actions (`mine`, `craft`, `place`, `smelt`)
+- autonomous reaction to threats and hazards
 
-*   **Pub/Sub Model:** Modules subscribe to specific signals (`HEALTH_LOW`, `CHAT_MESSAGE`).
-*   **Event Priority:** Signals carry priority weights. A `SURVIVAL` signal interrupts a `WORK` task immediately.
+## Layer E: Memory and evolution
+- `src/agent/memory/MemorySystem.js`
+- `src/memory/CogneeMemoryBridge.js`
+- `src/skills/SkillLibrary.js`
+- `src/agent/core/ToolRegistry.js`
+- `src/agent/core/EvolutionEngine.js`
 
-**Key Signals:**
-| Signal | Description | Priority |
-|--------|-------------|----------|
-| `HEALTH_CRITICAL` | HP < 50%, triggers extensive defense protocols | 100 (Max) |
-| `ENTITY_ATTACK` | Immediate threat detected | 90 |
-| `USER_COMMAND` | Direct instruction from admin | 80 |
-| `CODE_REQUEST` | Mind needs new capability | 50 |
-| `IDLE_TICK` | No active tasks, perform maintenance | 10 |
+Responsibilities:
+- short-term history + place memory + error traces
+- graph/vector recall with offline fallback
+- skill registration, schema-validated execution, and dynamic evolution
 
-### 2.2. The Arbiter (The Decision Maker)
-*Location: `src/agent/Arbiter.js`*
+## 3. Key runtime sequence
 
-The **Arbiter** acts as the Traffic Controller. It receives signals and decides *who* handles them. It prevents the "Split Brain" problem where the Reflex System and Planner try to control the body simultaneously.
+1. `main.js` starts MindServer and spawns agent process.
+2. Agent constructs base systems (`CoreSystem`, `UnifiedBrain`, reflex handlers).
+3. Agent connects to Minecraft and waits for spawn.
+4. Post-spawn heavy init loads memory bridge, skill library, tool registry.
+5. State flips to `READY`.
+6. Normal cycle:
+   - signals emitted from sensors and events
+   - scheduler arbitrates tasks
+   - reflex preempts unsafe work
+   - brain plans and executes
+   - memory stores outcomes
 
-*   **Role:** Resolves conflicts between System 1 (Fast) and System 2 (Slow).
-*   **Logic:**
-    *   If `Signal.Priority > CurrentTask.Priority` → **Interrupt & Switch**.
-    *   If `Signal.Priority <= CurrentTask.Priority` → **Queue or Ignore**.
+## 4. Event model (selected)
 
-### 2.3. Unified Memory (The Knowledge Graph)
-*Location: `src/agent/memory/UnifiedMemory.js` & `Dreamer.js`*
+Important `SignalBus` events:
+- survival: `health.critical`, `health.low`, `death`, `threat.detected`
+- actions: `action.started`, `action.completed`, `action.failed`
+- tasks: `task.failed`, `task.completed`
+- evolution: `skill.failed`, `skill.learned`, `skill.registered`
+- cognition: `system2.planning_start`, `system2.degraded`, `system2.recovered`
 
-Modern Agents require more than just a vector database. MindOS implements **Unified Memory**:
+Failure policy:
+- listeners are isolated; one handler failure does not crash the bus.
+- async listener rejections are trapped and logged.
 
-1.  **Short-Term (RAM):** Immediate context (last 20 messages, current inventory).
-2.  **Long-Term (Vector):** Embedding search for past conversations/instructions.
-3.  **Graph (Cognee/Future):** Structured relationships (e.g., "Home is at X,Y,Z", "Iron is needed for Pickaxe").
+## 5. Priority and interruption
+`TaskScheduler` priorities:
+- 100: survival (interrupts physical work)
+- 80: user intent
+- 50: work tasks
+- 10: background maintenance
 
----
+Critical tasks can preempt ongoing non-parallel actions. Non-critical tasks are queued by dynamic priority.
 
-## 3. Data Flow Diagrams / Biểu Đồ Luồng Dữ Liệu
+## 6. Memory architecture
 
-### 3.1. The Stimulus-Response Loop (Vòng Lặp Kích Thích-Phản Hồi)
+### 6.1 Short-term and structured memory
+`MemorySystem` stores:
+- turns (chat history)
+- errors
+- RAM key-value places (`setPlace`/`getPlace`)
 
-How the bot reacts to a Creeper appearing while building a house:
+### 6.2 Long-term memory bridge
+`CogneeMemoryBridge`:
+- writes experiences to service API (`/remember`)
+- recalls with query (`/recall`)
+- retries with exponential backoff
+- falls back to local vector store when service is degraded
 
-```mermaid
-sequenceDiagram
-    participant Env as Environment
-    participant Sensor as Sensors
-    participant Bus as SignalBus
-    participant Reflex as ReflexSystem (Sys 1)
-    participant Arbiter
-    participant Planner as StrategyPlanner (Sys 2)
+## 7. Evolution architecture
+`EvolutionEngine` listens to task/skill failures, captures snapshot context, requests fix code, validates sandbox constraints, deploys skill into `SkillLibrary`, and registers metadata with `ToolRegistry` for future use.
 
-    Note over Env, Planner: Scenario: Bot is building (Priority 50)
-    
-    Env->>Sensor: Creeper detected (Dist < 3m)
-    Sensor->>Bus: Emit Signal: ENTITY_THREAT (Priority 90)
-    
-    par Fast Path (System 1)
-        Bus->>Reflex: Notify Subscribers
-        Reflex->>Reflex: Check Rules (Creeper = Explode)
-        Reflex->>Bus: Emit: REQUEST_INTERRUPT (RunAway)
-    and Slow Path (System 2)
-        Bus->>Planner: Notify (Log threat)
-    end
-    
-    Bus->>Arbiter: REQUEST_INTERRUPT
-    Arbiter->>Arbiter: Compare Prio (90 > 50)
-    Arbiter->>Bus: GRANT_CONTROL (Reflex)
-    
-    Bus->>Env: Execute Move (Sprint Away)
-```
+## 8. Coupling constraints and cycle prevention
+Current rules implemented in code:
+- conversation transport is injected (`setBotChatTransport`) to avoid direct conversation-server circular imports.
+- MindServer creation receives callback handlers instead of importing process functions directly.
+- full-state generation receives in-game agents list as argument, avoiding hidden cross-module dependency.
 
-### 3.2. The Evolution Loop (Vòng Lặp Tiến Hóa)
-
-How the bot learns to "Craft a Shield" when it doesn't know how:
-
-```mermaid
-sequenceDiagram
-    participant Planner
-    participant Bus
-    participant Arbiter
-    participant Coder as SmartCoder
-    participant Lib as SkillLibrary
-
-    Planner->>Planner: Goal: "Defend Self"
-    Planner->>Lib: Check Skill("use_shield")
-    Lib-->>Planner: Skill Not Found
-    
-    Planner->>Bus: Emit: CODE_REQUEST ("Create shield skill")
-    Bus->>Arbiter: Route Request
-    Arbiter->>Coder: Wake up Coder
-    
-    Coder->>Coder: Generate Code (LLM)
-    Coder->>Coder: Syntax Check (AST)
-    Coder->>Lib: Save "use_shield.js"
-    
-    Lib->>Bus: Emit: SKILL_LEARNED
-    Bus->>Planner: Resume Task
-    Planner->>Env: Execute "use_shield"
-```
-
----
-
-## 4. Security & Safety / Bảo Mật & An Toàn
-
-### 4.1. The Sandbox
-All AI-generated code is executed in a restricted context using `vm2` or `compartments` (depending on configuration).
-*   **Blocked:** `eval()`, `child_process`, `fs` (write access outside sandbox).
-*   **Allowed:** `bot` API, `vec3`, `pathfinder`.
-
-### 4.2. The Watchdog
-A background heartbeat monitor that ensures the bot never hangs.
-*   **Mechanism:** If a task takes > 60 seconds without reporting progress, the Watchdog emits `SYSTEM_RESET`.
-*   **Recovery:** The Arbiter clears the task queue and respawns the default Idle state.
-
-### 4.3. Ironclad DoS Protection (v2.2)
-*Location: `src/agent/intelligence/CodeSanitizer.js`*
-
-To prevent "Death by Infinite Loop" (e.g., `while(true)`), MindOS uses an **AST-Based Sanitizer**:
-1.  **Parse:** All LLM code is parsed into an Abstract Syntax Tree (using `acorn`).
-2.  **Inject:** A `timeout check` is injected into the body of every loop (`for`, `while`, `do-while`).
-3.  **Execute:** If a loop runs > 5 seconds, it throws an `Execution Timeout` error, saving the Main Thread.
-
-### 4.4. Brain-Body Protocol (Structured Thought)
-*Location: `UnifiedBrain.js` -> `Agent.js`*
-
-The "Mind" and "Body" are decoupled via a strict JSON Protocol:
-```json
-{
-  "thought": "Internal monologue (Reasoning)",
-  "chat": "External speech (Communication)",
-  "task": {
-    "type": "code",
-    "content": "bot.pathfinder.goto(...)"
-  }
-}
-```
-This ensures the Planner never "hallucinates" actions it cannot perform. The Body only executes valid `task` objects.
-
----
-
-## 5. Developer Notes / Ghi Chú Phát Triển
-
-*   **Adding Sensors:** Register new event listeners in `src/agent/reflexes/sensors/`.
-*   **Modifying Priorities:** Edit `src/agent/core/TaskScheduler.js` constants.
-*   **Debugging:** Run with `DEBUG=true` to see raw SignalBus traffic.
+## 9. Production hardening checklist
+- Ensure `settings.js` objective is set correctly (`Beat Minecraft`).
+- Keep watchdog and retries configured for server latency profile.
+- Keep Cognee service healthy (`http://localhost:8001`) or validate fallback path.
+- Keep skills schema-valid so ToolRegistry can discover/execute reliably.
+- Monitor `task.failed` and `action.failed` rates to detect degradation early.

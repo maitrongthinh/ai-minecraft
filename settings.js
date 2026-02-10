@@ -1,14 +1,14 @@
 const settings = {
     "minecraft_version": "auto", // or specific version like "1.21.6"
-    "host": "thinhmcvn.aternos.me", // or "localhost", "your.ip.address.here"
-    "port": 51282, // Minecraft server port
+    "host": "localhost", // or "localhost", "your.ip.address.here"
+    "port": 5000, // Minecraft server port
     "auth": "offline", // or "microsoft"
 
     // the mindserver manages all agents and hosts the UI
-    "mindserver_port": 8090,
+    "mindserver_port": 8092,
     "auto_open_ui": true, // opens UI in browser on startup
 
-    "base_profile": "assistant", // survival, assistant, creative, or god_mode
+    "base_profile": "survival", // survival, assistant, creative, or god_mode
     "profiles": [
         "./andy.json",
         // "./profiles/gpt.json",
@@ -41,7 +41,7 @@ const settings = {
     "render_bot_view": false, // show bot's view in browser at localhost:3000, 3001...
 
     "allow_insecure_coding": false, // allows newAction command and model can write/run code on your computer. enable at own risk
-    "allow_vision": false, // allows vision model to interpret screenshots as inputs
+    "allow_vision": true, // allows vision model to interpret screenshots as inputs
     "allow_offline_mode": true, // User Request: Defaults to true
     "blocked_actions": ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"], // commands to disable and remove from docs. Ex: ["!setMode"],
     "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
@@ -59,21 +59,26 @@ const settings = {
 
     "log_all_prompts": false, // log ALL prompts to file
 
-    "log_all_prompts": false, // log ALL prompts to file
 
-
-    // Single Model Configuration (MiniMax-M2 via MegaLLM)
+    // Unified Brain Configuration
+    // Users can now specify 'apiKeyEnv' to choose which environment variable to use for the API key.
     "models": {
         "high_iq": {
             "api": "openai",
-            "model": "openai-gpt-oss-20b",
-            "url": "https://ai.megallm.io/v1",
-            "params": {
-                "apiKey": process.env.MEGALLM_API_KEY
-            },
-            "rate_limit": 200 // requests per 12h
+            "model": "minimaxai/minimax-m2",
+            "url": "https://quangdz.exe.xyz/v1",
+            "apiKeyEnv": "QUANGDZ_API_KEY",
+            "uses": 1000,
+            "rate_limit": 1000 // requests per 12h
+        },
+        "fast": {
+            "api": "openai",
+            "model": "minimaxai/minimax-m2",
+            "url": "https://quangdz.exe.xyz/v1",
+            "apiKeyEnv": "QUANGDZ_API_KEY",
+            "uses": 1000,
+            "rate_limit": 1000 // requests per 12h (default)
         }
-        // Note: "fast" model removed - using single MiniMax for all tasks
     },
 
     // Cognee Memory Service Configuration
@@ -84,7 +89,9 @@ const settings = {
         "enabled": false, // User Request: Defaults to false
         "stuck_timeout_seconds": 180,   // Time before triggering emergency (3 min)
         "check_interval_ms": 3000       // How often to check position
-    }
+    },
+
+    "objective": "Beat Minecraft" // Default long-term goal
 
 }
 

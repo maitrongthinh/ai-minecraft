@@ -15,6 +15,22 @@ function localLog(bot, message) {
     bot.output += message + '\n';
 }
 
+function isModeOn(bot, mode) {
+    return !!(bot?.modes && typeof bot.modes.isOn === 'function' && bot.modes.isOn(mode));
+}
+
+function pauseMode(bot, mode) {
+    if (bot?.modes && typeof bot.modes.pause === 'function') {
+        bot.modes.pause(mode);
+    }
+}
+
+function unpauseMode(bot, mode) {
+    if (bot?.modes && typeof bot.modes.unpause === 'function') {
+        bot.modes.unpause(mode);
+    }
+}
+
 let _doorInterval = null;
 function startDoorInterval(bot) {
     if (_doorInterval) {
@@ -86,23 +102,37 @@ export async function goToGoal(bot, goal) {
 
     let final_movements = destructiveMovements;
 
-    const pathfind_timeout = 1000;
-    if (await bot.pathfinder.getPathTo(nonDestructiveMovements, goal, pathfind_timeout).status === 'success') {
+    const pathfind_timeout = 4500;
+    const isUsableStatus = (status) => status === 'success' || status === 'partial';
+    const nonDestructiveProbe = await bot.pathfinder.getPathTo(nonDestructiveMovements, goal, pathfind_timeout);
+    if (isUsableStatus(nonDestructiveProbe.status)) {
         final_movements = nonDestructiveMovements;
         localLog(bot, `Found non-destructive path.`);
     }
-    else if (await bot.pathfinder.getPathTo(destructiveMovements, goal, pathfind_timeout).status === 'success') {
-        localLog(bot, `Found destructive path.`);
-    }
     else {
-        localLog(bot, `Path not found, but attempting to navigate anyway using destructive movements.`);
+        const destructiveProbe = await bot.pathfinder.getPathTo(destructiveMovements, goal, pathfind_timeout);
+        if (isUsableStatus(destructiveProbe.status)) {
+            localLog(bot, `Found destructive path.`);
+        }
+        else {
+            localLog(bot, `Path not found, but attempting to navigate anyway using destructive movements.`);
+        }
     }
 
     const doorCheckInterval = startDoorInterval(bot);
 
     bot.pathfinder.setMovements(final_movements);
+    const pathTimeoutMs = 32000;
     try {
-        await bot.pathfinder.goto(goal);
+        await Promise.race([
+            bot.pathfinder.goto(goal),
+            new Promise((_, reject) =>
+                setTimeout(() => {
+                    bot.pathfinder.stop();
+                    reject(new Error(`Pathfinder timeout after ${pathTimeoutMs}ms`));
+                }, pathTimeoutMs)
+            )
+        ]);
         clearInterval(doorCheckInterval);
         return true;
     } catch (err) {
@@ -116,7 +146,7 @@ export async function goToPosition(bot, x, y, z, min_distance = 2) {
         localLog(bot, `Missing coordinates, given x:${x} y:${y} z:${z}`);
         return false;
     }
-    if (bot.modes.isOn('cheat')) {
+    if (isModeOn(bot, 'cheat')) {
         bot.chat('/tp @s ' + x + ' ' + y + ' ' + z);
         localLog(bot, `Teleported to ${x}, ${y}, ${z}.`);
         return true;
@@ -166,8 +196,7 @@ export async function goToNearestBlock(bot, blockType, min_distance = 2, range =
         return false;
     }
     localLog(bot, `Found ${blockType} at ${block.position}. Navigating...`);
-    await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
 }
 
 export async function goToNearestEntity(bot, entityType, min_distance = 2, range = 64) {
@@ -178,8 +207,7 @@ export async function goToNearestEntity(bot, entityType, min_distance = 2, range
     }
     let distance = bot.entity.position.distanceTo(entity.position);
     localLog(bot, `Found ${entityType} ${distance} blocks away.`);
-    await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
 }
 
 export async function goToPlayer(bot, username, distance = 3) {
@@ -187,14 +215,14 @@ export async function goToPlayer(bot, username, distance = 3) {
         localLog(bot, `You are already at ${username}.`);
         return true;
     }
-    if (bot.modes.isOn('cheat')) {
+    if (isModeOn(bot, 'cheat')) {
         bot.chat('/tp @s ' + username);
         localLog(bot, `Teleported to ${username}.`);
         return true;
     }
 
-    bot.modes.pause('self_defense');
-    bot.modes.pause('cowardice');
+    pauseMode(bot, 'self_defense');
+    pauseMode(bot, 'cowardice');
     let player = bot.players[username]?.entity;
     if (!player) {
         localLog(bot, `Could not find ${username}.`);
@@ -229,31 +257,31 @@ export async function followPlayer(bot, username, distance = 4) {
         const ignore_modes_distance = 30;
         const nearby_distance = distance + 2;
 
-        if (distance_from_player > teleport_distance && bot.modes.isOn('cheat')) {
+        if (distance_from_player > teleport_distance && isModeOn(bot, 'cheat')) {
             await goToPlayer(bot, username);
         }
         else if (distance_from_player > ignore_modes_distance) {
-            bot.modes.pause('item_collecting');
-            bot.modes.pause('hunting');
-            bot.modes.pause('torch_placing');
+            pauseMode(bot, 'item_collecting');
+            pauseMode(bot, 'hunting');
+            pauseMode(bot, 'torch_placing');
         }
         else if (distance_from_player <= ignore_modes_distance) {
-            bot.modes.unpause('item_collecting');
-            bot.modes.unpause('hunting');
-            bot.modes.unpause('torch_placing');
+            unpauseMode(bot, 'item_collecting');
+            unpauseMode(bot, 'hunting');
+            unpauseMode(bot, 'torch_placing');
         }
 
         if (distance_from_player <= nearby_distance) {
             if (doorCheckInterval) { clearInterval(doorCheckInterval); doorCheckInterval = null; }
-            bot.modes.pause('unstuck');
-            bot.modes.pause('elbow_room');
+            pauseMode(bot, 'unstuck');
+            pauseMode(bot, 'elbow_room');
         }
         else {
             if (!doorCheckInterval) {
                 doorCheckInterval = startDoorInterval(bot);
             }
-            bot.modes.unpause('unstuck');
-            bot.modes.unpause('elbow_room');
+            unpauseMode(bot, 'unstuck');
+            unpauseMode(bot, 'elbow_room');
         }
     }
     if (doorCheckInterval) clearInterval(doorCheckInterval);
@@ -268,7 +296,7 @@ export async function moveAway(bot, distance) {
 
     if (safePos) {
         log(bot, `Retreating to safe position: ${safePos.floored()}`);
-        if (bot.modes.isOn('cheat')) {
+        if (isModeOn(bot, 'cheat')) {
             bot.chat('/tp @s ' + safePos.x + ' ' + safePos.y + ' ' + safePos.z);
             return true;
         }
@@ -303,13 +331,13 @@ export async function moveAwayFromEntity(bot, entity, distance = 16) {
 // avoidEnemies moved to combat_skills.js to avoid circular dependency
 
 export async function stay(bot, seconds = 30) {
-    bot.modes.pause('self_preservation');
-    bot.modes.pause('unstuck');
-    bot.modes.pause('cowardice');
-    bot.modes.pause('self_defense');
-    bot.modes.pause('hunting');
-    bot.modes.pause('torch_placing');
-    bot.modes.pause('item_collecting');
+    pauseMode(bot, 'self_preservation');
+    pauseMode(bot, 'unstuck');
+    pauseMode(bot, 'cowardice');
+    pauseMode(bot, 'self_defense');
+    pauseMode(bot, 'hunting');
+    pauseMode(bot, 'torch_placing');
+    pauseMode(bot, 'item_collecting');
     let start = Date.now();
     while (!bot.interrupt_code && (seconds === -1 || Date.now() - start < seconds * 1000)) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -335,7 +363,7 @@ export async function goToBed(bot) {
     const bed = bot.blockAt(loc);
     await bot.sleep(bed);
     localLog(bot, `You are in bed.`);
-    bot.modes.pause('unstuck');
+    pauseMode(bot, 'unstuck');
     while (bot.isSleeping) {
         await new Promise(resolve => setTimeout(resolve, 500));
     }

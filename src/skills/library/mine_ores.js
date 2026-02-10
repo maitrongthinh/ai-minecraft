@@ -1,3 +1,8 @@
+import minecraftData from 'minecraft-data';
+import { RetryHelper } from '../../utils/RetryHelper.js';
+import { checkInventorySpace } from '../../utils/mcdata.js';
+import { goToPosition } from './movement_skills.js';
+
 /**
  * MCP-Compliant Skill: Mine Ores
  * 
@@ -47,15 +52,15 @@ export const metadata = {
     tags: ['mining', 'ores', 'survival']
 };
 
-export default async function execute(agent, params) {
+export default async function execute(agent, params = {}) {
     const { oreType, count = 8, maxDistance = 64 } = params;
-    const { checkInventorySpace } = require('../../utils/mcdata.js');
+    const bot = agent?.bot || agent;
 
     try {
-        if (agent.bot) checkInventorySpace(agent.bot);
+        if (bot) checkInventorySpace(bot);
         console.log(`[mine_ores] Mining ${count}x ${oreType}...`);
 
-        if (!agent.bot) {
+        if (!bot) {
             return {
                 success: false,
                 mined: 0,
@@ -64,7 +69,7 @@ export default async function execute(agent, params) {
             };
         }
 
-        const mcData = require('minecraft-data')(agent.bot.version);
+        const mcData = minecraftData(bot.version);
         const oreBlock = mcData.blocksByName[oreType];
 
         if (!oreBlock) {
@@ -76,11 +81,37 @@ export default async function execute(agent, params) {
             };
         }
 
+        const withTimeout = (promise, timeoutMs, label) => Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs))
+        ]);
+
+        const mineTargetOre = async (targetPos) => {
+            const latest = bot.blockAt(targetPos);
+            if (!latest || latest.type !== oreBlock.id) {
+                throw new Error(`Target ${oreType} block disappeared`);
+            }
+
+            const distance = bot.entity.position.distanceTo(latest.position);
+            if (distance > 4.5) {
+                const moved = await withTimeout(
+                    goToPosition(bot, latest.position.x, latest.position.y, latest.position.z, 2),
+                    15000,
+                    'goToPosition'
+                );
+                if (!moved) {
+                    throw new Error(`Cannot reach ${oreType} at ${latest.position.x},${latest.position.y},${latest.position.z}`);
+                }
+            }
+
+            await withTimeout(bot.dig(latest, true), 12000, 'dig');
+        };
+
         let mined = 0;
         const collected = [];
 
         for (let i = 0; i < count; i++) {
-            const ore = agent.bot.findBlock({
+            const ore = bot.findBlock({
                 matching: oreBlock.id,
                 maxDistance: maxDistance
             });
@@ -96,15 +127,34 @@ export default async function execute(agent, params) {
 
             try {
                 // Count items before digging
-                const beforeCount = agent.bot.inventory.items().length;
+                const beforeCount = bot.inventory.items().length;
 
-                await agent.bot.dig(ore);
+                if (agent?.actionAPI) {
+                    const minedResult = await agent.actionAPI.mine(ore, {
+                        retries: 2,
+                        baseDelay: 250,
+                        executor: async () => mineTargetOre(ore.position)
+                    });
+                    if (!minedResult.success) {
+                        throw new Error(minedResult.error || 'mine failed');
+                    }
+                } else {
+                    await RetryHelper.retry(
+                        async () => mineTargetOre(ore.position),
+                        {
+                            context: `mine_ores:${oreType}`,
+                            maxRetries: 2,
+                            baseDelay: 250,
+                            maxDelay: 800
+                        }
+                    );
+                }
                 mined++;
 
                 // Check what we collected
-                const afterCount = agent.bot.inventory.items().length;
+                const afterCount = bot.inventory.items().length;
                 if (afterCount > beforeCount) {
-                    const newItems = agent.bot.inventory.items().slice(beforeCount);
+                    const newItems = bot.inventory.items().slice(beforeCount);
                     collected.push(...newItems.map(item => item.name));
                 }
             } catch (error) {

@@ -1,75 +1,73 @@
-# Self-Evolution / Tự Tiến Hóa
+﻿# Self-Evolution Concept (Current Implementation)
 
-## 🦠 The Evolution Loop / Vòng Lặp Tiến Hóa
+Last updated: 2026-02-10
 
-MindOS is designed to improve itself over time. This is not just "learning" parameters; it is **structural self-modification**.
-MindOS được thiết kế để tự cải thiện theo thời gian. Đây không chỉ là "học" tham số; nó là **tự sửa đổi cấu trúc**.
+## 1. Purpose
+Self-evolution turns runtime failures into reusable skills without restarting the agent.
+The goal is to improve robustness of action execution and planning, not to bypass safety controls.
 
-### The Cycle / Chu Trình
+## 2. Main components
+- `src/agent/core/EvolutionEngine.js`
+- `src/agent/core/CodeSandbox.js`
+- `src/skills/SkillLibrary.js`
+- `src/agent/core/ToolRegistry.js`
+- `src/brain/UnifiedBrain.js` (code generation backend)
 
-1.  **Failure Detection (Phát hiện Lỗi)**:
-    - `TaskScheduler` marks a task as `FAILED` after N retries.
-    - `ActionManager` catches a runtime error.
-    
-2.  **Snapshot & Context (Chụp Ảnh & Bối Cảnh)**:
-    - The `EvolutionEngine` captures the current state (Inventory, Nearby blocks, Last logs).
-    - It retrieves the code that caused the error.
+## 3. Evolution loop
 
-3.  **LLM Analysis (Phân Tích LLM)**:
-    - The `SmartCoder` sends the error + code to the LLM.
-    - Prompt: "Why did this fail? Fix the code."
+1. Failure capture
+- `TaskScheduler` emits `task.failed`.
+- `ToolRegistry`/skills can emit `skill.failed`.
+- `EvolutionEngine` listens and captures a snapshot.
 
-4.  **Sandbox Validation (Kiểm Tra Sandbox)**:
-    - The new code is generated.
-    - It is DRY-RUN inside a `Compartment` (VM) to check for syntax errors and malicious patterns.
+2. Snapshot build
+Snapshot includes:
+- task name
+- normalized error message/hash
+- health/food/position
+- inventory summary
+- nearby block context
 
-5.  **Hot-Swap (Thay Nóng)**:
-    - If valid, the new code replaces the old function in `SkillLibrary`.
-    - The bot retries the task immediately with new capabilities.
+3. Fix generation
+- Evolution requests code from `UnifiedBrain.generateReflexCode(...)`.
+- If unavailable, fallback uses prompter coding API.
 
----
+4. Validation
+- Candidate code is validated in sandbox constraints before deployment.
 
-## 🔒 The Sandbox Mechanism / Cơ Chế Sandbox
+5. Deployment
+- Skill is hot-swapped into `SkillLibrary`.
+- Skill metadata is dynamically registered into `ToolRegistry`.
+- Experience is logged to Cognee memory when available.
 
-To prevent the AI from deleting system files or crashing the server, we use a **Compartment (Sesame/Lockdown)** approach.
-Để ngăn AI xóa file hệ thống, chúng tôi dùng cách tiếp cận **Compartment**.
+6. Reuse
+- Error hash cache avoids regenerating the same fix repeatedly.
+- Registered dynamic skills become callable by planner/tool execution path.
 
-```mermaid
-graph LR
-    LLM[LLM Generator] -->|Raw Code| Sanitize
-    Sanitize[Sanitizer] -->|Clean Code| VM
-    subgraph "Secure Compartment (VM)"
-        VM[Virtual Machine]
-        Context[Whitelisted APIs]
-    end
-    VM -->|Result| Action
-    Context -.->|Vec3, Bot| VM
-    
-    style VM fill:#f96,stroke:#333
-```
+## 4. Interaction with Action API
+The preferred hardening path is:
+- keep primitive reliability in `ActionAPI` (`mine/craft/place/smelt` + retries)
+- let evolution generate higher-level wrappers or fallback procedures
+- avoid replacing stable primitives with brittle generated code
 
-- **Whitelisted**: `bot`, `vec3`, `skills` (read-only).
-- **Blacklisted**: `fs`, `child_process`, `eval`, `process`.
+This preserves strong "instinct" behavior while still allowing adaptation.
 
----
+## 5. Interaction with memory
+When memory is available:
+- failures and successful fixes are persisted via `CogneeMemoryBridge.storeExperience(...)`
+- subsequent planning can retrieve prior failures/solutions through recall
 
-## 🧬 Example Generated Skill / Ví Dụ Skill Được Tạo
+If Cognee service is unavailable:
+- fallback vector store remains active
+- evolution still runs, but long-term graph recall quality is reduced
 
-Here is a real example of a skill MindOS generated when it couldn't find a path to a tree:
-Đây là ví dụ thực tế MindOS tạo ra khi không tìm được đường đến cây:
+## 6. Safety and limits
+- Generated code must pass sandbox validation.
+- Evolution does not execute arbitrary unsafe system operations.
+- Recurrent system-level failures should trigger operator review, not blind auto-patching.
 
-```javascript
-// Generated Skill: bridge_to_target
-// Reason: Previous pathfinding failed due to gap.
-export async function main(bot) {
-    const target = bot.findBlock({ matching: bot.registry.blocksByName.log.id });
-    if (!target) return;
-    
-    // AI decided to place dirt blocks to bridge
-    const gap = target.position.minus(bot.entity.position);
-    if (gap.y == 0 && gap.x > 1) {
-        await bot.equip(bot.registry.itemsByName.dirt.id, 'hand');
-        await bot.placeBlock(bot.blockAt(bot.entity.position.offset(1, -1, 0)), new Vec3(0, 1, 0));
-    }
-}
-```
+## 7. Practical production guidance
+- Track frequent failure reasons from evolution stats.
+- Promote repeatedly successful generated skills into reviewed static skills.
+- Keep a blacklist policy for unstable generated skills.
+- Prioritize deterministic ActionAPI improvements before adding more memory complexity.

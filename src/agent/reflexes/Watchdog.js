@@ -107,7 +107,7 @@ export class Watchdog {
             const posStr = pos ? `(${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)})` : 'unknown';
             this.agent.cogneeMemory.storeExperience(
                 this.agent.world_id,
-                `Bot got stuck at position ${posStr} for ${this.STUCK_TIMEOUT / 1000} seconds. Emergency protocol triggered.`,
+                [`Bot got stuck at position ${posStr} for ${this.STUCK_TIMEOUT / 1000} seconds. Emergency protocol triggered.`],
                 { type: 'stuck', position: pos ? { x: pos.x, y: pos.y, z: pos.z } : null }
             ).catch(err => console.warn('[Watchdog] Failed to log stuck event to Cognee:', err.message));
         }
@@ -119,8 +119,7 @@ export class Watchdog {
             const currentState = this.agent.stateStack ? this.agent.stateStack.current() : 'unknown';
             this.agent.history.addError(
                 'got_stuck',
-                `Stuck at ${posStr} during ${currentState} state for ${this.STUCK_TIMEOUT / 1000}s`,
-                { position: pos, state: currentState }
+                `Stuck at ${posStr} during ${currentState} state for ${this.STUCK_TIMEOUT / 1000}s`
             );
         }
 

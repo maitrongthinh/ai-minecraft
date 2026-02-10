@@ -11,6 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { globalBus, SIGNAL } from '../agent/core/SignalBus.js'; // Phase 4.5: MindOS Integration
 import { AsyncLock } from '../utils/AsyncLock.js';
+import settings from '../../settings.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

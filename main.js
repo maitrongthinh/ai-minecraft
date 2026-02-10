@@ -1,8 +1,10 @@
+import './src/utils/keys.js';
 import * as Mindcraft from './src/mindcraft/mindcraft.js';
 import settings from './settings.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { readFileSync } from 'fs';
+import { execSync } from 'child_process';
 
 function parseArguments() {
     return yargs(hideBin(process.argv))
@@ -61,6 +63,30 @@ if (process.env.NUM_EXAMPLES) {
 }
 if (process.env.LOG_ALL) {
     settings.log_all_prompts = process.env.LOG_ALL;
+}
+
+// Phase 10: Port Doctor - Auto-cleanup orphaned processes on Windows
+if (process.platform === 'win32') {
+    const port = settings.mindserver_port || 8092;
+    try {
+        const netstatOutput = execSync(`netstat -ano | findstr :${port}`).toString();
+        const lines = netstatOutput.trim().split('\n');
+        for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            const pid = parts[parts.length - 1];
+            // Only kill if Listening and not self
+            if (line.includes('LISTENING') && pid && pid !== '0' && pid !== process.pid.toString()) {
+                console.log(`[PortDoctor] 🩺 Found orphaned process ${pid} on port ${port}. Terminating...`);
+                try {
+                    execSync(`taskkill /F /PID ${pid} /T`);
+                } catch (killErr) {
+                    // Ignore already dead processes
+                }
+            }
+        }
+    } catch (e) {
+        // netstat returns exit code 1 if no matches found
+    }
 }
 
 Mindcraft.init(true, settings.mindserver_port, settings.auto_open_ui);

@@ -1,11 +1,10 @@
-import * as mc from '../../utils/mcdata.js';
 import { CombatUtils } from '../../utils/CombatUtils.js';
 
 export default async function eat_food(agent, options = {}) {
     const bot = agent.bot || agent;
     const { priority_only = true } = options;
 
-    const food = bot.inventory.items().filter(item => item.name in mc.foods);
+    const food = bot.inventory.items().filter(item => CombatUtils.getFoodScore(item, bot.health) > 0 || !priority_only);
 
     if (food.length === 0) {
         return { success: false, message: "No food found in inventory." };

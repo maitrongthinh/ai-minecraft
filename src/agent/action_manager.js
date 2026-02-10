@@ -13,8 +13,12 @@ export class ActionManager {
         this.recent_action_counter = 0;
     }
 
-    async resumeAction(actionFn, timeout) {
-        return this._executeResume(actionFn, timeout);
+    isBusy() {
+        return this.executing;
+    }
+
+    async resumeAction(actionLabel = null, actionFn = null, timeout = 10) {
+        return this._executeResume(actionLabel, actionFn, timeout);
     }
 
     async runAction(actionLabel, actionFn, { timeout, resume = false } = {}) {
@@ -83,7 +87,7 @@ export class ActionManager {
         if (!this.executing) return;
 
         const timeout = setTimeout(() => {
-            this.agent.cleanKill('Code execution refused stop after 10 seconds. Killing process.');
+            void this.agent.shutdown('Code execution refused stop after 10 seconds. Forcing shutdown.');
         }, 10000);
         while (this.executing) {
             this.agent.requestInterrupt();
@@ -102,7 +106,9 @@ export class ActionManager {
         const new_resume = actionFn != null;
         if (new_resume) { // start new resume
             this.resume_func = actionFn;
-            assert(actionLabel != null, 'actionLabel is required for new resume');
+            if (actionLabel == null) {
+                throw new Error('actionLabel is required for new resume');
+            }
             this.resume_name = actionLabel;
         }
         if (this.resume_func != null && (this.agent.isIdle() || new_resume) && (!this.agent.self_prompter.isActive() || new_resume)) {
@@ -132,7 +138,7 @@ export class ActionManager {
                 }
                 if (this.recent_action_counter > 5) {
                     console.error('Infinite action loop detected, shutting down.');
-                    this.agent.cleanKill('Infinite action loop detected, shutting down.');
+                    void this.agent.shutdown('Infinite action loop detected, shutting down.');
                     return { success: false, message: 'Infinite action loop detected, shutting down.', interrupted: false, timedout: false };
                 }
             }
@@ -150,6 +156,7 @@ export class ActionManager {
             this.agent.clearBotLogs();
 
             this.executing = true;
+            this.timedout = false;
             this.currentActionLabel = actionLabel;
             this.currentActionFn = actionFn;
 
@@ -196,6 +203,8 @@ export class ActionManager {
             // return action status report
             return { success: true, message: output, interrupted, timedout };
         } catch (err) {
+            const errText = err instanceof Error ? err.message : String(err);
+            const errStack = err instanceof Error ? err.stack : '';
             this.executing = false;
             this.currentActionLabel = '';
             this.currentActionFn = null;
@@ -208,16 +217,14 @@ export class ActionManager {
             // Emit Failure Signal
             globalBus.emitSignal(SIGNAL.ACTION_FAILED, {
                 action: actionLabel,
-                error: err.toString()
+                error: errText
             });
 
             await this.stop();
-            err = err.toString();
-
             let message = this.getBotOutputSummary() +
                 '!!Code threw exception!!\n' +
-                'Error: ' + err + '\n' +
-                'Stack trace:\n' + err.stack + '\n';
+                'Error: ' + errText + '\n' +
+                'Stack trace:\n' + (errStack || 'N/A') + '\n';
 
             let interrupted = this.agent.bot.interrupt_code;
             this.agent.clearBotLogs();

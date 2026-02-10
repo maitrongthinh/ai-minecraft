@@ -2,7 +2,7 @@ import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
 
 
-export function getNearestFreeSpace(bot, size=1, distance=8) {
+export function getNearestFreeSpace(bot, size = 1, distance = 8) {
     /**
      * Get the nearest empty space with solid blocks beneath it of the given size.
      * @param {Bot} bot - The bot to get the nearest free space for.
@@ -39,21 +39,21 @@ export function getNearestFreeSpace(bot, size=1, distance=8) {
 }
 
 
-export function getBlockAtPosition(bot, x=0, y=0, z=0) {
-     /**
-     * Get a block from the bot's relative position 
-     * @param {Bot} bot - The bot to get the block for.
-     * @param {number} x - The relative x offset to serach, default 0.
-     * @param {number} y - The relative y offset to serach, default 0.
-     * @param {number} y - The relative z offset to serach, default 0. 
-     * @returns {Block} - The nearest block.
-     * @example
-     * let blockBelow = world.getBlockAtPosition(bot, 0, -1, 0);
-     * let blockAbove = world.getBlockAtPosition(bot, 0, 2, 0); since minecraft position is at the feet
-     **/
+export function getBlockAtPosition(bot, x = 0, y = 0, z = 0) {
+    /**
+    * Get a block from the bot's relative position 
+    * @param {Bot} bot - The bot to get the block for.
+    * @param {number} x - The relative x offset to serach, default 0.
+    * @param {number} y - The relative y offset to serach, default 0.
+    * @param {number} y - The relative z offset to serach, default 0. 
+    * @returns {Block} - The nearest block.
+    * @example
+    * let blockBelow = world.getBlockAtPosition(bot, 0, -1, 0);
+    * let blockAbove = world.getBlockAtPosition(bot, 0, 2, 0); since minecraft position is at the feet
+    **/
     let block = bot.blockAt(bot.entity.position.offset(x, y, z));
-    if (!block) block = {name: 'air'};
-       
+    if (!block) block = { name: 'air' };
+
     return block;
 }
 
@@ -75,32 +75,32 @@ export function getSurroundingBlocks(bot) {
 }
 
 
-export function getFirstBlockAboveHead(bot, ignore_types=null, distance=32) {
-     /**
-     * Searches a column from the bot's position for the first solid block above its head
-     * @param {Bot} bot - The bot to get the block for.
-     * @param {string[]} ignore_types - The names of the blocks to ignore.
-     * @param {number} distance - The maximum distance to search, default 32.
-     * @returns {string} - The fist block above head.
-     * @example
-     * let firstBlockAboveHead = world.getFirstBlockAboveHead(bot, null, 32);
-     **/
+export function getFirstBlockAboveHead(bot, ignore_types = null, distance = 32) {
+    /**
+    * Searches a column from the bot's position for the first solid block above its head
+    * @param {Bot} bot - The bot to get the block for.
+    * @param {string[]} ignore_types - The names of the blocks to ignore.
+    * @param {number} distance - The maximum distance to search, default 32.
+    * @returns {string} - The fist block above head.
+    * @example
+    * let firstBlockAboveHead = world.getFirstBlockAboveHead(bot, null, 32);
+    **/
     // if ignore_types is not a list, make it a list.
-    let ignore_blocks = []; 
+    let ignore_blocks = [];
     if (ignore_types === null) ignore_blocks = ['air', 'cave_air'];
     else {
         if (!Array.isArray(ignore_types))
             ignore_types = [ignore_types];
-        for(let ignore_type of ignore_types) {
+        for (let ignore_type of ignore_types) {
             if (mc.getBlockId(ignore_type)) ignore_blocks.push(ignore_type);
         }
     }
     // The block above, stops when it finds a solid block .
-    let block_above = {name: 'air'};
+    let block_above = { name: 'air' };
     let height = 0
     for (let i = 0; i < distance; i++) {
-        let block = bot.blockAt(bot.entity.position.offset(0, i+2, 0));
-        if (!block) block = {name: 'air'};
+        let block = bot.blockAt(bot.entity.position.offset(0, i + 2, 0));
+        if (!block) block = { name: 'air' };
         // Ignore and continue
         if (ignore_blocks.includes(block.name)) continue;
         // Defaults to any block
@@ -110,12 +110,12 @@ export function getFirstBlockAboveHead(bot, ignore_types=null, distance=32) {
     }
 
     if (ignore_blocks.includes(block_above.name)) return 'none';
-    
+
     return `${block_above.name} (${height} blocks up)`;
 }
 
 
-export function getNearestBlocks(bot, block_types=null, distance=8, count=10000) {
+export function getNearestBlocks(bot, block_types = null, distance = 8, count = 10000) {
     /**
      * Get a list of the nearest blocks of the given types.
      * @param {Bot} bot - The bot to get the nearest block for.
@@ -134,14 +134,14 @@ export function getNearestBlocks(bot, block_types=null, distance=8, count=10000)
     else {
         if (!Array.isArray(block_types))
             block_types = [block_types];
-        for(let block_type of block_types) {
+        for (let block_type of block_types) {
             block_ids.push(mc.getBlockId(block_type));
         }
     }
-    return getNearestBlocksWhere(bot, block_ids, distance, count);  
+    return getNearestBlocksWhere(bot, block_ids, distance, count);
 }
 
-export function getNearestBlocksWhere(bot, predicate, distance=8, count=10000) {
+export function getNearestBlocksWhere(bot, predicate, distance = 8, count = 10000) {
     /**
      * Get a list of the nearest blocks that satisfy the given predicate.
      * @param {Bot} bot - The bot to get the nearest blocks for.
@@ -152,22 +152,22 @@ export function getNearestBlocksWhere(bot, predicate, distance=8, count=10000) {
      * @example
      * let waterBlocks = world.getNearestBlocksWhere(bot, block => block.name === 'water', 16, 10);
      **/
-    let positions = bot.findBlocks({matching: predicate, maxDistance: distance, count: count});
+    let positions = bot.findBlocks({ matching: predicate, maxDistance: distance, count: count });
     let blocks = positions.map(position => bot.blockAt(position));
     return blocks;
 }
 
 
-export function getNearestBlock(bot, block_type, distance=16) {
-     /**
-     * Get the nearest block of the given type.
-     * @param {Bot} bot - The bot to get the nearest block for.
-     * @param {string} block_type - The name of the block to search for.
-     * @param {number} distance - The maximum distance to search, default 16.
-     * @returns {Block} - The nearest block of the given type.
-     * @example
-     * let coalBlock = world.getNearestBlock(bot, 'coal_ore', 16);
-     **/
+export function getNearestBlock(bot, block_type, distance = 16) {
+    /**
+    * Get the nearest block of the given type.
+    * @param {Bot} bot - The bot to get the nearest block for.
+    * @param {string} block_type - The name of the block to search for.
+    * @param {number} distance - The maximum distance to search, default 16.
+    * @returns {Block} - The nearest block of the given type.
+    * @example
+    * let coalBlock = world.getNearestBlock(bot, 'coal_ore', 16);
+    **/
     let blocks = getNearestBlocks(bot, block_type, distance, 1);
     if (blocks.length > 0) {
         return blocks[0];
@@ -176,7 +176,7 @@ export function getNearestBlock(bot, block_type, distance=16) {
 }
 
 
-export function getNearbyEntities(bot, maxDistance=16) {
+export function getNearbyEntities(bot, maxDistance = 16) {
     let entities = [];
     for (const entity of Object.values(bot.entities)) {
         const distance = entity.position.distanceTo(bot.entity.position);
@@ -191,7 +191,7 @@ export function getNearbyEntities(bot, maxDistance=16) {
     return res;
 }
 
-export function getNearestEntityWhere(bot, predicate, maxDistance=16) {
+export function getNearestEntityWhere(bot, predicate, maxDistance = 16) {
     return bot.nearestEntity(entity => predicate(entity) && bot.entity.position.distanceTo(entity.position) < maxDistance);
 }
 
@@ -204,7 +204,7 @@ export function getNearbyPlayers(bot, maxDistance) {
         if (distance > maxDistance) continue;
         if (entity.type == 'player' && entity.username != bot.username) {
             players.push({ entity: entity, distance: distance });
-        } 
+        }
     }
     players.sort((a, b) => a.distance - b.distance);
     let res = [];
@@ -220,7 +220,7 @@ export function getVillagerProfession(entity) {
     const professions = {
         0: 'Unemployed',
         1: 'Armorer',
-        2: 'Butcher', 
+        2: 'Butcher',
         3: 'Cartographer',
         4: 'Cleric',
         5: 'Farmer',
@@ -234,7 +234,7 @@ export function getVillagerProfession(entity) {
         13: 'Toolsmith',
         14: 'Weaponsmith'
     };
-    
+
     if (entity.metadata && entity.metadata[18]) {
         // Check if metadata[18] is an object with villagerProfession property
         if (typeof entity.metadata[18] === 'object' && entity.metadata[18].villagerProfession !== undefined) {
@@ -249,12 +249,12 @@ export function getVillagerProfession(entity) {
             return professions[professionId] || 'Unknown';
         }
     }
-    
+
     // If we can't determine profession but it's an adult villager
     if (entity.metadata && entity.metadata[16] !== 1) { // Not a baby
         return 'Adult';
     }
-    
+
     return 'Unknown';
 }
 
@@ -379,7 +379,7 @@ export function getNearbyPlayerNames(bot) {
 }
 
 
-export function getNearbyBlockTypes(bot, distance=16) {
+export function getNearbyBlockTypes(bot, distance = 16) {
     /**
      * Get a list of all nearby block names.
      * @param {Bot} bot - The bot to get nearby blocks for.
@@ -415,12 +415,19 @@ export async function isClearPath(bot, target) {
 }
 
 export function shouldPlaceTorch(bot) {
-    if (!bot.modes.isOn('torch_placing') || bot.interrupt_code) return false;
+    const torchModeOn = !!(bot?.modes && typeof bot.modes.isOn === 'function' && bot.modes.isOn('torch_placing'));
+    if (!torchModeOn || bot.interrupt_code) return false;
     const pos = getPosition(bot);
-    // TODO: check light level instead of nearby torches, block.light is broken
+
+    // Proper light level check (0-15)
+    // Minecraft mobs spawn at light level 0 (in 1.18+)
+    const light = bot.world.getLight(pos);
+    if (light > 7) return false; // Bright enough
+
     let nearest_torch = getNearestBlock(bot, 'torch', 6);
     if (!nearest_torch)
         nearest_torch = getNearestBlock(bot, 'wall_torch', 6);
+
     if (!nearest_torch) {
         const block = bot.blockAt(pos);
         let has_torch = bot.inventory.items().find(item => item.name === 'torch');

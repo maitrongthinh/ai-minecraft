@@ -47,7 +47,7 @@ export class EvolutionEngine {
         globalBus.subscribe(SIGNAL.SKILL_FAILED, async (event) => {
             console.log('[EvolutionEngine] 👂 Skill FAILED. Analyzing for evolution...');
             const snapshot = this.captureSnapshot(
-                { name: event.payload.skillName, params: event.payload.params },
+                { name: event.payload.skillName || event.payload.name, params: event.payload.params },
                 new Error(event.payload.error)
             );
             await this.requestFix(snapshot);
@@ -83,13 +83,15 @@ export class EvolutionEngine {
      */
     captureSnapshot(task, error) {
         const bot = this.agent.bot;
+        const errorMessage = typeof error === 'string' ? error : (error?.message || 'Unknown error');
+        const errorStack = typeof error === 'string' ? [] : (error?.stack?.split('\n').slice(0, 5) || []);
 
         const snapshot = {
             // Error info
             taskName: task?.name || 'unknown_task',
-            errorMessage: error?.message || 'Unknown error',
-            errorStack: error?.stack?.split('\n').slice(0, 5) || [],
-            errorHash: hashError(error?.message || '', task?.name || ''),
+            errorMessage,
+            errorStack,
+            errorHash: hashError(errorMessage, task?.name || ''),
 
             // Bot state
             position: bot?.entity?.position ? {
@@ -355,13 +357,21 @@ CONSTRAINTS:
             await this.registerWithToolRegistry(name, code, snapshot);
 
             // Log to Cognee for future retrieval
-            if (this.agent.cogneeMemory) {
-                await this.agent.cogneeMemory.store({
-                    type: 'skill_evolution',
-                    skillName: name,
-                    errorFixed: snapshot.errorMessage,
-                    code: code.slice(0, 500) // Truncate for memory
-                });
+            if (this.agent.cogneeMemory && typeof this.agent.cogneeMemory.storeExperience === 'function') {
+                try {
+                    await this.agent.cogneeMemory.storeExperience(
+                        this.agent.world_id || 'default',
+                        [`Evolved skill ${name} to fix error: ${snapshot.errorMessage}`],
+                        {
+                            type: 'skill_evolution',
+                            skillName: name,
+                            errorFixed: snapshot.errorMessage,
+                            codePreview: code.slice(0, 500)
+                        }
+                    );
+                } catch (memoryErr) {
+                    console.warn('[EvolutionEngine] Failed to persist evolution event to Cognee:', memoryErr.message);
+                }
             }
 
             // Emit skill learned signal

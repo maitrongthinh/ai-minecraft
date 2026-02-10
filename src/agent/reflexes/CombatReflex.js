@@ -26,7 +26,6 @@ const STATE = {
 export class CombatReflex {
     constructor(agent) {
         this.agent = agent;
-        this.bot = agent.bot;
         this.tactics = new MovementTactics(agent.bot);
 
         // State
@@ -56,11 +55,19 @@ export class CombatReflex {
         console.log('[CombatReflex] ⚔️ Gladiator initialized');
     }
 
+    _syncBot() {
+        const bot = this.agent?.bot || null;
+        this.bot = bot;
+        this.tactics.bot = bot;
+        return bot;
+    }
+
     /**
      * Enter combat mode - activates tick loop
      * @param {Entity} target - The enemy entity
      */
     enterCombat(target) {
+        if (!this._syncBot()) return;
         if (this.inCombat && this.target === target) return;
 
         this.target = target;
@@ -90,6 +97,7 @@ export class CombatReflex {
      * Exit combat mode
      */
     exitCombat() {
+        const bot = this._syncBot();
         this.state = STATE.IDLE;
         this.target = null;
         this.inCombat = false;
@@ -99,7 +107,7 @@ export class CombatReflex {
         globalBus.emitSignal(SIGNAL.COMBAT_ENDED, { reason: 'manual_exit' });
 
         // Clear control states
-        if (this.bot) this.bot.clearControlStates();
+        if (bot) bot.clearControlStates();
         this.consecutiveFailures = 0; // Reset circuit breaker
 
         console.log('[CombatReflex] 🛡️ Combat ended');
@@ -170,12 +178,12 @@ export class CombatReflex {
      * Main tick - called every 50ms during combat
      */
     async tick() {
+        const bot = this._syncBot();
+        if (!bot) return;
         if (!this.inCombat || !this.target || this._isUpdating) return;
         this._isUpdating = true;
 
         try {
-            const bot = this.bot;
-
             // PRIORITY 1: Check retreat conditions
             if (this._shouldRetreat()) {
                 this.state = STATE.RETREAT;
@@ -202,7 +210,8 @@ export class CombatReflex {
      * Check if should retreat
      */
     _shouldRetreat() {
-        const bot = this.bot;
+        const bot = this._syncBot();
+        if (!bot) return true;
 
         // Critical health (< 3 hearts)
         if (bot.health < 6) return true;
@@ -261,6 +270,7 @@ export class CombatReflex {
      * Execute combat engagement
      */
     async _executeEngagement() {
+        if (!this._syncBot()) return;
         if (!this._isValidTarget(this.target)) {
             this.exitCombat();
             return;
@@ -316,16 +326,18 @@ export class CombatReflex {
      * Check if bot has Line of Sight to target (no blocks blocking)
      */
     _hasLineOfSight(target) {
+        const bot = this._syncBot();
         if (!target) return false;
+        if (!bot?.entity?.position || !bot.world?.raycast) return false;
 
-        const eyePos = this.bot.entity.position.offset(0, 1.6, 0);
+        const eyePos = bot.entity.position.offset(0, 1.6, 0);
         const targetPos = target.position.offset(0, 1.6, 0); // Head height
 
         const direction = targetPos.minus(eyePos).normalize();
         const dist = eyePos.distanceTo(targetPos);
 
         // Raycast up to the distance of target
-        const block = this.bot.world.raycast(eyePos, direction, dist);
+        const block = bot.world.raycast(eyePos, direction, dist);
 
         // If no block found, or block is transparent/non-solid
         if (!block) return true;
@@ -338,24 +350,31 @@ export class CombatReflex {
      * Check if the bot is in a safe position (not edge of cliff)
      */
     _isTerrainSafe() {
-        const botPos = this.bot.entity.position;
+        const bot = this._syncBot();
+        if (!bot?.entity?.position) return false;
+        const botPos = bot.entity.position;
 
         // Check 1 block ahead in moving direction
-        const velocity = this.bot.entity.velocity.normalize();
-        const checkPos = botPos.plus(velocity.scaled(1.2));
+        const velocity = bot.entity.velocity;
+        const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
+        if (speed < 0.01) return true;
+
+        const direction = velocity.normalize();
+        const checkPos = botPos.plus(direction.scaled(1.2));
 
         // Check block directly underneath
-        const blockBelow = this.bot.blockAt(checkPos.offset(0, -1, 0));
-        const blockTwoBelow = this.bot.blockAt(checkPos.offset(0, -2, 0));
+        const blockBelow = bot.blockAt(checkPos.offset(0, -1, 0));
+        const blockTwoBelow = bot.blockAt(checkPos.offset(0, -2, 0));
 
-        // If both are air, it's a cliff
-        return !(!blockBelow || blockBelow.type === 0) || !(!blockTwoBelow || blockTwoBelow.type === 0);
+        // Both blocks must be solid enough to avoid stepping into a cliff edge.
+        return !!(blockBelow && blockBelow.type !== 0 && blockTwoBelow && blockTwoBelow.type !== 0);
     }
 
     /**
      * Attempt critical hit (jump + fall + attack)
      */
     async _attemptCritAttack() {
+        if (!this._syncBot()) return;
         const now = Date.now();
         if (now - this.lastAttackTime < this.attackCooldown) return;
 
@@ -379,6 +398,7 @@ export class CombatReflex {
      * Ranged attack with bow/crossbow
      */
     async _rangedAttack() {
+        if (!this._syncBot()) return;
         // Look at target
         await this.bot.lookAt(this.target.position.offset(0, 1.6, 0));
 
@@ -392,6 +412,7 @@ export class CombatReflex {
      * Emergency heal when HP < 8
      */
     async _emergencyHeal() {
+        if (!this._syncBot()) return false;
         const food = this._getBestFood();
         if (!food) {
             console.warn('[CombatReflex] No food available for healing!');
@@ -425,6 +446,7 @@ export class CombatReflex {
      * Equip best weapon for given mode
      */
     async _equipBestWeapon(mode) {
+        if (!this._syncBot()) return false;
         const weapon = this._getBestWeapon(mode);
         if (!weapon) return false;
 
@@ -445,6 +467,7 @@ export class CombatReflex {
      * Get best weapon using CombatUtils
      */
     _getBestWeapon(mode) {
+        if (!this._syncBot()) return null;
         return CombatUtils.getBestWeapon(this.bot, mode);
     }
 
@@ -452,6 +475,7 @@ export class CombatReflex {
      * Get best food using CombatUtils
      */
     _getBestFood() {
+        if (!this._syncBot()) return null;
         const items = this.bot.inventory.items();
         let bestFood = null;
         let bestScore = -999;
@@ -475,6 +499,7 @@ export class CombatReflex {
      * Check if has arrows for bow
      */
     _hasAmmo() {
+        if (!this._syncBot()) return false;
         const items = this.bot.inventory.items();
         return items.some(i => i.name === 'arrow' || i.name.includes('arrow'));
     }
@@ -483,6 +508,7 @@ export class CombatReflex {
      * Get armor durability
      */
     _getArmorDurability() {
+        if (!this._syncBot()) return { lowest: 0 };
         const slots = ['head', 'torso', 'legs', 'feet'];
         let lowest = Infinity;
 
@@ -501,6 +527,7 @@ export class CombatReflex {
      * Check if target is valid and alive
      */
     _isValidTarget(target) {
+        if (!this._syncBot()) return false;
         if (!target) return false;
         if (!target.isValid) return false;
         if (target.metadata?.[6] !== undefined && target.metadata[6] <= 0) return false; // Dead
@@ -527,6 +554,7 @@ export class CombatReflex {
      * Get distance to entity
      */
     _getDistance(entity) {
+        if (!this._syncBot()) return Infinity;
         if (!entity?.position || !this.bot?.entity?.position) return Infinity;
         return this.bot.entity.position.distanceTo(entity.position);
     }
@@ -535,9 +563,10 @@ export class CombatReflex {
      * Get safe position (home or far from target)
      */
     _getSafePosition() {
+        if (!this._syncBot()) return null;
         // Try to get home from memory
-        if (this.agent.memory_bank) {
-            const home = this.agent.memory_bank.getPlace('home');
+        if (this.agent.memory) {
+            const home = this.agent.memory.getPlace('home');
             if (home) return home;
         }
 
@@ -554,6 +583,7 @@ export class CombatReflex {
      * Find nearby hostiles
      */
     findNearbyHostiles(radius = 10) {
+        if (!this._syncBot()) return [];
         return Object.values(this.bot.entities).filter(e => {
             if (!e.position) return false;
             if (this._getDistance(e) > radius) return false;

@@ -1,4 +1,6 @@
 
+import settings from '../../settings.js';
+
 export class Arbiter {
     constructor(agent) {
         this.agent = agent;
@@ -11,22 +13,24 @@ export class Arbiter {
         // Allowed commands during emergencies
         this.SAFE_COMMANDS = ['eat', 'equip', 'hide', 'sleep', 'retreat', 'come', 'help'];
         this.FOOD_COMMANDS = ['eat', 'fish', 'hunt', 'harvest', 'cook', 'find_food'];
-
-        this.init();
     }
 
-    init() {
+    bindBot(bot) {
+        if (!bot) return;
+        this.agent.bot = bot; // Ensure sync
+
         this._physicsListener = () => this.update();
         this._idleListener = () => this.onIdle();
 
-        this.agent.bot.on('physicsTick', this._physicsListener);
+        // this.agent.bot.on('physicsTick', this._physicsListener); // Update is empty, disabling for performance
         this.agent.bot.on('idle', this._idleListener);
+        console.log('[Arbiter] 👁️ Connected to Bot Events');
     }
 
     cleanup() {
         if (!this.agent.bot) return;
         console.log('[Arbiter] 🧹 Removing event listeners...');
-        if (this._physicsListener) this.agent.bot.removeListener('physicsTick', this._physicsListener);
+        // if (this._physicsListener) this.agent.bot.removeListener('physicsTick', this._physicsListener);
         if (this._idleListener) this.agent.bot.removeListener('idle', this._idleListener);
 
         this._physicsListener = null;
@@ -99,13 +103,22 @@ export class Arbiter {
         if (this.agent.actions.isBusy()) return;
         if (this.agent.convoManager && this.agent.convoManager.inConversation()) return;
 
-        // Priority 3: Strategic Goals (NPCController)
-        if (this.agent.npc.data.curr_goal || this.agent.npc.data.goals.length > 0) {
+        // Priority 3: Strategic Goals (Legacy NPCController) - REMOVED
+        /*
+        if (this.agent.npc && this.agent.npc.data && (this.agent.npc.data.curr_goal || this.agent.npc.data.goals.length > 0)) {
             await this.agent.npc.executeNext();
             return;
         }
+        */
 
-        // Priority 4: Survival Mode / Maintenance
+        // Priority 4: Survival Mode / Strategic Objectives
+        const objective = this.agent.config.profile?.objective || settings.objective;
+        if (objective && !this.agent.self_prompter.isActive()) {
+            console.log(`[Arbiter] 🎯 No active tasks. Adopting strategic objective: "${objective}"`);
+            this.agent.self_prompter.start(objective);
+            return;
+        }
+
         if (this.is_survival_mode) {
             // Survival Logic
             // 1. Check Inventory for tools
@@ -116,7 +129,7 @@ export class Arbiter {
 
         // Priority 5: Dreaming
         // Only dream if truly nothing else to do
-        if (Math.random() < 0.05) { // Occasional dreaming
+        if (this.agent.dreamer && Math.random() < 0.05) { // Occasional dreaming
             await this.agent.dreamer.dream('Boredom');
         }
     }

@@ -3,7 +3,7 @@ import { lockdown } from '../library/lockdown.js';
 import { JsonSanitizer } from '../../utils/JsonSanitizer.js';
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
 import { ActionLogger } from '../../utils/ActionLogger.js';
-import { getBotOutputSummary, sanitizeCode } from '../../utils/mcdata.js';
+import { getBotOutputSummary } from '../../utils/mcdata.js';
 
 /**
  * CodeEngine: Unified JS Execution & Learning System
@@ -41,6 +41,13 @@ export class CodeEngine {
                 globalBus.emitSignal(SIGNAL.CODE_GENERATED, { success: false, error: err.message });
             }
         });
+    }
+
+    /**
+     * Compatibility alias for Agent.js
+     */
+    async execute(code, options = {}) {
+        return await this.executeParsedCode(code, options);
     }
 
     /**
@@ -88,7 +95,9 @@ export class CodeEngine {
     }
 
     async _generateAndLearn(agent_history, { signal } = {}) {
-        this.agent.bot.modes.pause('unstuck');
+        if (this.agent.bot?.modes && typeof this.agent.bot.modes.pause === 'function') {
+            this.agent.bot.modes.pause('unstuck');
+        }
         lockdown();
 
         let messages = agent_history.getHistory();
@@ -156,23 +165,46 @@ export class CodeEngine {
 
             // 10s Timeout for physical action execution (Predictive Safety)
             // Audit Fix: Parameterize timeout
-            const timeout = this.agent.config?.profile?.timeouts?.code_execution || 10000;
+            const timeout = this.agent.config?.profile?.timeouts?.code_execution || 90000;
 
-            await this.agent.actions.safeExec(
+            this.agent.bot.output = '';
+
+            const executionReturn = await this.agent.actions.safeExec(
                 'ai_interaction',
                 () => result.func.main(this.agent.bot),
                 timeout,
                 signal // Pass signal to safeExec
             );
 
-            const codeOutput = this.agent.bot.output?.summary || "No specific output recorded.";
+            let codeOutput = (this.agent.bot.output || '').trim();
+            if (!codeOutput) {
+                codeOutput = getBotOutputSummary(this.agent.bot);
+            }
+            this.agent.bot.output = '';
+
+            if (executionReturn && typeof executionReturn === 'object' && executionReturn.success === false) {
+                const failMessage = executionReturn.message || executionReturn.error || 'Execution returned success=false';
+                return {
+                    success: false,
+                    executionError: {
+                        name: 'ActionResultFailure',
+                        message: failMessage
+                    },
+                    codeOutput
+                };
+            }
+
             return {
                 success: true,
                 summary: `Code executed successfully.\nOutput: ${codeOutput}`,
                 codeOutput
             };
         } catch (e) {
-            const codeOutput = this.agent.bot.output?.summary || "Execution error.";
+            let codeOutput = (this.agent.bot.output || '').trim();
+            if (!codeOutput) {
+                codeOutput = getBotOutputSummary(this.agent.bot);
+            }
+            this.agent.bot.output = '';
             console.error('[CodeEngine] Execution Failure:', e);
 
             return {
@@ -199,7 +231,7 @@ export class CodeEngine {
             console.warn('[CodeEngine] Sanitizer failed, proceeding with raw code:', e.message);
         }
 
-        let src_lint_copy = "import {skills, world, Vec3} from '../../utils/mcdata.js';\nasync function main(bot) {\n" + code_clean + "\n}\nexport {main};";
+        let src_lint_copy = "import * as skills from '../../skills/library/index.js';\nimport * as world from '../../skills/library/world.js';\nimport Vec3 from 'vec3';\nasync function main(bot) {\n" + code_clean + "\n}\nexport {main};";
 
         // Dynamic evaluation in a compartment-like style or simple eval
         // For Mindcraft environment:
@@ -208,14 +240,112 @@ export class CodeEngine {
 
             // SECURITY UPDATE: Use Node.js VM for sandbox execution
             const mainFn = async (bot) => {
-                const { skills, world, Vec3 } = await import('../../utils/mcdata.js');
+                const rawSkills = await import('../../skills/library/index.js');
+                const world = await import('../../skills/library/world.js');
+                const { default: Vec3 } = await import('vec3');
                 const vm = await import('vm');
+
+                const looksLikeBot = (value) =>
+                    !!value &&
+                    (typeof value.findBlock === 'function' ||
+                        typeof value.blockAt === 'function' ||
+                        typeof value.chat === 'function');
+
+                const looksLikeAgent = (value) => !!(value && value.bot && looksLikeBot(value.bot));
+
+                const ensureOutcome = (name, result) => {
+                    if (result && typeof result === 'object' && result.success === false) {
+                        const detail = result.message || result.error || 'failed';
+                        throw new Error(`[${name}] ${detail}`);
+                    }
+                    return result;
+                };
+
+                const invokeBoundSkill = (fn, arg1, arg2) => {
+                    if (!fn) return Promise.resolve({ success: false, message: 'Skill not available' });
+                    if (looksLikeBot(arg1) || looksLikeAgent(arg1)) {
+                        return Promise.resolve(fn(arg1, arg2 ?? {})).then(r => ensureOutcome(fn.name || 'skill', r));
+                    }
+                    if (arg2 !== undefined) {
+                        return Promise.resolve(fn(arg1, arg2)).then(r => ensureOutcome(fn.name || 'skill', r));
+                    }
+                    if (arg1 && typeof arg1 === 'object') {
+                        return Promise.resolve(fn(bot, arg1)).then(r => ensureOutcome(fn.name || 'skill', r));
+                    }
+                    return Promise.resolve(fn(bot, {})).then(r => ensureOutcome(fn.name || 'skill', r));
+                };
+
+                const boundSkills = {
+                    ...rawSkills,
+                    find_shelter: (arg1, arg2) => invokeBoundSkill(rawSkills.find_shelter, arg1, arg2),
+                    gather_wood: (arg1, arg2) => invokeBoundSkill(rawSkills.gather_wood, arg1, arg2),
+                    gather_resources: (arg1, arg2) => invokeBoundSkill(rawSkills.gather_resources, arg1, arg2),
+                    mine_ores: (arg1, arg2) => invokeBoundSkill(rawSkills.mine_ores, arg1, arg2),
+                    craft_items: (arg1, arg2) => invokeBoundSkill(rawSkills.craft_items, arg1, arg2),
+                    place_blocks: (arg1, arg2) => invokeBoundSkill(rawSkills.place_blocks, arg1, arg2),
+                    smelt_items: (arg1, arg2) => invokeBoundSkill(rawSkills.smelt_items, arg1, arg2),
+                    StrategicMovement: (arg1, arg2) => invokeBoundSkill(rawSkills.find_shelter, arg1, arg2)
+                };
+
+                const skills = new Proxy(boundSkills, {
+                    get(target, prop) {
+                        if (prop in target) {
+                            return target[prop];
+                        }
+                        if (typeof prop === 'string') {
+                            return async () => {
+                                throw new Error(`Unknown skill: ${prop}`);
+                            };
+                        }
+                        return undefined;
+                    }
+                });
+
+                const coreActions = this.agent?.actionAPI;
+                const actions = {
+                    move_to: async (position, options = {}) => {
+                        if (!coreActions) throw new Error('ActionAPI unavailable');
+                        return ensureOutcome('move_to', await coreActions.moveTo(position, options));
+                    },
+                    gather_nearby: async (matching, count = 1, options = {}) => {
+                        if (!coreActions) throw new Error('ActionAPI unavailable');
+                        return ensureOutcome('gather_nearby', await coreActions.gatherNearby(matching, count, options));
+                    },
+                    craft_first_available: async (items = [], count = 1, options = {}) => {
+                        if (!coreActions) throw new Error('ActionAPI unavailable');
+                        return ensureOutcome('craft_first_available', await coreActions.craftFirstAvailable(items, count, options));
+                    },
+                    ensure_item: async (itemName, targetCount = 1, options = {}) => {
+                        if (!coreActions) throw new Error('ActionAPI unavailable');
+                        return ensureOutcome('ensure_item', await coreActions.ensureItem(itemName, targetCount, options));
+                    },
+                    collect_drops: async (options = {}) => {
+                        if (!coreActions) throw new Error('ActionAPI unavailable');
+                        return ensureOutcome('collect_drops', await coreActions.collectDroppedItems(options));
+                    },
+                    eat_if_hungry: async (options = {}) => {
+                        if (!coreActions) throw new Error('ActionAPI unavailable');
+                        return ensureOutcome('eat_if_hungry', await coreActions.eatIfHungry(options));
+                    }
+                };
+
+                const skillAliases = {
+                    find_shelter: (options = {}) => skills.find_shelter?.(bot, options),
+                    gather_wood: (options = {}) => skills.gather_wood?.(bot, options),
+                    gather_resources: (options = {}) => skills.gather_resources?.(bot, options),
+                    mine_ores: (options = {}) => skills.mine_ores?.(bot, options),
+                    craft_items: (options = {}) => skills.craft_items?.(bot, options),
+                    place_blocks: (options = {}) => skills.place_blocks?.(bot, options),
+                    smelt_items: (options = {}) => skills.smelt_items?.(bot, options)
+                };
 
                 const sandbox = {
                     bot,
                     skills,
+                    actions,
                     world,
                     Vec3,
+                    ...skillAliases,
                     console, // Allow logging
                     setTimeout,
                     clearTimeout,

@@ -55,6 +55,10 @@ Chúng tôi xây dựng MindOS để giải quyết vấn đề **"Sụp Đổ N
 - **Structured Thought:** The `UnifiedBrain` thinks in strict JSON, separating internal monologue from external speech.
 - **Token Economy:** `InventorySummarizer` compresses data by 40%, allowing for longer context windows.
 
+### 6. 🚀 Strategic Autonomy (v2.5) / Tự Chủ Chiến Lược
+- **Permanent Victory Objective:** The bot is now pre-configured with a long-term goal ("Beat Minecraft"). It will proactively gather resources, explore, and evolve without human intervention.
+  - *Mục Tiêu Chiến Thắng Vĩnh Viễn:* Bot hiện được cấu hình sẵn mục tiêu dài hạn ("Phá đảo Minecraft"). Nó sẽ chủ động thu thập tài nguyên, khám phá và tiến hóa mà không cần sự can thiệp của con người.
+
 ---
 
 ## 🛠️ System Architecture / Kiến Trúc Hệ Thống

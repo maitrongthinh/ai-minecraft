@@ -14,6 +14,7 @@ export const StandardProfileSchema = {
     model: {
         provider: "openai", // or "anthropic", "gemini", etc.
         model: "gpt-4o",
+        apiKeyEnv: "OPENAI_API_KEY",
         params: {
             temperature: 0.7,
             max_tokens: 2048

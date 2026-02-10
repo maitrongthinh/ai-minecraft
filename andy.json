@@ -13,5 +13,6 @@
         "torch_placing": true,
         "idle_staring": true,
         "cheat": false
-    }
+    },
+    "objective": "Beat Minecraft"
 }

@@ -14,7 +14,12 @@ export async function init(host_public = false, port = 8080, auto_open_ui = true
         console.error('Already initiliazed!');
         return;
     }
-    mindserver = createMindServer(host_public, port);
+    mindserver = createMindServer(host_public, port, {
+        createAgent: (agentSettings) => createAgent(agentSettings),
+        startAgent: (agentName) => startAgent(agentName),
+        stopAgent: (agentName) => stopAgent(agentName),
+        destroyAgent: (agentName) => destroyAgent(agentName)
+    });
     mindserver_port = port;
     connected = true;
     if (auto_open_ui) {

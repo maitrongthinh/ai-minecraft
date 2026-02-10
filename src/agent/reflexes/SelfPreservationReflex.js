@@ -22,6 +22,7 @@ export class SelfPreservationReflex {
     }
 
     async tick() {
+        this.bot = this.agent?.bot || null;
         if (!this.bot || !this.bot.entity) return;
 
         // Critical Status Checks

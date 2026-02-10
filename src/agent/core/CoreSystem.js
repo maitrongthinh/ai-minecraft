@@ -40,6 +40,8 @@ export class CoreSystem {
         // Safeguard Timers (still null initially)
         this.zombieInterval = null;
         this.watchdogInterval = null;
+        this.activeTimers = new Set();
+        this.lastPos = null;
 
         console.log('[CoreSystem] 🧠 Core System Instantiated');
     }
@@ -180,9 +182,6 @@ export class CoreSystem {
         console.log('[CoreSystem] 🛑 Shutting down Kernel...');
         this.isRunning = false;
 
-        // Initialized in constructor to avoid undefined access
-        if (!this.activeTimers) this.activeTimers = new Set();
-
         // Clear floating timers
         for (const timerId of this.activeTimers) {
             clearTimeout(timerId);
@@ -198,12 +197,6 @@ export class CoreSystem {
         if (this.watchdogInterval) clearInterval(this.watchdogInterval);
         this.zombieInterval = null;
         this.watchdogInterval = null;
-
-        // Clear floating timers
-        for (const timerId of this.activeTimers) {
-            clearTimeout(timerId);
-        }
-        this.activeTimers.clear();
 
         if (this.scheduler) {
             this.scheduler.shutdown();

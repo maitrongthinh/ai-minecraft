@@ -7,13 +7,13 @@ export function stringifyTurns(turns) {
             res += `\nSystem output: ${turn.content}`;
         } else {
             res += `\nUser input: ${turn.content}`;
-        
+
         }
     }
     return res.trim();
 }
 
-export function toSinglePrompt(turns, system=null, stop_seq='***', model_nickname='assistant') {
+export function toSinglePrompt(turns, system = null, stop_seq = '***', model_nickname = 'assistant') {
     let prompt = system ? `${system}${stop_seq}` : '';
     let role = '';
     turns.forEach((message) => {
@@ -44,9 +44,10 @@ export function wordOverlapScore(text1, text2) {
 export function strictFormat(turns) {
     let prev_role = null;
     let messages = [];
-    let filler = {role: 'user', content: '_'};
-    for (let msg of turns) {
-        if (typeof msg.content === 'string')  {
+    let filler = { role: 'user', content: '_' };
+    for (let turn of turns) {
+        let msg = { ...turn }; // Clone to avoid side effects
+        if (typeof msg.content === 'string') {
             msg.content = msg.content.trim();
         }
         if (msg.role === 'system') {
@@ -60,13 +61,17 @@ export function strictFormat(turns) {
         }
         else if (msg.role === prev_role) {
             // combine new message with previous message instead of adding a new one
-            messages[messages.length-1].content += '\n' + msg.content;
+            // create NEW object for mutation to be absolutely safe
+            const lastIdx = messages.length - 1;
+            messages[lastIdx] = {
+                ...messages[lastIdx],
+                content: messages[lastIdx].content + '\n' + msg.content
+            };
         }
         else {
             messages.push(msg);
         }
         prev_role = msg.role;
-        
     }
     if (messages.length > 0 && messages[0].role !== 'user') {
         messages.unshift(filler); // anthropic requires user message to start

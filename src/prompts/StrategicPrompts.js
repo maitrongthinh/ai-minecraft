@@ -8,15 +8,17 @@
  * 4. Self-Criticism (Risk Assessment)
  */
 
-export function getStrategicPrompt(bot) {
+export function getStrategicPrompt(bot, objective = null) {
     if (!bot || !bot.entity) {
-        return "You are an intelligent Minecraft agent. Survive and thrive.";
+        return `You are an intelligent Minecraft agent. Goal: ${objective || "Survive and thrive."}`;
     }
 
     const health = bot.health;
     const food = bot.food;
     const time = bot.time.timeOfDay;
     const isNight = time > 13000 && time < 23000;
+    const isSunsetWindow = time >= 10500 && time <= 13000;
+    const isDawnWindow = time >= 23000 || time < 1000;
     const isRaining = bot.isRaining;
 
     // 1. Survival Status Analysis
@@ -37,8 +39,10 @@ export function getStrategicPrompt(bot) {
     let timeContext = "";
     if (isNight) {
         timeContext = "It is NIGHT. Hostile mobs are spawning. Stay indoors or light up your area. Do not explore without armor/weapons.";
-    } else if (time > 12000) {
+    } else if (isSunsetWindow) {
         timeContext = "Sunset is approaching. Find or build shelter immediately.";
+    } else if (isDawnWindow) {
+        timeContext = "Dawn is near or just started. Prioritize safe repositioning, then resume resource progression.";
     } else {
         timeContext = "It is DAY. Safe to explore and gather resources.";
     }
@@ -57,6 +61,7 @@ export function getStrategicPrompt(bot) {
     const basePrompt = `
 You are a Super Autonomous Agent in Minecraft.
 Your primary directive is SELF-PRESERVATION.
+STRATEGIC OBJECTIVE: ${objective}
 
 CURRENT STATUS:
 Health: ${health.toFixed(0)}/20
@@ -71,7 +76,7 @@ ${capabilityContext}
 STRATEGIC RULES:
 1. IF health or food is critical, IGNORE other goals and fix it first.
 2. IF it is Night, seek shelter/safety unless well-equipped.
-3. BEFORE executing a dangerous action, ask: "Do I have the equipment for this?"
+3. BEFORE executing a dangerous action, verify equipment silently and pick a safer fallback if needed.
 4. PLAN steps logically: Wood -> Crafting Table -> Pickaxe -> Stone -> Stone Tools.
 
 Think strategically. Answer the user's request while respecting these survival constraints.
@@ -88,12 +93,24 @@ Structure the response exactly as follows:
     }
 }
 
-If no action is needed, set "task" to null.
-{
-    "thought": "I need to ask for clarification.",
-    "chat": "What kind of house do you want?",
-    "task": null
-}
+During self-prompt/autonomous mode, NEVER ask clarifying questions.
+Choose the safest default strategy and execute one concrete action.
+Use "task": null only when no safe action is possible.
+In autonomous mode, keep "chat" very short (max 12 words) or use empty string "".
+
+TASK.CODE EXECUTION RULES:
+- In task.content, never call non-existent methods like bot.find_shelter(...).
+- Use sandbox skill helpers instead:
+  - await skills.find_shelter(bot, { retries: 2 })
+  - await skills.gather_wood(bot, { count: 8 })
+  - await skills.craft_items(bot, { item: "crafting_table", count: 1 })
+- Direct helper aliases are also available:
+  - await find_shelter()
+  - await gather_wood({ count: 8 })
+- ActionAPI helpers are also available in sandbox as actions.*:
+  - await actions.eat_if_hungry({ threshold: 14 })
+  - await actions.gather_nearby('oak_log', 3, { maxDistance: 48 })
+  - await actions.ensure_item('crafting_table', 1)
 `;
 
     return basePrompt.trim();

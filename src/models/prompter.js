@@ -58,10 +58,14 @@ export class Prompter {
             max_tokens = this.profile.max_tokens;
 
         let chat_model_profile = selectAPI(this.profile.model);
+        if (this.profile.params) chat_model_profile.params = { ...this.profile.params, ...chat_model_profile.params };
+        if (this.profile.url) chat_model_profile.url = this.profile.url;
         this.chat_model = createModel(chat_model_profile);
 
         if (this.profile.code_model) {
             let code_model_profile = selectAPI(this.profile.code_model);
+            if (this.profile.params) code_model_profile.params = { ...this.profile.params, ...code_model_profile.params };
+            if (this.profile.url) code_model_profile.url = this.profile.url;
             this.code_model = createModel(code_model_profile);
         }
         else {
@@ -89,10 +93,14 @@ export class Prompter {
             this.embedding_model = createModel(embedding_model_profile);
         }
         else {
-            this.embedding_model = createModel({ api: chat_model_profile.api });
+            this.embedding_model = createModel({
+                api: chat_model_profile.api,
+                url: chat_model_profile.url,
+                params: chat_model_profile.params
+            });
         }
 
-        this.skill_libary = new SkillLibrary(agent, this.embedding_model);
+        this.skillLibrary = new SkillLibrary(agent, this.embedding_model);
         mkdirSync(`./bots/${name}`, { recursive: true });
         writeFileSync(`./bots/${name}/last_profile.json`, JSON.stringify(this.profile, null, 4), (err) => {
             if (err) {
@@ -123,7 +131,7 @@ export class Prompter {
             await Promise.all([
                 this.convo_examples.load(this.profile.conversation_examples),
                 this.coding_examples.load(this.profile.coding_examples),
-                this.skill_libary.initSkillLibrary()
+                this.skillLibrary.init()
             ]).catch(error => {
                 // Preserve error details
                 console.error('Failed to initialize examples. Error details:', error);
@@ -137,6 +145,39 @@ export class Prompter {
             console.error('Stack trace:', error.stack);
             throw error; // Re-throw with preserved details
         }
+    }
+
+    /**
+     * Unified Chat Gateway: Supports dynamic model selection
+     * @param {Array} messages - Chat history
+     * @param {Object} modelConfig - Optional model override
+     */
+    async chat(messages, modelConfig = null) {
+        await this.checkCooldown();
+        const model = modelConfig ? createModel({
+            ...selectAPI(modelConfig.model),
+            url: modelConfig.url || this.profile.url,
+            params: { ...this.profile.params, ...modelConfig.params, apiKeyEnv: modelConfig.apiKeyEnv }
+        }) : this.chat_model;
+
+        // Task 25: Use RequestQueue
+        let res = await this.requestQueue.add(
+            () => model.sendRequest(messages, this.profile.conversing),
+            { priority: this.requestQueue.PRIORITY.NORMAL }
+        );
+
+        // Reasoning Model Support: Strip <think> tags if present
+        if (typeof res === 'string' && res.includes('<think>')) {
+            res = res.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        }
+        return res;
+    }
+
+    /**
+     * Compatibility wrapper for generateCode (used by UnifiedBrain)
+     */
+    async generateCode(prompt, modelConfig = null) {
+        return await this.chat([{ role: 'user', content: prompt }], modelConfig);
     }
 
     async replaceStrings(prompt, messages, examples = null, to_summarize = [], last_goals = null) {
@@ -186,7 +227,7 @@ export class Prompter {
 
             prompt = prompt.replaceAll(
                 '$CODE_DOCS',
-                await this.skill_libary.getRelevantSkillDocs(code_task_content, settings.relevant_docs_count)
+                await this.skillLibrary.getRelevantSkillDocs(code_task_content, settings.relevant_docs_count)
             );
         }
         if (prompt.includes('$EXAMPLES') && examples !== null)

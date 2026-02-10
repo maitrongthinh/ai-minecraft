@@ -9,6 +9,10 @@ function log(bot, message) {
     bot.output += message + '\n';
 }
 
+function modeIsOn(bot, mode) {
+    return !!(bot?.modes && typeof bot.modes.isOn === 'function' && bot.modes.isOn(mode));
+}
+
 const blockPlaceDelay = settings.block_place_delay == null ? 0 : settings.block_place_delay;
 const useDelay = blockPlaceDelay > 0;
 
@@ -16,7 +20,7 @@ export async function breakBlockAt(bot, x, y, z) {
     if (x == null || y == null || z == null) throw new Error('Invalid position.');
     let block = bot.blockAt(new Vec3(x, y, z));
     if (block.name !== 'air' && block.name !== 'water' && block.name !== 'lava') {
-        if (bot.modes.isOn('cheat')) {
+        if (modeIsOn(bot, 'cheat')) {
             if (useDelay) { await new Promise(resolve => setTimeout(resolve, blockPlaceDelay)); }
             let msg = '/setblock ' + Math.floor(x) + ' ' + Math.floor(y) + ' ' + Math.floor(z) + ' air';
             bot.chat(msg);
@@ -42,13 +46,16 @@ export async function breakBlockAt(bot, x, y, z) {
 }
 
 export async function placeBlock(bot, blockType, x, y, z, placeOn = 'bottom', dontCheat = false) {
+    if (!blockType || typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
+        throw new Error('Invalid placeBlock parameters: blockType, x, y, z are required');
+    }
     const target_dest = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
 
     if (blockType === 'air') {
         return await breakBlockAt(bot, x, y, z);
     }
 
-    if (bot.modes.isOn('cheat') && !dontCheat) {
+    if (modeIsOn(bot, 'cheat') && !dontCheat) {
         if (useDelay) { await new Promise(resolve => setTimeout(resolve, blockPlaceDelay)); }
         let msg = '/setblock ' + Math.floor(x) + ' ' + Math.floor(y) + ' ' + Math.floor(z) + ' ' + blockType;
         bot.chat(msg);
@@ -359,7 +366,7 @@ export async function tillAndSow(bot, x, y, z, seedType = null) {
     let block = bot.blockAt(pos);
     log(bot, `Planting ${seedType} at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)}.`);
 
-    if (bot.modes.isOn('cheat')) {
+    if (modeIsOn(bot, 'cheat')) {
         let to_remove = ['_seed', '_seeds'];
         for (let remove of to_remove) {
             if (seedType.endsWith(remove)) {

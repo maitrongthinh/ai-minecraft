@@ -9,7 +9,10 @@ export class SelfPrompter {
         this.interrupt = false;
         this.prompt = '';
         this.idle_time = 0;
-        this.cooldown = 2000;
+        this.cooldown = 3500;
+        this.last_response = '';
+        this.stuck_count = 0;
+        this.provider_failure_count = 0;
     }
 
     start(prompt) {
@@ -21,6 +24,7 @@ export class SelfPrompter {
         }
         this.state = ACTIVE;
         this.prompt = prompt;
+        this.provider_failure_count = 0;
         this.startLoop();
     }
 
@@ -60,16 +64,22 @@ export class SelfPrompter {
         }
         console.log('starting self-prompt loop')
         this.loop_active = true;
-        let no_command_count = 0;
-        const MAX_NO_COMMAND = 3;
+        let no_response_count = 0;
+        const MAX_NO_RESPONSE = 3;
         while (!this.interrupt) {
-            const msg = `You are self-prompting with the goal: '${this.prompt}'. Your next response MUST contain a command with this syntax: !commandName. Respond:`;
-            
-            let used_command = await this.agent.handleMessage('system', msg, -1);
-            if (!used_command) {
-                no_command_count++;
-                if (no_command_count >= MAX_NO_COMMAND) {
-                    let out = `Agent did not use command in the last ${MAX_NO_COMMAND} auto-prompts. Stopping auto-prompting.`;
+            let msg = `You are self-prompting with the goal: '${this.prompt}'.
+Return VALID JSON only with keys: thought, chat, task.
+task must be actionable code whenever possible; do not leave task null unless absolutely blocked.
+Do not ask clarifying questions during self-prompting. Execute the next concrete survival step now.`;
+            if (this.stuck_count >= 2) {
+                msg += '\nYou are repeating yourself. Switch strategy and execute a different concrete action immediately.';
+            }
+
+            let response = await this.agent.handleMessage('system', msg, -1);
+            if (!response) {
+                no_response_count++;
+                if (no_response_count >= MAX_NO_RESPONSE) {
+                    let out = `Agent produced no useful response in the last ${MAX_NO_RESPONSE} auto-prompts. Stopping auto-prompting.`;
                     this.agent.openChat(out);
                     console.warn(out);
                     this.state = STOPPED;
@@ -77,13 +87,60 @@ export class SelfPrompter {
                 }
             }
             else {
-                no_command_count = 0;
-                await new Promise(r => setTimeout(r, this.cooldown));
+                no_response_count = 0;
+
+                const isProviderFailure = typeof response === 'string' && (
+                    response.includes('[BRAIN_DISCONNECTED]') ||
+                    response.includes('Provider API disconnected') ||
+                    response.includes('error while thinking')
+                );
+                const brainDegraded = this.agent.brain &&
+                    typeof this.agent.brain.isProviderDegraded === 'function' &&
+                    this.agent.brain.isProviderDegraded();
+
+                if (isProviderFailure || brainDegraded) {
+                    this.provider_failure_count++;
+                } else {
+                    this.provider_failure_count = 0;
+                }
+
+                // Stop quickly when provider is degraded to avoid hot-looping API errors.
+                if (this.provider_failure_count >= 2) {
+                    console.warn('[SelfPrompter] Provider appears degraded. Pausing self-prompting.');
+                    this.state = PAUSED;
+                    break;
+                }
+
+                // STUCK DETECTION: If responding same thing multiple times in a row -> Stop
+                // response is now a string or processResult.result
+                if (response === this.last_response) {
+                    this.stuck_count++;
+                } else {
+                    this.stuck_count = 0;
+                }
+                this.last_response = response;
+
+                if (this.stuck_count >= 3) {
+                    console.warn('[SelfPrompter] Loop pattern detected. Forcing strategy switch.');
+                    this.stuck_count = 0;
+                    this.last_response = '';
+                    await this.agent.handleMessage(
+                        'system',
+                        "UNSTUCK MODE: Do not ask clarification. Execute one concrete survival action immediately using available skills.",
+                        -1
+                    );
+                    await new Promise(r => setTimeout(r, this.cooldown));
+                    continue;
+                }
+
+                const dynamicCooldown = this.cooldown + (this.provider_failure_count * 1500);
+                await new Promise(r => setTimeout(r, dynamicCooldown));
             }
         }
         console.log('self prompt loop stopped')
         this.loop_active = false;
         this.interrupt = false;
+        this.provider_failure_count = 0;
     }
 
     update(delta) {
@@ -117,7 +174,7 @@ export class SelfPrompter {
         this.interrupt = false;
     }
 
-    async stop(stop_action=true) {
+    async stop(stop_action = true) {
         this.interrupt = true;
         if (stop_action)
             await this.agent.actions.stop();

@@ -1,3 +1,4 @@
+import '../utils/keys.js';
 import { Agent } from '../agent/agent.js';
 import { serverProxy } from '../agent/mindserver_proxy.js';
 import yargs from 'yargs';

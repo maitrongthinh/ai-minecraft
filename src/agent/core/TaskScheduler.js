@@ -70,21 +70,52 @@ export class TaskScheduler {
             const utility = this.calculateUtility('survival_reflex', 100);
             this.schedule('survival_reflex', utility, async () => {
                 await this.agent.bot.stopDigging();
-                console.log(`[CORTEX] SURVIVAL REFLEX EXECUTED (Utility: ${utility})`);
+                console.log(`[CORTEX] 🚨 CRITICAL SURVIVAL REFLEX (HP: ${payload.health})`);
+
+                // If in combat, trigger retreat
+                if (this.agent.combatReflex?.inCombat) {
+                    await this.agent.combatReflex._executeRetreat();
+                } else {
+                    // Try to eat for regeneration
+                    const food = this.agent.bot.inventory.items().find(i => i.name.includes('cook') || i.name.includes('apple') || i.name.includes('steak'));
+                    if (food) {
+                        await this.agent.bot.equip(food, 'hand');
+                        this.agent.bot.activateItem();
+                        await new Promise(r => setTimeout(r, 1610));
+                        this.agent.bot.deactivateItem();
+                    }
+                }
             }, false);
         }));
 
         this._unsubscribers.push(globalBus.subscribe(SIGNAL.HUNGRY, (payload) => {
             const utility = this.calculateUtility('eat_reflex', 90);
             this.schedule('eat_reflex', utility, async () => {
-                console.log(`[CORTEX] EAT REFLEX EXECUTED (Utility: ${utility})`);
+                console.log(`[CORTEX] 🍖 Hunger Instinct (Food: ${payload.food})`);
+                if (this.agent.bot.food < 20) {
+                    const food = this.agent.bot.inventory.items().find(i => i.name.includes('steak') || i.name.includes('bread') || i.name.includes('apple'));
+                    if (food) {
+                        await this.agent.bot.equip(food, 'hand');
+                        this.agent.bot.activateItem();
+                        await new Promise(r => setTimeout(r, 1610));
+                        this.agent.bot.deactivateItem();
+                    }
+                }
             }, false);
         }));
 
         this._unsubscribers.push(globalBus.subscribe(SIGNAL.THREAT_DETECTED, (payload) => {
             const utility = this.calculateUtility('combat_reflex', 95);
             this.schedule('combat_reflex', utility, async () => {
-                console.log(`[CORTEX] COMBAT REFLEX EXECUTED (Utility: ${utility})`);
+                if (this.agent.combatReflex && !this.agent.combatReflex.inCombat) {
+                    const attacker = this.agent.combatReflex.findAttacker();
+                    if (attacker) {
+                        console.log(`[CORTEX] ⚔️ Attacker found: ${attacker.name || attacker.username}. Engaging!`);
+                        this.agent.combatReflex.enterCombat(attacker);
+                    } else {
+                        console.warn('[CORTEX] Threat detected but no attacker found nearby.');
+                    }
+                }
             }, false);
         }));
     }
@@ -111,7 +142,7 @@ export class TaskScheduler {
 
         // RULE 2: Insertion Sort by Priority (desc)
         // Ensures queue is always sorted highest priority first
-        const index = this.queue.findIndex(t => t.priority < priority);
+        const index = this.queue.findIndex(t => t.priority < dynamicPriority);
         if (index === -1) {
             this.queue.push(task);
         } else {
@@ -254,7 +285,15 @@ export class TaskScheduler {
             // Report failure to Cognee for learning from mistakes
             if (this.agent.cogneeMemory) {
                 try {
-                    await this.agent.cogneeMemory.reportFailure(task.name, error.message);
+                    await this.agent.cogneeMemory.storeExperience(
+                        this.agent.world_id || 'default',
+                        [`Task failure: ${task.name}. Error: ${error.message}`],
+                        {
+                            type: 'task_failure',
+                            task: task.name,
+                            priority: task.priority
+                        }
+                    );
                 } catch (e) {
                     // Silently fail - don't crash the scheduler for logging issues
                 }

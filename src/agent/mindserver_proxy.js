@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import convoManager from './conversation.js';
+import convoManager, { setBotChatTransport } from './conversation.js';
 import settings from '../../settings.js';
 import { getFullState } from './library/full_state.js';
 
@@ -39,7 +39,7 @@ class MindServerProxy {
             console.log('Disconnected from MindServer');
             this.connected = false;
             if (this.agent) {
-                this.agent.cleanKill('Disconnected from MindServer. Killing agent process.');
+                void this.agent.shutdown('Disconnected from MindServer. Shutting down agent process.');
             }
         });
 
@@ -58,12 +58,14 @@ class MindServerProxy {
 
         this.socket.on('restart-agent', (agentName) => {
             console.log(`Restarting agent: ${agentName}`);
-            this.agent.cleanKill();
+            if (this.agent) {
+                void this.agent.shutdown('Restart requested by MindServer.');
+            }
         });
 
         this.socket.on('send-message', (data) => {
             try {
-                this.agent.respondFunc(data.from, data.message);
+                this.agent.handleMessage(data.from, data.message);
             } catch (error) {
                 console.error('Error: ', JSON.stringify(error, Object.getOwnPropertyNames(error)));
             }
@@ -71,7 +73,7 @@ class MindServerProxy {
 
         this.socket.on('get-full-state', (callback) => {
             try {
-                const state = getFullState(this.agent);
+                const state = getFullState(this.agent, this.agents);
                 callback(state);
             } catch (error) {
                 console.error('Error getting full state:', error);
@@ -124,10 +126,17 @@ class MindServerProxy {
 
 // Create and export a singleton instance
 export const serverProxy = new MindServerProxy();
+setBotChatTransport((agentName, json) => sendBotChatToServer(agentName, json));
 
 // for chatting with other bots
 export function sendBotChatToServer(agentName, json) {
-    serverProxy.getSocket().emit('chat-message', agentName, json);
+    const socket = serverProxy.getSocket();
+    if (!socket) {
+        console.warn('[MindServerProxy] Cannot send bot chat: socket unavailable');
+        return false;
+    }
+    socket.emit('chat-message', agentName, json);
+    return true;
 }
 
 // for sending general output to server for display

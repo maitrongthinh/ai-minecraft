@@ -1,3 +1,7 @@
+import minecraftData from 'minecraft-data';
+import { RetryHelper } from '../../utils/RetryHelper.js';
+import { goToPosition } from './movement_skills.js';
+
 /**
  * MCP-Compliant Skill: Gather Resources
  * 
@@ -17,7 +21,10 @@ export const metadata = {
         properties: {
             resource: {
                 type: 'string',
-                enum: ['wood', 'stone', 'food', 'sand', 'dirt'],
+                enum: [
+                    'wood', 'oak_log', 'birch_log', 'spruce_log', 'jungle_log', 'acacia_log', 'dark_oak_log',
+                    'mangrove_log', 'cherry_log', 'stone', 'food', 'sand', 'dirt'
+                ],
                 description: 'Type of resource to gather'
             },
             count: {
@@ -49,15 +56,18 @@ export const metadata = {
 };
 
 // Execution function
-export default async function execute(agent, params) {
+export default async function execute(agent, params = {}) {
     const { resource, count, maxDistance = 32 } = params;
     const startTime = Date.now();
+    const bot = agent?.bot || agent;
 
     try {
-        console.log(`[gather_resources] Gathering ${count}x ${resource}...`);
+        const normalizedResource = String(resource || 'wood').trim().toLowerCase();
+        const safeCount = Math.max(1, Math.min(Number.isFinite(count) ? Number(count) : 8, 64));
+        console.log(`[gather_resources] Gathering ${safeCount}x ${normalizedResource || 'wood'}...`);
 
         // Validate bot status
-        if (!agent.bot) {
+        if (!bot) {
             return {
                 success: false,
                 gathered: 0,
@@ -68,28 +78,44 @@ export default async function execute(agent, params) {
 
         // Map resource to block/entity type
         const resourceMap = {
-            'wood': ['oak_log', 'birch_log', 'spruce_log'],
+            'wood': [
+                'oak_log', 'birch_log', 'spruce_log', 'jungle_log', 'acacia_log',
+                'dark_oak_log', 'mangrove_log', 'cherry_log'
+            ],
             'stone': ['stone', 'cobblestone'],
             'food': ['apple', 'bread', 'cooked_beef'],
             'sand': ['sand'],
             'dirt': ['dirt']
         };
 
-        const targets = resourceMap[resource];
+        const woodAliases = new Set([
+            'log', 'oak_log', 'birch_log', 'spruce_log', 'jungle_log', 'acacia_log',
+            'dark_oak_log', 'mangrove_log', 'cherry_log'
+        ]);
+        const resolvedResource = woodAliases.has(normalizedResource)
+            ? 'wood'
+            : (resourceMap[normalizedResource] ? normalizedResource : 'wood');
+
+        const targets = [...(resourceMap[resolvedResource] || resourceMap.wood)];
+        if (woodAliases.has(normalizedResource) && normalizedResource !== 'log') {
+            targets.unshift(normalizedResource);
+        }
+
         if (!targets) {
             return {
                 success: false,
                 gathered: 0,
-                message: `Unknown resource type: ${resource}`,
+                message: `Unknown resource type: ${normalizedResource}`,
                 timeElapsed: Date.now() - startTime
             };
         }
 
         // Find nearest block of this type
-        const mcData = require('minecraft-data')(agent.bot.version);
-        const blockType = mcData.blocksByName[targets[0]];
-
-        if (!blockType) {
+        const mcData = minecraftData(bot.version);
+        const blockTypeIds = targets
+            .map(name => mcData.blocksByName[name]?.id)
+            .filter(id => typeof id === 'number');
+        if (blockTypeIds.length === 0) {
             return {
                 success: false,
                 gathered: 0,
@@ -98,11 +124,37 @@ export default async function execute(agent, params) {
             };
         }
 
+        const withTimeout = (promise, timeoutMs, label) => Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs))
+        ]);
+
+        const mineTargetBlock = async (targetPos) => {
+            const latest = bot.blockAt(targetPos);
+            if (!latest || !blockTypeIds.includes(latest.type)) {
+                throw new Error(`Target ${resolvedResource} block disappeared`);
+            }
+
+            const distance = bot.entity.position.distanceTo(latest.position);
+            if (distance > 4.5) {
+                const moved = await withTimeout(
+                    goToPosition(bot, latest.position.x, latest.position.y, latest.position.z, 2),
+                    12000,
+                    'goToPosition'
+                );
+                if (!moved) {
+                    throw new Error(`Cannot reach ${resolvedResource} at ${latest.position.x},${latest.position.y},${latest.position.z}`);
+                }
+            }
+
+            await withTimeout(bot.dig(latest, true), 10000, 'dig');
+        };
+
         // Use bot's skill system to gather
         let gathered = 0;
-        for (let i = 0; i < count; i++) {
-            const block = agent.bot.findBlock({
-                matching: blockType.id,
+        for (let i = 0; i < safeCount; i++) {
+            const block = bot.findBlock({
+                matching: (candidate) => candidate && blockTypeIds.includes(candidate.type),
                 maxDistance: maxDistance
             });
 
@@ -110,20 +162,39 @@ export default async function execute(agent, params) {
                 return {
                     success: gathered > 0,
                     gathered,
-                    message: `Gathered ${gathered}/${count} (no more ${resource} found within ${maxDistance} blocks)`,
+                    message: `Gathered ${gathered}/${safeCount} (no more ${resolvedResource} found within ${maxDistance} blocks)`,
                     timeElapsed: Date.now() - startTime
                 };
             }
 
             // Dig block
             try {
-                await agent.bot.dig(block);
+                if (agent?.actionAPI) {
+                    const mined = await agent.actionAPI.mine(block, {
+                        retries: 2,
+                        baseDelay: 250,
+                        executor: async () => mineTargetBlock(block.position)
+                    });
+                    if (!mined.success) {
+                        throw new Error(mined.error || 'mine failed');
+                    }
+                } else {
+                    await RetryHelper.retry(
+                        async () => mineTargetBlock(block.position),
+                        {
+                            context: `gather_resources:${resolvedResource}`,
+                            maxRetries: 2,
+                            baseDelay: 250,
+                            maxDelay: 800
+                        }
+                    );
+                }
                 gathered++;
             } catch (error) {
                 return {
                     success: gathered > 0,
                     gathered,
-                    message: `Gathered ${gathered}/${count} (error: ${error.message})`,
+                    message: `Gathered ${gathered}/${safeCount} (error: ${error.message})`,
                     timeElapsed: Date.now() - startTime
                 };
             }
@@ -132,7 +203,7 @@ export default async function execute(agent, params) {
         return {
             success: true,
             gathered,
-            message: `Successfully gathered ${gathered}x ${resource}`,
+            message: `Successfully gathered ${gathered}x ${resolvedResource}`,
             timeElapsed: Date.now() - startTime
         };
 

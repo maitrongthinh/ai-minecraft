@@ -4,6 +4,7 @@ import { moveAwayFromEntity, goToGoal, goToPosition } from "./movement_skills.js
 import pf from 'mineflayer-pathfinder';
 import { log } from "./util.js";
 import { StrategicMovement } from "./StrategicMovement.js";
+import { pickupNearbyItems } from "./interaction_skills.js";
 
 // We need to be careful with imports.
 // interaction_skills.js imports movement_skills.js

@@ -1,9 +1,13 @@
 import settings from '../../settings.js';
-import { sendBotChatToServer } from './mindserver_proxy.js';
 
 let agent;
 let agent_names = [];
 let agents_in_game = [];
+let sendBotChatTransport = null;
+
+export function setBotChatTransport(fn) {
+    sendBotChatTransport = typeof fn === 'function' ? fn : null;
+}
 
 class Conversation {
     constructor(name) {
@@ -161,7 +165,11 @@ class ConversationManager {
         };
 
         this.awaiting_response = true;
-        sendBotChatToServer(send_to, json);
+        if (typeof sendBotChatTransport !== 'function') {
+            console.warn('[Conversation] Bot chat transport is not configured.');
+            return;
+        }
+        sendBotChatTransport(send_to, json);
     }
 
     async receiveFromBot(sender, received) {
@@ -190,7 +198,7 @@ class ConversationManager {
             await agent.self_prompter.pause();
         }
 
-        _scheduleProcessInMessage(sender, received, convo);
+        void _scheduleProcessInMessage(sender, received, convo);
     }
 
     responseScheduledFor(sender) {
@@ -226,11 +234,11 @@ class ConversationManager {
     endConversation(sender) {
         if (this.convos[sender]) {
             this.convos[sender].end();
-            if (this.activeConversation.name === sender) {
+            if (this.activeConversation && this.activeConversation.name === sender) {
                 this._stopMonitor();
                 this.activeConversation = null;
                 if (agent.self_prompter.isPaused() && !this.inConversation()) {
-                    _resumeSelfPrompter();
+                    void _resumeSelfPrompter();
                 }
             }
         }
@@ -241,7 +249,7 @@ class ConversationManager {
             this.endConversation(sender);
         }
         if (agent.self_prompter.isPaused()) {
-            _resumeSelfPrompter();
+            void _resumeSelfPrompter();
         }
     }
 
@@ -295,7 +303,7 @@ async function _scheduleProcessInMessage(sender, received, convo) {
         // both are busy
         let canTalkOver = talkOverActions.some(a => agent.actions.currentActionLabel.includes(a));
         if (canTalkOver)
-            scheduleResponse(fastDelay)
+            scheduleResponse(fastDelay);
         // otherwise don't respond
     }
     else if (otherAgentBusy)
@@ -351,7 +359,7 @@ function _handleFullInMessage(sender, received) {
     else if (received.start)
         agent.shut_up = false;
     convo.inMessageTimer = null;
-    agent.handleMessage(sender, message);
+    void agent.handleMessage(sender, message);
 }
 
 

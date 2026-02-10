@@ -33,7 +33,7 @@ export class ToolRegistry {
         console.log('[ToolRegistry] Discovering skills...');
 
         try {
-            const skillsPath = path.join(__dirname, '../../../skills/library');
+            const skillsPath = path.join(__dirname, '../../../src/skills/library');
 
             if (!fs.existsSync(skillsPath)) {
                 console.warn('[ToolRegistry] Skills directory not found:', skillsPath);
@@ -68,10 +68,12 @@ export class ToolRegistry {
      */
     async _loadSkill(skillPath) {
         const skillModule = await import(`file://${skillPath}`);
-        const skill = skillModule.default || skillModule;
 
         // Extract metadata from skill
-        const metadata = this._extractMetadata(skill, skillPath);
+        const metadata = this._extractMetadata(skillModule, skillPath);
+        if (!metadata) {
+            return;
+        }
 
         // Validate schema
         if (!this._validateSchema(metadata)) {
@@ -87,12 +89,20 @@ export class ToolRegistry {
      * Extract metadata from skill function/object
      * @private
      */
-    _extractMetadata(skill, skillPath) {
+    _extractMetadata(skillModule, skillPath) {
+        const skill = skillModule.default;
+        const metadataFromModule = skillModule.metadata || skill?.metadata;
+
+        // Skip helper modules that do not export a callable default skill.
+        if (typeof skill !== 'function') {
+            return null;
+        }
+
         // If skill has explicit metadata
-        if (skill.metadata) {
+        if (metadataFromModule) {
             return {
-                ...skill.metadata,
-                execute: skill.execute || skill,
+                ...metadataFromModule,
+                execute: skill,
                 path: skillPath
             };
         }
@@ -131,6 +141,10 @@ export class ToolRegistry {
         }
 
         if (!metadata.parameters || metadata.parameters.type !== 'object') {
+            return false;
+        }
+
+        if (!metadata.parameters.properties || typeof metadata.parameters.properties !== 'object') {
             return false;
         }
 
@@ -298,6 +312,14 @@ export class ToolRegistry {
      * @private
      */
     _validateParams(params, schema) {
+        if (!schema || typeof schema !== 'object') {
+            return { valid: false, error: 'Invalid schema' };
+        }
+
+        if (params == null || typeof params !== 'object' || Array.isArray(params)) {
+            return { valid: false, error: 'Parameters must be an object' };
+        }
+
         // Basic validation - check required fields
         const required = schema.required || [];
 
@@ -313,16 +335,49 @@ export class ToolRegistry {
         // TODO: More sophisticated JSON Schema validation
         // For now, basic type checking
         const properties = schema.properties || {};
+        const allowAdditional = schema.additionalProperties === true;
+
+        for (const key of Object.keys(params)) {
+            if (!(key in properties) && !allowAdditional) {
+                return {
+                    valid: false,
+                    error: `Unexpected parameter: ${key}`
+                };
+            }
+        }
+
         for (const [key, value] of Object.entries(params)) {
             if (key in properties) {
-                const expectedType = properties[key].type;
-                const actualType = typeof value;
+                const descriptor = properties[key] || {};
+                const expectedType = descriptor.type;
 
-                if (expectedType === 'number' && actualType !== 'number') {
-                    return {
-                        valid: false,
-                        error: `Parameter '${key}' should be ${expectedType}, got ${actualType}`
-                    };
+                if (expectedType === 'number' && typeof value !== 'number') {
+                    return { valid: false, error: `Parameter '${key}' should be number` };
+                }
+                if (expectedType === 'integer' && !Number.isInteger(value)) {
+                    return { valid: false, error: `Parameter '${key}' should be integer` };
+                }
+                if (expectedType === 'string' && typeof value !== 'string') {
+                    return { valid: false, error: `Parameter '${key}' should be string` };
+                }
+                if (expectedType === 'boolean' && typeof value !== 'boolean') {
+                    return { valid: false, error: `Parameter '${key}' should be boolean` };
+                }
+                if (expectedType === 'array' && !Array.isArray(value)) {
+                    return { valid: false, error: `Parameter '${key}' should be array` };
+                }
+                if (expectedType === 'object' && (value == null || typeof value !== 'object' || Array.isArray(value))) {
+                    return { valid: false, error: `Parameter '${key}' should be object` };
+                }
+
+                if (descriptor.enum && Array.isArray(descriptor.enum) && !descriptor.enum.includes(value)) {
+                    return { valid: false, error: `Parameter '${key}' must be one of: ${descriptor.enum.join(', ')}` };
+                }
+                if (typeof descriptor.minimum === 'number' && typeof value === 'number' && value < descriptor.minimum) {
+                    return { valid: false, error: `Parameter '${key}' must be >= ${descriptor.minimum}` };
+                }
+                if (typeof descriptor.maximum === 'number' && typeof value === 'number' && value > descriptor.maximum) {
+                    return { valid: false, error: `Parameter '${key}' must be <= ${descriptor.maximum}` };
                 }
             }
         }

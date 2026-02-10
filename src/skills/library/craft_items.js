@@ -1,3 +1,6 @@
+import minecraftData from 'minecraft-data';
+import { RetryHelper } from '../../utils/RetryHelper.js';
+
 /**
  * MCP-Compliant Skill: Craft Items
  * 
@@ -38,13 +41,14 @@ export const metadata = {
     tags: ['crafting', 'items', 'building']
 };
 
-export default async function execute(agent, params) {
+export default async function execute(agent, params = {}) {
     const { item, count = 1 } = params;
+    const bot = agent?.bot || agent;
 
     try {
         console.log(`[craft_items] Crafting ${count}x ${item}...`);
 
-        if (!agent.bot) {
+        if (!bot) {
             return {
                 success: false,
                 crafted: 0,
@@ -52,7 +56,7 @@ export default async function execute(agent, params) {
             };
         }
 
-        const mcData = require('minecraft-data')(agent.bot.version);
+        const mcData = minecraftData(bot.version);
         const itemType = mcData.itemsByName[item];
 
         if (!itemType) {
@@ -63,22 +67,43 @@ export default async function execute(agent, params) {
             };
         }
 
-        // Check if we have a crafting table nearby
-        const craftingTable = agent.bot.findBlock({
-            matching: mcData.blocksByName.crafting_table.id,
-            maxDistance: 32
-        });
+        if (agent?.actionAPI) {
+            const result = await agent.actionAPI.craft(item, count, { retries: 2, baseDelay: 300 });
+            return {
+                success: result.success,
+                crafted: result.success ? count : 0,
+                message: result.success
+                    ? `Successfully crafted ${count}x ${item}`
+                    : `Craft failed: ${result.error}`
+            };
+        }
+
+        const craftingTableId = mcData.blocksByName?.crafting_table?.id;
+        const craftingTable = craftingTableId
+            ? bot.findBlock({
+                matching: craftingTableId,
+                maxDistance: 32
+            })
+            : null;
 
         let crafted = 0;
         for (let i = 0; i < count; i++) {
             try {
-                if (craftingTable) {
-                    // Use crafting table
-                    await agent.bot.craft(itemType, 1, craftingTable);
-                } else {
-                    // Use 2x2 inventory crafting
-                    await agent.bot.craft(itemType, 1, null);
-                }
+                await RetryHelper.retry(
+                    async () => {
+                        const recipes = bot.recipesFor(itemType.id, null, 1, craftingTable || null);
+                        if (!recipes || recipes.length === 0) {
+                            throw new Error(`No recipe available for ${item}`);
+                        }
+                        await bot.craft(recipes[0], 1, craftingTable || null);
+                    },
+                    {
+                        context: `craft_items:${item}`,
+                        maxRetries: 2,
+                        baseDelay: 300,
+                        maxDelay: 1000
+                    }
+                );
                 crafted++;
             } catch (error) {
                 return {
