@@ -390,6 +390,74 @@
             color: #cccccc;
             font-style: italic;
         }
+
+        .mind-shell {
+            display: flex;
+            flex-direction: column;
+            min-height: 300px;
+            padding-left: 10px;
+            border-left: 1px solid #444;
+        }
+
+        .mind-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .mind-tab-btn {
+            background: #2d2d2d;
+            color: #c7c7c7;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .mind-tab-btn.active {
+            background: #3f78c4;
+            border-color: #3f78c4;
+            color: #fff;
+        }
+
+        .mind-pane {
+            flex: 1;
+            background: #111;
+            color: #d6ffd6;
+            font-family: monospace;
+            font-size: 0.85em;
+            padding: 8px;
+            border-radius: 4px;
+            overflow-y: auto;
+            max-height: 400px;
+            white-space: pre-wrap;
+            line-height: 1.45;
+        }
+
+        .mind-pane a {
+            color: #9ecbff;
+        }
+
+        .log-time {
+            color: #888;
+        }
+
+        .trace-phase {
+            color: #f0ad4e;
+        }
+
+        .adventure-entry {
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #333;
+        }
+
+        .adventure-entry img {
+            max-width: 100%;
+            border-radius: 4px;
+            margin-top: 6px;
+        }
     </style>
 </head>
 
@@ -471,7 +539,75 @@
         const agentSettings = {};
         const agentLastMessage = {};
         const inventoryOpen = {};
+        const agentLogs = {};
+        const MAX_LOG_LINES = 300;
         let currentAgents = [];
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function safeUrl(url) {
+            if (typeof url !== 'string') return '';
+            if (url.startsWith('/bots/')) return url;
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            return '';
+        }
+
+        function ensureAgentLogs(agentName) {
+            if (!agentLogs[agentName]) {
+                agentLogs[agentName] = {
+                    activeTab: 'chat',
+                    chat: [],
+                    thought: [],
+                    adventure: []
+                };
+            }
+            return agentLogs[agentName];
+        }
+
+        function appendAgentLog(agentName, channel, html) {
+            const logs = ensureAgentLogs(agentName);
+            const key = channel === 'thought' || channel === 'adventure' ? channel : 'chat';
+            logs[key].push(html);
+            if (logs[key].length > MAX_LOG_LINES) {
+                logs[key].shift();
+            }
+            renderMindPane(agentName, key);
+        }
+
+        function renderMindPane(agentName, channel) {
+            const logs = ensureAgentLogs(agentName);
+            const pane = document.getElementById(`mindPane-${channel}-${agentName}`);
+            if (!pane) return;
+            pane.innerHTML = logs[channel].join('');
+            pane.scrollTop = pane.scrollHeight;
+        }
+
+        function renderAllMindPanes(agentName) {
+            const logs = ensureAgentLogs(agentName);
+            renderMindPane(agentName, 'chat');
+            renderMindPane(agentName, 'thought');
+            renderMindPane(agentName, 'adventure');
+            setMindTab(agentName, logs.activeTab || 'chat');
+        }
+
+        function setMindTab(agentName, tabName) {
+            const logs = ensureAgentLogs(agentName);
+            logs.activeTab = tabName;
+            ['chat', 'thought', 'adventure'].forEach(tab => {
+                const pane = document.getElementById(`mindPane-${tab}-${agentName}`);
+                const btn = document.getElementById(`mindTab-${tab}-${agentName}`);
+                if (pane) pane.style.display = tab === tabName ? 'block' : 'none';
+                if (btn) btn.classList.toggle('active', tab === tabName);
+            });
+        }
+        window.setMindTab = setMindTab;
 
         const statusEl = document.getElementById('msStatus');
         function updateStatus(connected) {
@@ -622,17 +758,48 @@
             agentLastMessage[agentName] = message;
             const messageDiv = document.getElementById(`lastMessage-${agentName}`);
             if (messageDiv) {
-                messageDiv.textContent = message;
+                messageDiv.innerHTML = `<strong>Last Output:</strong> ${escapeHtml(message)}`;
             }
+
+            const time = new Date().toLocaleTimeString();
+            appendAgentLog(
+                agentName,
+                'chat',
+                `<div><span class="log-time">[${time}]</span> ${escapeHtml(message)}</div>`
+            );
         });
 
         socket.on('bot-thought', (agentName, thought) => {
-            const logDiv = document.getElementById(`mindLog-${agentName}`);
-            if (logDiv) {
-                const time = new Date().toLocaleTimeString();
-                logDiv.innerHTML += `<div><span style="color:#888;">[${time}]</span> ${thought}</div>`;
-                logDiv.scrollTop = logDiv.scrollHeight;
+            const time = new Date().toLocaleTimeString();
+            appendAgentLog(
+                agentName,
+                'thought',
+                `<div><span class="log-time">[${time}]</span> ${escapeHtml(thought)}</div>`
+            );
+        });
+
+        socket.on('system2-trace', (agentName, trace) => {
+            const time = new Date().toLocaleTimeString();
+            const phase = escapeHtml((trace?.phase || 'system2').toUpperCase());
+            const stage = escapeHtml(trace?.stage || 'event');
+            const message = escapeHtml(trace?.message || JSON.stringify(trace || {}));
+            appendAgentLog(
+                agentName,
+                'thought',
+                `<div><span class="log-time">[${time}]</span> <span class="trace-phase">[${phase}/${stage}]</span> ${message}</div>`
+            );
+        });
+
+        socket.on('adventure-log', (agentName, entry) => {
+            const dayLabel = entry?.day ? `Day ${entry.day}` : 'Adventure';
+            const summary = escapeHtml(entry?.summary || entry?.markdown || '').replace(/\n/g, '<br>');
+            const screenshotUrl = safeUrl(entry?.screenshotUrl || '');
+            let html = `<div class="adventure-entry"><div><span class="trace-phase">${escapeHtml(dayLabel)}</span></div><div>${summary}</div>`;
+            if (screenshotUrl) {
+                html += `<div><a href="${escapeHtml(screenshotUrl)}" target="_blank">Open screenshot</a></div><img src="${escapeHtml(screenshotUrl)}" alt="Adventure screenshot">`;
             }
+            html += `</div>`;
+            appendAgentLog(agentName, 'adventure', html);
         });
 
         // Subscribe to aggregated state updates (re-sent on each connect)
@@ -851,7 +1018,7 @@
             const showViewer = agent.in_game && cfg.render_bot_view === true;
             const viewerPort = agent.viewerPort;
             const viewerHTML = showViewer ? `<div class="agent-view-container"><iframe class="agent-viewer" id="viewer-${agent.name}" src="http://localhost:${viewerPort}"></iframe></div>` : '';
-            const lastMessage = agentLastMessage[agent.name] || '';
+            const lastMessage = escapeHtml(agentLastMessage[agent.name] || '');
             const invOpen = inventoryOpen[agent.name] === true;
             const invStyle = invOpen ? '' : 'display:none;';
             return `
@@ -884,7 +1051,14 @@
                             <!-- Right Column: Mind Log (Terminal) -->
                             <div style="display: flex; flex-direction: column; height: 100%; min-height: 300px; padding-left: 10px; border-left: 1px solid #444;">
                                 <h3 style="margin: 0 0 5px 0; font-size: 0.9em; color: #888;">🧠 Mind Log (System 2)</h3>
-                                <div id="mindLog-${agent.name}" style="flex: 1; background: #111; color: #0f0; font-family: monospace; font-size: 0.85em; padding: 8px; border-radius: 4px; overflow-y: auto; max-height: 400px; white-space: pre-wrap;"></div>
+                                <div class="mind-tabs">
+                                    <button class="mind-tab-btn active" id="mindTab-chat-${agent.name}" onclick="setMindTab('${agent.name}', 'chat')">Chat</button>
+                                    <button class="mind-tab-btn" id="mindTab-thought-${agent.name}" onclick="setMindTab('${agent.name}', 'thought')">Thought Process</button>
+                                    <button class="mind-tab-btn" id="mindTab-adventure-${agent.name}" onclick="setMindTab('${agent.name}', 'adventure')">Adventure Log</button>
+                                </div>
+                                <div id="mindPane-chat-${agent.name}" class="mind-pane"></div>
+                                <div id="mindPane-thought-${agent.name}" class="mind-pane" style="display:none;"></div>
+                                <div id="mindPane-adventure-${agent.name}" class="mind-pane" style="display:none;"></div>
                                 <div id="lastMessage-${agent.name}" class="last-message" style="margin-top: 5px;"><strong>Last Output:</strong> ${lastMessage}</div>
                             </div>
                         </div>
@@ -917,6 +1091,7 @@
                 setTimeout(() => {
                     agents.forEach(a => {
                         if (a.in_game) updateAgentViewer(a.name);
+                        renderAllMindPanes(a.name);
                     });
                 }, 0);
                 return;
@@ -936,10 +1111,12 @@
                     // Update existing card
                     el.outerHTML = renderAgentCard(agent);
                     if (agent.in_game) updateAgentViewer(agent.name);
+                    renderAllMindPanes(agent.name);
                 } else {
                     // Add new card
                     agentsDiv.insertAdjacentHTML('beforeend', renderAgentCard(agent));
                     if (agent.in_game) updateAgentViewer(agent.name);
+                    renderAllMindPanes(agent.name);
                 }
             });
 
@@ -949,6 +1126,7 @@
                 if (!agents.find(a => a.name === name)) {
                     el.remove();
                     delete inventoryOpen[name];
+                    delete agentLogs[name];
                 }
             });
         }
@@ -982,6 +1160,7 @@
                 setTimeout(() => {
                     agents.forEach(a => {
                         if (a.in_game) updateAgentViewer(a.name);
+                        renderAllMindPanes(a.name);
                     });
                 }, 0);
                 return;
@@ -994,10 +1173,12 @@
                     // Update existing card
                     el.outerHTML = renderAgentCard(agent);
                     if (agent.in_game) updateAgentViewer(agent.name);
+                    renderAllMindPanes(agent.name);
                 } else {
                     // Add new card
                     agentsDiv.insertAdjacentHTML('beforeend', renderAgentCard(agent));
                     if (agent.in_game) updateAgentViewer(agent.name);
+                    renderAllMindPanes(agent.name);
                 }
             });
 
@@ -1007,6 +1188,7 @@
                 if (!agents.find(a => a.name === name)) {
                     el.remove();
                     delete inventoryOpen[name];
+                    delete agentLogs[name];
                 }
             });
         });

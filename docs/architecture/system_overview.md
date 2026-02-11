@@ -22,6 +22,7 @@ It replaces old references to `DualBrain` and old state-stack-only designs.
    - `CogneeMemoryBridge`
    - `SkillLibrary` + `SkillOptimizer`
    - `ToolRegistry` discovery
+   - `AdventureLogger` (daily journal writer + optional screenshot capture)
    - `UnifiedBrain` rebind with memory + skills
    - `DeathRecovery` + `Watchdog`
 5. Agent state switches to `READY` and starts normal operation.
@@ -37,6 +38,7 @@ It replaces old references to `DualBrain` and old state-stack-only designs.
 - `src/brain/UnifiedBrain.js`: fast chat + high IQ planning + strategic prompt injection.
 - `src/agent/orchestration/System2Loop.js`: planner/critic/executor slow loop, degradation and recovery.
 - `src/agent/Arbiter.js`: idle arbitration, safety gates, objective trigger.
+- `src/agent/core/AdventureLogger.js`: in-game daily summary generation and markdown persistence.
 
 ### 3.3 Action execution
 - `src/agent/action_manager.js`: controlled execution with timeout and interruption.
@@ -59,6 +61,11 @@ It replaces old references to `DualBrain` and old state-stack-only designs.
 - `src/agent/core/ToolRegistry.js`: MCP-style skill discovery + schema validation.
 - `src/agent/core/EvolutionEngine.js`: failure-to-skill conversion and dynamic registration.
 
+### 3.6 Dashboard and observability
+- `src/mindcraft/public/index.html`: web dashboard with tabs for Chat, Thought Process, Adventure Log.
+- `src/mindcraft/mindserver.js`: relay channels for `bot-output`, `bot-thought`, `system2-trace`, `adventure-log`.
+- `src/agent/mindserver_proxy.js`: transport helpers for structured thought and journal events.
+
 ## 4. Strategic objective
 - Global objective is configured in `settings.js`:
   - `objective: "Beat Minecraft"`
@@ -75,6 +82,7 @@ It replaces old references to `DualBrain` and old state-stack-only designs.
 - Scheduler interrupts low-priority physical work for critical survival events.
 - Evolution engine captures failures and attempts runtime skill evolution.
 - Watchdog and death recovery provide autonomous unstuck and post-death continuity.
+- Torch placement light checks fall back to block/sky light when world light API is unstable.
 
 ## 7. Current known limit
 - This architecture is hardened for stability, but full "Beat Minecraft" completion still depends on long-horizon strategy quality, world seed constraints, and external model reliability.

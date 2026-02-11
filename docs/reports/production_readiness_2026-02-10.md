@@ -143,3 +143,34 @@ Highlights:
 - Hardened `gather_wood` and `gather_resources` for parameter and exploration robustness.
 - Fixed movement helpers that previously reported success even when navigation failed.
 - Reduced failure-heavy loops from keytest15 to stable zero-failure execution runs in keytest18.
+
+## 10) UX + Collaboration + Local Model hardening (2026-02-10 night patch)
+
+Implemented:
+- Dashboard tabs in `src/mindcraft/public/index.html`:
+  - `Chat`
+  - `Thought Process` (includes structured `system2-trace`)
+  - `Adventure Log`
+- New realtime relays in `src/mindcraft/mindserver.js`:
+  - `system2-trace`
+  - `adventure-log`
+  - static serving for `/bots/*` artifacts
+- Agent transport extensions in `src/agent/mindserver_proxy.js` for structured traces and adventure entries.
+- Structured phase tracing (`plan -> critic -> execute`) emitted from:
+  - `src/agent/orchestration/System2Loop.js`
+  - main planning runtime in `src/agent/agent.js`
+- Daily journal subsystem:
+  - `src/agent/core/AdventureLogger.js`
+  - writes markdown snapshots to `bots/<agent>/adventure`
+  - captures screenshot when vision camera is available
+- Assist/Collaborator mode controls in `src/agent/agent.js`:
+  - deterministic owner-aware errands
+  - auto-switch to assist when addressed (`Hey MindOS ...`) by owner
+  - teammate sync hook for collaborator mode
+- Torch light detection hardening in `src/skills/library/world.js`:
+  - fallback from `world.getLight` to block/sky light and day/night heuristic.
+- Local Llama profile switched to Ollama default in `profiles/llama.json` (`ollama/llama3.1:8b`).
+
+Status update on prior blockers:
+- External provider 403/500 remains intermittent and is still the only hard external dependency blocker for long-horizon strategy.
+- Light sensing TODO is now covered by runtime fallback path (no longer hard-broken when `getLight` is unreliable).

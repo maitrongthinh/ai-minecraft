@@ -31,11 +31,13 @@ Responsibilities:
 - `src/brain/UnifiedBrain.js`
 - `src/agent/orchestration/System2Loop.js`
 - `src/agent/Arbiter.js`
+- `src/agent/core/AdventureLogger.js`
 
 Responsibilities:
 - handle chat vs planning routing
 - enforce strategic objective context
 - manage degrade/recover behavior for slow-loop failures
+- generate daily narrative summaries + screenshots for user-facing observability
 
 ## Layer D: Body and reflex
 - `src/agent/action_manager.js`
@@ -51,13 +53,21 @@ Responsibilities:
 - `src/agent/memory/MemorySystem.js`
 - `src/memory/CogneeMemoryBridge.js`
 - `src/skills/SkillLibrary.js`
-- `src/agent/core/ToolRegistry.js`
 - `src/agent/core/EvolutionEngine.js`
+- `src/agent/core/ReplayBuffer.js`
 
 Responsibilities:
-- short-term history + place memory + error traces
-- graph/vector recall with offline fallback
-- skill registration, schema-validated execution, and dynamic evolution
+- short-term history + tick-perfect activity capture (50ms)
+- skill registration, schema-validated execution, and retroactive self-refactoring (Adversarial Learning)
+
+## Layer F: Sovereign Swarm (v2.5)
+- `src/agent/core/SwarmSync.js`
+- `src/agent/core/PathfindingWorker.js`
+
+Responsibilities:
+- Zero-Trust P2P communication (Sigma Protocol) over whispers
+- Distributed target acquisition and flocking behavior
+- Offloaded pathfinding via Worker Threads for main-loop stability
 
 ## 3. Key runtime sequence
 
@@ -65,13 +75,15 @@ Responsibilities:
 2. Agent constructs base systems (`CoreSystem`, `UnifiedBrain`, reflex handlers).
 3. Agent connects to Minecraft and waits for spawn.
 4. Post-spawn heavy init loads memory bridge, skill library, tool registry.
-5. State flips to `READY`.
+5. Adventure logger initializes output directory and day tracking.
+6. State flips to `READY`.
 6. Normal cycle:
    - signals emitted from sensors and events
    - scheduler arbitrates tasks
    - reflex preempts unsafe work
    - brain plans and executes
    - memory stores outcomes
+   - dashboard streams chat/thought/adventure traces in realtime
 
 ## 4. Event model (selected)
 
@@ -119,9 +131,19 @@ Current rules implemented in code:
 - MindServer creation receives callback handlers instead of importing process functions directly.
 - full-state generation receives in-game agents list as argument, avoiding hidden cross-module dependency.
 
-## 9. Production hardening checklist
+## 9. Future Roadmap: Toward Phase 5 (Singularity)
+Based on the [Optimization Manual](../guides/OPTIMIZATION_MANUAL.md):
+1. **Memory Hardening**: Implementing `isolated-vm` for multi-isolate code execution.
+2. **ReAct Integration**: UnifiedBrain will transition to strict Thought-Action sequences.
+3. **Adaptive Context**: Token-saving environment compression for longer horizon planning.
+4. **SLM Sub-Agents**: Local Llama-3 integration for cost-saving trivial task processing.
+5. **Deduplication**: Vector-store similarity checks for Skill Library maintenance.
+
+## 10. Production hardening checklist
 - Ensure `settings.js` objective is set correctly (`Beat Minecraft`).
 - Keep watchdog and retries configured for server latency profile.
 - Keep Cognee service healthy (`http://localhost:8001`) or validate fallback path.
 - Keep skills schema-valid so ToolRegistry can discover/execute reliably.
 - Monitor `task.failed` and `action.failed` rates to detect degradation early.
+- Validate dashboard receives `system2-trace` and `adventure-log` events from live agents.
+- For local-only deployments, use `profiles/llama.json` (Ollama endpoint) to remove external quota dependency.

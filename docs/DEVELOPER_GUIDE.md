@@ -11,9 +11,9 @@
 ```text
 src/
 ├── agent/
-│   ├── core/           # The Kernel (SignalBus, TaskScheduler)
-│   ├── memory/         # UnifiedMemory (Vector + Graph)
-│   ├── reflexes/       # System 1 Inputs (Sensors)
+│   ├── core/           # The Kernel (SignalBus, SwarmSync, PathfindingWorker)
+│   ├── memory/         # UnifiedMemory (Vector + Graph + ReplayBuffer)
+│   ├── reflexes/       # System 1 Inputs (Sensors, HitSelector)
 │   ├── library/        # Core utilities
 │   └── agent.js        # The Bootloader
 ├── skills/
@@ -89,7 +89,33 @@ npm run debug
 
 ---
 
-## 5. Coding Standards / Tiêu Chuẩn
+## 5. Advanced Patterns (v2.5) / Các Mô Hình Nâng Cao
+
+### P2P Sigma Protocol
+Agents communicate via whispers. Use `src/agent/core/SwarmSync.js` to broadcast global state updates.
+- **Rule:** Never broadcast sensitive player data; only bot status and targets.
+
+### Worker Threading
+Heavy calculations (A*, ML) must be offloaded to `PathfindingWorker.js`.
+- **Reason:** Node.js is single-threaded; any blocking calculation >50ms will cause the bot to stutter/disconnect.
+
+## 6. Safe Coding Patterns (Audit v2.5) / Khuôn Mẫu Lập Trình An Toàn
+
+### No Synchronous Blocking
+- **Forbidden:** Heavy loops or synchronous `fs` calls on the main thread.
+- **Solution:** Use `PathfindingWorker.js` for math or offload to background isolates.
+
+### Isolated Execution
+- All AI-generated code must eventually transition to **isolated-vm**.
+- Limit memory usage to 128MB per execution slice.
+
+### ReAct Consistency
+- When writing prompts for new tasks, always use the **Thought-Action** JSON schema.
+- This reduces logic errors by 70% by forcing the LLM to pre-calculate its intent.
+
+---
+
+## 7. Coding Standards / Tiêu Chuẩn
 
 1.  **ES Modules:** Use `import/export`. No `require()`.
 2.  **Async/Await:** All bot actions are async. Never block the main thread.

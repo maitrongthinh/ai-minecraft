@@ -4,6 +4,7 @@ import { SurvivalAnalysis } from '../intelligence/SurvivalAnalysis.js';
 import { PlannerAgent } from './PlannerAgent.js';
 import { CriticAgent } from './CriticAgent.js';
 import { ExecutorAgent } from './ExecutorAgent.js';
+import { sendSystem2TraceToServer } from '../mindserver_proxy.js';
 
 /**
  * System2Loop - Async Orchestration Controller
@@ -47,6 +48,18 @@ export class System2Loop {
         console.log('[System2Loop] Initialized - Slow Loop ready');
     }
 
+    _trace(phase, stage, message, meta = {}) {
+        const trace = {
+            phase,
+            stage,
+            message,
+            meta,
+            timestamp: Date.now()
+        };
+        sendSystem2TraceToServer(this.agent?.name || 'unknown', trace);
+        return trace;
+    }
+
     /**
      * Setup signal handlers
      * @private
@@ -75,6 +88,7 @@ export class System2Loop {
     async processGoal(goal) {
         console.log(`[System2Loop] ========== NEW GOAL ==========`);
         console.log(`[System2Loop] Goal: "${goal}"`);
+        this._trace('lifecycle', 'goal_received', `New goal: ${goal}`);
 
         this.isRunning = true;
         this.currentGoal = goal;
@@ -83,21 +97,32 @@ export class System2Loop {
         const signal = this.abortController.signal;
 
         globalBus.emitSignal(SIGNAL.SYSTEM2_START, { goal });
+        this._trace('lifecycle', 'start', 'System2 loop started', { goal });
 
         try {
             // Phase 1: Planning
             console.log('[System2Loop] Phase 1: Planning...');
+            this._trace('plan', 'start', 'Planner decomposition started');
             const planResult = await this.planner.decompose(goal);
 
             if (!planResult.success) {
+                this._trace('plan', 'failed', 'Planner decomposition failed', { reason: planResult.reasoning });
                 return this._handleFailure('Planning failed', planResult.reasoning);
             }
 
             this.currentPlan = planResult.plan;
             console.log(`[System2Loop] Plan created: ${this.currentPlan.length} steps`);
+            this._trace('plan', 'ready', `Plan created with ${this.currentPlan.length} steps`, {
+                steps: this.currentPlan.map(s => ({
+                    id: s.id,
+                    task: s.task,
+                    reason: s.reason
+                }))
+            });
 
             // Phase 2: Critique
             console.log('[System2Loop] Phase 2: Safety Review...');
+            this._trace('critic', 'start', 'Critic safety review started');
             const context = await this._getCurrentContext();
             const reviewResult = await this.critic.review(this.currentPlan, context);
 
@@ -105,35 +130,62 @@ export class System2Loop {
                 // Try to apply suggestions and replan
                 if (reviewResult.suggestions.length > 0) {
                     console.log('[System2Loop] Applying critic suggestions...');
+                    this._trace('critic', 'needs_changes', 'Critic requested plan changes', {
+                        summary: reviewResult.summary,
+                        suggestions: reviewResult.suggestions
+                    });
                     const modifiedPlan = this._applySuggestions(this.currentPlan, reviewResult.suggestions);
 
                     // Re-review
                     const reReview = await this.critic.review(modifiedPlan, context);
                     if (!reReview.approved) {
+                        this._trace('critic', 'failed', 'Critic rejected modified plan', {
+                            summary: reReview.summary || reviewResult.summary
+                        });
                         return this._handleFailure('Safety review failed', reviewResult.summary);
                     }
                     this.currentPlan = modifiedPlan;
+                    this._trace('critic', 'approved', 'Critic approved modified plan', {
+                        steps: this.currentPlan.length
+                    });
                 } else {
+                    this._trace('critic', 'failed', 'Critic rejected plan with no suggestions', {
+                        summary: reviewResult.summary
+                    });
                     return this._handleFailure('Safety review failed', reviewResult.summary);
                 }
+            } else {
+                this._trace('critic', 'approved', 'Critic approved plan', {
+                    issues: reviewResult.issues?.length || 0
+                });
             }
 
             // Log any warnings
             if (reviewResult.issues.length > 0) {
                 console.log(`[System2Loop] Warnings: ${reviewResult.issues.length}`);
                 reviewResult.issues.forEach(i => console.log(`  - ${i.message}`));
+                this._trace('critic', 'warning', 'Critic warnings detected', {
+                    issues: reviewResult.issues.map(i => i.message)
+                });
             }
 
             // Phase 3: Execution
             console.log('[System2Loop] Phase 3: Executing plan...');
+            this._trace('execute', 'start', 'Execution started', { steps: this.currentPlan.length });
             if (signal.aborted) throw new Error('AbortError');
 
             const execResult = await this.executor.executePlan(this.currentPlan, { signal });
 
             if (!execResult.success) {
+                this._trace('execute', 'failed', 'Execution failed', {
+                    failed: execResult.failed
+                });
                 // Attempt replan with intelligent retry check
                 if (SurvivalAnalysis.shouldRetry(execResult.failed.map(f => f.error).join('; '), this.failureCount)) {
                     console.log('[System2Loop] Execution failed, attempting replan...');
+                    this._trace('replan', 'start', 'Execution failed, starting replan', {
+                        failed: execResult.failed
+                    });
                     return this._attemptReplan(goal, execResult.failed);
                 }
                 return this._handleFailure('Execution failed', `${execResult.failed.length} steps failed (Non-retryable or max retries exceeded)`);
@@ -141,6 +193,10 @@ export class System2Loop {
 
             // Success!
             console.log('[System2Loop] ========== GOAL COMPLETE ==========');
+            this._trace('lifecycle', 'complete', 'Goal completed successfully', {
+                goal,
+                completed: execResult.completed
+            });
             this.isRunning = false;
             this.currentGoal = null;
             this.currentPlan = null;
@@ -157,9 +213,11 @@ export class System2Loop {
         } catch (error) {
             if (error.message === 'AbortError') {
                 console.log('[System2Loop] Goal execution aborted by user.');
+                this._trace('lifecycle', 'aborted', 'Goal execution aborted by user');
                 return { success: false, result: 'Aborted' };
             }
             console.error('[System2Loop] Unexpected error:', error);
+            this._trace('lifecycle', 'error', 'Unexpected System2 error', { error: error.message });
             return this._handleFailure('System error', error.message);
         }
     }
@@ -210,15 +268,22 @@ export class System2Loop {
     async _attemptReplan(goal, failedSteps) {
         this.failureCount++;
         console.log(`[System2Loop] Replan attempt ${this.failureCount}/${this.maxFailures}`);
+        this._trace('replan', 'attempt', 'Replan attempt started', {
+            attempt: this.failureCount,
+            maxFailures: this.maxFailures,
+            failedSteps
+        });
 
         const failureReason = failedSteps.map(f => f.error).join('; ');
         const replanResult = await this.planner.replan(goal, failedSteps, failureReason);
 
         if (!replanResult.success) {
+            this._trace('replan', 'failed', 'Replan generation failed', { reason: replanResult.reasoning });
             return this._handleFailure('Replan failed', replanResult.reasoning);
         }
 
         this.currentPlan = replanResult.plan;
+        this._trace('replan', 'ready', 'Replan generated', { steps: this.currentPlan.length });
 
         // Execute new plan
         const execResult = await this.executor.executePlan(this.currentPlan);
@@ -226,12 +291,22 @@ export class System2Loop {
         // Intelligent Retry Check
         const execFailureReason = execResult.failed.map(f => f.error).join('; ');
         if (!execResult.success && SurvivalAnalysis.shouldRetry(execFailureReason, this.failureCount)) {
+            this._trace('replan', 'retry', 'Replan execution failed, retrying', {
+                failed: execResult.failed
+            });
             return this._attemptReplan(goal, execResult.failed);
         }
 
         if (!execResult.success) {
+            this._trace('replan', 'failed', 'Replan execution failed permanently', {
+                failed: execResult.failed
+            });
             return this._handleFailure('Replan execution failed', 'Max retries exceeded or fatal error');
         }
+
+        this._trace('replan', 'complete', 'Replan execution succeeded', {
+            completed: execResult.completed
+        });
 
         return {
             success: true,
@@ -249,6 +324,7 @@ export class System2Loop {
      */
     _handleFailure(type, reason) {
         console.log(`[System2Loop] FAILURE: ${type} - ${reason}`);
+        this._trace('lifecycle', 'failed', `${type}: ${reason}`);
 
         this.isRunning = false;
         this._enterSurvivalMode(reason);
@@ -275,6 +351,7 @@ export class System2Loop {
      */
     _enterSurvivalMode(reason) {
         console.log(`[System2Loop] Entering Survival Mode: ${reason}`);
+        this._trace('survival', 'enter', 'Entering survival mode', { reason });
         this.survivalMode = true;
 
         // Schedule recovery attempt with configurable interval
@@ -290,12 +367,14 @@ export class System2Loop {
      */
     async _attemptRecovery() {
         console.log('[System2Loop] Attempting recovery from Survival Mode...');
+        this._trace('survival', 'recovery_attempt', 'Attempting survival recovery');
 
         // Dynamic Check using SurvivalAnalysis
         if (SurvivalAnalysis.isSafeToRecover(this.agent.bot)) {
             console.log('[System2Loop] Conditions safe - exiting Survival Mode');
             this.survivalMode = false;
             this.failureCount = 0;
+            this._trace('survival', 'recovered', 'Recovered from survival mode');
 
             globalBus.emitSignal(SIGNAL.SYSTEM2_RECOVERED, {
                 previousGoal: this.currentGoal
@@ -303,6 +382,7 @@ export class System2Loop {
         } else {
             const threat = SurvivalAnalysis.getThreatLevel(this.agent.bot);
             console.log(`[System2Loop] Conditions NOT safe (Threat: ${threat}) - staying in Survival Mode`);
+            this._trace('survival', 'blocked', 'Recovery blocked by threat', { threat });
             // Try again later with configurable interval
             if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
             this.recoveryTimer = setTimeout(() => this._attemptRecovery(), this.recoveryInterval);
@@ -315,6 +395,7 @@ export class System2Loop {
      */
     async handleOverride(payload) {
         console.log('[System2Loop] Processing Human Override...');
+        this._trace('override', 'received', 'Human override received', { payload });
 
         // Abort current execution
         if (this.isRunning && this.abortController) {
@@ -333,12 +414,14 @@ export class System2Loop {
         // If override has a new goal, process it
         if (payload.goal) {
             console.log(`[System2Loop] Override goal: "${payload.goal}"`);
+            this._trace('override', 'goal', `Override goal: ${payload.goal}`);
             return await this.processGoal(payload.goal);
         }
 
         // If override has a direct command
         if (payload.command) {
             console.log(`[System2Loop] Override command: "${payload.command}"`);
+            this._trace('override', 'command', `Override command: ${payload.command}`);
             // Execute directly without planning
             return await this.executor._executeFallback({
                 task: payload.command,

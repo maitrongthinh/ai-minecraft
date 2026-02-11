@@ -46,6 +46,27 @@
         "description": "List of agents to only chat with. If empty, the bot will chat publicly",
         "default": []
     },
+    "collaboration_mode": {
+        "type": "string",
+        "description": "Collaboration behavior mode: survival (autonomous), assist (errands), collaborator (team sync).",
+        "default": "survival",
+        "options": ["survival", "assist", "collaborator"]
+    },
+    "owner_username": {
+        "type": "string",
+        "description": "Optional owner player name. When set, assist errands only accept this owner (if obey_owner=true).",
+        "default": ""
+    },
+    "teammate_agents": {
+        "type": "array",
+        "description": "Agent names used for collaborator mode team sync.",
+        "default": []
+    },
+    "obey_owner": {
+        "type": "boolean",
+        "description": "Whether assist mode should reject errands from non-owner users when owner_username is set.",
+        "default": true
+    },
     "speak": {
         "type": "boolean",
         "description": "Whether to enable text-to-speech reading on the host machine",
@@ -60,6 +81,11 @@
         "type": "boolean",
         "description": "Whether to allow vision capabilities",
         "default": false
+    },
+    "enable_adventure_log": {
+        "type": "boolean",
+        "description": "Whether to generate daily adventure markdown logs (and screenshots when vision is available).",
+        "default": true
     },
     "blocked_actions": {
         "type": "array",

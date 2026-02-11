@@ -47,8 +47,15 @@ export class MovementTactics {
         // Look at target while moving
         await this.bot.lookAt(targetPos.offset(0, 1.6, 0));
 
-        // Move toward new position
-        const goalPos = { x: newX, y: botPos.y, z: newZ };
+        // PRIORITY: Flocking (Phase 4)
+        const flockingVec = this.bot.agent?.swarm ? await this.bot.agent.swarm.getFlockingVector() : { x: 0, y: 0, z: 0 };
+
+        // Move toward new position + flocking bias
+        const goalPos = {
+            x: newX + (flockingVec.x || 0),
+            y: botPos.y,
+            z: newZ + (flockingVec.z || 0)
+        };
         this._moveToward(goalPos);
     }
 

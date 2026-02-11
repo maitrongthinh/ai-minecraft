@@ -1,15 +1,21 @@
 <div align="center">
 
-# 🧠 MindOS V2.2 (Ironclad Cortex)
+# 🧠 MindOS V2.5 (Sovereign Swarm)
 ### The First Event-Driven, Self-Evolving AI Kernel for Minecraft
 ### Hệ Điều Hành AI Hướng Sự Kiện & Tự Tiến Hóa Đầu Tiên Cho Minecraft
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-gold.svg)](https://opensource.org/licenses/MIT)
 [![Status: Production Ready](https://img.shields.io/badge/Status-Production_Ready-brightgreen.svg)]()
-[![Core: MindOS](https://img.shields.io/badge/Core-MindOS_Kernel_v2.2-blue)](https://github.com/your-repo/mindcraft)
-[![Architecture: Event-Driven](https://img.shields.io/badge/Architecture-Event--Driven-purple)]()
+[![Core: MindOS](https://img.shields.io/badge/Core-MindOS_Kernel_v2.5-blue)](https://github.com/your-repo/mindcraft)
+[![Architecture: Sovereign Swarm](https://img.shields.io/badge/Architecture-Sovereign_Swarm-red)]()
 
 </div>
+
+---
+
+> [!WARNING]
+> **ARCHITECTURAL ALERT (2026-02-11):** A Strategic Audit has identified critical performance bottlenecks in the current Event-Loop handling and memory management. We are transitioning to an **isolated-vm** sandbox and **Adaptive Context** processing. 
+> See [**Strategic Audit Report**](./docs/reports/strategic_audit_20260211.md) for details.
 
 ---
 
@@ -29,35 +35,21 @@ Chúng tôi xây dựng MindOS để giải quyết vấn đề **"Sụp Đổ N
 
 ## 🚀 Enterprise Features / Tính Năng Doanh Nghiệp
 
-### 1. 🧠 Dual-Loop Cognitive Architecture / Kiến Trúc Nhận Thức Kép
-- **System 1 (Reflexes/Phản Xạ):** Millisecond-latency responses to threats (Creepers, Lava, Hunger). Powered by `ReflexSystem`.
-  - *Hệ Thống 1:* Phản hồi mối đe dọa với độ trễ mili-giây. Được vận hành bởi `ReflexSystem`.
-- **System 2 (Reasoning/Suy Luận):** Long-horizon planning and tool crafting. Powered by `StrategyPlanner` & LLMs.
-  - *Hệ Thống 2:* Lập kế hoạch dài hạn và chế tạo công cụ. Được vận hành bởi `StrategyPlanner` & LLMs.
+### 1. ⚔️ Warrior Reflexes (v2.5) / Phản Xạ Chiến Binh
+- **High-Precision Combat:** Tick-perfect W-Tap resets, predictive Crystal Aura, and Gaussian distributed delays to bypass anti-cheat.
+- **Hit Selection:** Lag-compensated attacks using historical position tracking (backtracking).
 
-### 2. ⚡ Event-Driven Kernel / Kernel Hướng Sự Kiện
-- **SignalBus Technology:** A standardized event bus that decouples all modules. Sensors emit signals (`ENTITY_SPOTTED`), and systems subscribe eagerly or lazily.
-  - *Công nghệ SignalBus:* Bus sự kiện chuẩn hóa giúp tách rời mọi module. Cảm biến phát tín hiệu, hệ thống đăng ký nhận tin.
+### 2. 🧬 Adversarial Learning / Học Tập Đối Kháng
+- **Tick-Perfect Replay Buffer:** Captures the last 30s of activity at 50ms resolution. Freezes and exports on death for analysis.
+- **Self-Refactoring Loop:** LLM analyzes death replays and automatically rewrites skill code to avoid future failures.
 
-### 3. 🧬 Evolution Engine / Động Cơ Tiến Hóa
-- **Self-Coding Skills:** The agent detects missing capabilities and writes its own JavaScript modules using `SmartCoder`.
-  - *Kỹ Năng Tự Code:* Agent phát hiện khả năng còn thiếu và tự viết module JavaScript bằng `SmartCoder`.
-- **Hot-Swapping:** New code is loaded into memory without restarting the bot.
-  - *Thay Thế Nóng:* Code mới được nạp vào bộ nhớ ngay lập tức mà không cần khởi động lại.
+### 3. 🐝 Sovereign Swarm / Bầy Đàn Tối Cao
+- **P2P Coordination (Sigma Protocol):** Multiple agents share targets, status, and roles (TANK, DPS, RETREATER) via a P2P mesh over whispers.
+- **Flocking Movement:** Coordinated formations using repulsion/cohesion vectors to prevent collisions and maximize area control.
 
-### 4. 🛡️ Military-Grade Reliability / Độ Tin Cậy Cấp Quân Sự
-- **Watchdog Timer:** Detects frozen logic loops and force-resets the decision stack.
-- **Bootloader Safety:** Verifies module integrity before the "conscious" mind awakens.
-- **Secure Sandbox:** AI-generated code runs in a sandbox to prevent system damage.
-
-### 5. ⚔️ Ironclad Security (v2.2) / Bảo Mật Thép
-- **DoS Prevention:** `CodeSanitizer` uses AST parsing to inject timeout guards into every generated loop, preventing infinite freezes.
-- **Structured Thought:** The `UnifiedBrain` thinks in strict JSON, separating internal monologue from external speech.
-- **Token Economy:** `InventorySummarizer` compresses data by 40%, allowing for longer context windows.
-
-### 6. 🚀 Strategic Autonomy (v2.5) / Tự Chủ Chiến Lược
-- **Permanent Victory Objective:** The bot is now pre-configured with a long-term goal ("Beat Minecraft"). It will proactively gather resources, explore, and evolve without human intervention.
-  - *Mục Tiêu Chiến Thắng Vĩnh Viễn:* Bot hiện được cấu hình sẵn mục tiêu dài hạn ("Phá đảo Minecraft"). Nó sẽ chủ động thu thập tài nguyên, khám phá và tiến hóa mà không cần sự can thiệp của con người.
+### 4. ⚡ Async Infrastructure / Hạ Tầng Bất Đồng Bộ
+- **Pathfinding Workers:** Offloads heavy A* calculations to separate threads, ensuring 100% main-loop responsiveness.
+- **Secure Sandbox:** AI-generated code runs in a sandboxed environment with strict DoS protection.
 
 ---
 

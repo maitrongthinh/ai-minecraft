@@ -29,6 +29,10 @@ const settings = {
     "load_memory": false, // load memory from previous session
     "init_message": "Respond with hello world and your name", // sends to all on spawn
     "only_chat_with": [], // users that the bots listen to and send general messages to. if empty it will chat publicly
+    "collaboration_mode": "survival", // survival, assist, collaborator
+    "owner_username": "", // if set, assist mode only accepts errands from this player
+    "teammate_agents": [], // agent names used in collaborator mode
+    "obey_owner": true, // if true, non-owner assist requests are rejected when owner is set
 
     "speak": false,
     // allows all bots to speak through text-to-speech. 
@@ -42,6 +46,7 @@ const settings = {
 
     "allow_insecure_coding": false, // allows newAction command and model can write/run code on your computer. enable at own risk
     "allow_vision": true, // allows vision model to interpret screenshots as inputs
+    "enable_adventure_log": true, // daily markdown adventure journal (and screenshot if vision enabled)
     "allow_offline_mode": true, // User Request: Defaults to true
     "blocked_actions": ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"], // commands to disable and remove from docs. Ex: ["!setMode"],
     "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout

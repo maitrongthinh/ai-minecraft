@@ -59,6 +59,7 @@ export function createMindServer(host_public = false, port = 8080, agentControl 
     // Serve static files
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     app.use(express.static(path.join(__dirname, 'public')));
+    app.use('/bots', express.static(path.join(process.cwd(), 'bots')));
 
     // Socket.io connection handling
     io.on('connection', (socket) => {
@@ -220,6 +221,14 @@ export function createMindServer(host_public = false, port = 8080, agentControl 
 
         socket.on('bot-thought', (agentName, thought) => {
             io.emit('bot-thought', agentName, thought);
+        });
+
+        socket.on('system2-trace', (agentName, trace) => {
+            io.emit('system2-trace', agentName, trace);
+        });
+
+        socket.on('adventure-log', (agentName, entry) => {
+            io.emit('adventure-log', agentName, entry);
         });
 
         socket.on('listen-to-agents', () => {

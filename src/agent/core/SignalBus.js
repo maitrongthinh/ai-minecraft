@@ -18,6 +18,7 @@ export const SIGNAL = {
     THREAT_CLEARED: 'threat.cleared',
     COMBAT_STARTED: 'combat.started',
     COMBAT_ENDED: 'combat.ended',
+    ENGAGED_TARGET: 'combat.engaged_target', // Phase 4: Swarm sync
 
     // Task Management
     TASK_SCHEDULED: 'task.scheduled',
@@ -51,6 +52,8 @@ export const SIGNAL = {
     BOT_SPAWNED: 'bot.spawned',
     BOT_READY: 'bot.ready',
     BOT_DISCONNECTED: 'bot.disconnected',
+    PEER_UPDATE: 'swarm.peer_update', // Phase 4
+    SWARM_SIGNAL: 'swarm.signal',   // Phase 4
 
     // Vision
     ENTITY_SPOTTED: 'entity.spotted',

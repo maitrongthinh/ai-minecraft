@@ -7,7 +7,7 @@
  * Protects against: infinite loops, dangerous APIs, malformed code.
  */
 
-import vm from 'vm';
+import ivm from 'isolated-vm';
 
 // Dangerous patterns that should never appear in generated code
 const DANGER_PATTERNS = [
@@ -25,111 +25,36 @@ const DANGER_PATTERNS = [
 
 export class CodeSandbox {
     constructor(options = {}) {
-        this.timeout = options.timeout || 100; // ms - very strict
-        this.memoryLimit = options.memoryLimit || 10 * 1024 * 1024; // 10MB
+        this.timeout = options.timeout || 500; // ms - bit more generous for isolated-vm
+        this.memoryLimit = options.memoryLimit || 128; // 128MB as per strategic audit
     }
 
     /**
      * Create a mock bot for sandbox testing
-     * Returns success for all operations
+     * Note: In isolated-vm, we pass a simplified state rather than complex objects
      */
-    createMockBot() {
-        const noop = () => Promise.resolve(true);
-        const mockEntity = {
-            position: { x: 0, y: 64, z: 0 },
-            velocity: { x: 0, y: 0, z: 0 },
-            yaw: 0,
-            pitch: 0
-        };
-
+    createMockBotState() {
         return {
-            entity: mockEntity,
+            entity: { position: { x: 0, y: 64, z: 0 } },
             health: 20,
             food: 20,
-
-            // Movement
-            pathfinder: {
-                setGoal: noop,
-                setMovements: noop,
-                goto: noop,
-                isMoving: () => false,
-                stop: noop
-            },
-
-            // Actions
-            dig: noop,
-            placeBlock: noop,
-            equip: noop,
-            activateItem: noop,
-            deactivateItem: noop,
-            attack: noop,
-            useOn: noop,
-
-            // Inventory
-            inventory: {
-                items: () => [],
-                findInventoryItem: () => null,
-                count: () => 0
-            },
-
-            // World
-            blockAt: () => ({ name: 'stone', type: 1 }),
-            findBlock: () => null,
-            findBlocks: () => [],
-
-            // Chat
-            chat: console.log,
-            whisper: console.log,
-
-            // Control
-            setControlState: noop,
-            clearControlStates: noop,
-            look: noop,
-            lookAt: noop,
-
-            // Events (no-op for sandbox)
-            on: () => { },
-            once: () => { },
-            removeListener: () => { }
+            inventory: { count: 0 }
         };
     }
 
     /**
      * Scan code for dangerous patterns before execution
-     * @param {string} code - Code to scan
-     * @returns {Object} { safe: boolean, dangers: string[] }
      */
     scanForDanger(code) {
         const dangers = [];
-
         for (const { pattern, reason } of DANGER_PATTERNS) {
-            if (pattern.test(code)) {
-                dangers.push(reason);
-            }
+            if (pattern.test(code)) dangers.push(reason);
         }
-
-        return {
-            safe: dangers.length === 0,
-            dangers
-        };
+        return { safe: dangers.length === 0, dangers };
     }
 
     /**
-     * Validate code syntax without execution
-     * @param {string} code - Code to validate
-     * @returns {Object} { valid: boolean, error?: string }
-     */
-    validateSyntax(code) {
-        try {
-            new vm.Script(code);
-            return { valid: true };
-        } catch (e) {
-            return { valid: false, error: e.message };
-        }
-    }
-
-    /**
-     * Run code in sandbox with timeout
+     * Run code in isolated-vm sandbox
      * @param {string} code - Code to execute
      * @returns {Object} { success: boolean, result?: any, error?: string }
      */
@@ -143,78 +68,63 @@ export class CodeSandbox {
             };
         }
 
-        // Step 2: Validate syntax
-        const syntaxCheck = this.validateSyntax(code);
-        if (!syntaxCheck.valid) {
-            return {
-                success: false,
-                error: `Syntax error: ${syntaxCheck.error}`
-            };
-        }
-
-        // Step 3: Execute in sandbox
-        const context = vm.createContext({
-            bot: this.createMockBot(),
-            vec3: (x, y, z) => ({ x, y, z }),
-            console: {
-                log: () => { },
-                warn: () => { },
-                error: () => { }
-            },
-            setTimeout: () => { },
-            setInterval: () => { },
-            Promise: Promise,
-            Math: Math,
-            Date: Date,
-            JSON: JSON,
-            Array: Array,
-            Object: Object,
-            String: String,
-            Number: Number,
-            Boolean: Boolean
-        });
-
+        const isolate = new ivm.Isolate({ memoryLimit: this.memoryLimit });
         try {
-            const result = vm.runInContext(code, context, {
-                timeout: this.timeout,
-                breakOnSigint: true
+            const context = isolate.createContextSync();
+            const jail = context.global;
+
+            // Setup global environment
+            jail.setSync('global', jail.derefInto());
+
+            // Inject basic mocks and globals
+            // Note: complex bot interaction is usually handled via SignalBus outside sandbox
+            // but for simple skill validation, we provide minimal mocks
+            const mockBot = this.createMockBotState();
+            jail.setSync('bot', new ivm.ExternalCopy(mockBot).copyInto());
+
+            // Add standard globals
+            const globals = ['Math', 'Date', 'JSON', 'Array', 'Object', 'String', 'Number', 'Boolean'];
+            globals.forEach(g => {
+                jail.setSync(g, new ivm.ExternalCopy(global[g]).copyInto());
             });
+
+            const script = isolate.compileScriptSync(code);
+            const result = script.runSync(context, { timeout: this.timeout });
 
             return { success: true, result };
         } catch (e) {
-            if (e.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
-                return {
-                    success: false,
-                    error: `Timeout: Code took longer than ${this.timeout}ms`
-                };
+            let errorMsg = e.message;
+            if (e.message.includes('Script execution timed out')) {
+                errorMsg = `Timeout: Code took longer than ${this.timeout}ms`;
             }
             return {
                 success: false,
-                error: `Runtime error: ${e.message}`
+                error: `Execution error: ${errorMsg}`
             };
+        } finally {
+            // Crucial: Clean up the isolate to reclaim memory immediately
+            isolate.dispose();
         }
     }
 
     /**
      * Full validation pipeline
-     * @param {string} code - AI-generated code to validate
-     * @returns {Object} Validation result
      */
     validate(code) {
         const startTime = Date.now();
-
-        // Run all checks
         const dangerScan = this.scanForDanger(code);
-        const syntaxCheck = this.validateSyntax(code);
-        const execution = dangerScan.safe && syntaxCheck.valid
-            ? this.execute(code)
-            : { success: false, skipped: true };
+
+        let execution;
+        if (dangerScan.safe) {
+            execution = this.execute(code);
+        } else {
+            execution = { success: false, skipped: true };
+        }
 
         return {
-            valid: dangerScan.safe && syntaxCheck.valid && execution.success,
+            valid: dangerScan.safe && execution.success,
             checks: {
                 dangerScan,
-                syntaxCheck,
                 execution
             },
             duration: Date.now() - startTime

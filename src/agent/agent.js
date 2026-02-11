@@ -5,7 +5,7 @@ import { globalBus, SIGNAL } from './core/SignalBus.js';
 import convoManager from './conversation.js';
 import { handleTranslation } from '../utils/translator.js';
 import { addBrowserViewer } from './vision/browser_viewer.js';
-import { serverProxy, sendThoughtToServer, sendOutputToServer } from './mindserver_proxy.js';
+import { serverProxy, sendThoughtToServer, sendOutputToServer, sendSystem2TraceToServer } from './mindserver_proxy.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { UnifiedBrain } from '../brain/UnifiedBrain.js';
@@ -22,6 +22,7 @@ import { ToolRegistry } from './core/ToolRegistry.js';
 import { System2Loop } from './orchestration/System2Loop.js';
 import EvolutionEngine from './core/EvolutionEngine.js';
 import { CoreSystem } from './core/CoreSystem.js';
+import AdventureLogger from './core/AdventureLogger.js';
 import { CombatReflex } from './reflexes/CombatReflex.js';
 import { SelfPreservationReflex } from './reflexes/SelfPreservationReflex.js';
 import { RetryHelper } from '../utils/RetryHelper.js';
@@ -40,6 +41,11 @@ import { Prompter } from '../models/prompter.js';
 import { UtilityEngine } from './intelligence/UtilityEngine.js';
 import { SelfPrompter } from './self_prompter.js';
 import { Task } from './tasks/ScenarioManager.js';
+import { PhysicsPredictor } from './reflexes/PhysicsPredictor.js';
+import { ReplayBuffer } from './core/ReplayBuffer.js';
+import { HitSelector } from './reflexes/HitSelector.js';
+import { SwarmSync } from './core/SwarmSync.js';
+import { PathfindingWorkerController } from './core/PathfindingWorker.js';
 
 export class Agent {
     constructor() {
@@ -54,6 +60,13 @@ export class Agent {
         this.bot = null;
         this.self_prompter = new SelfPrompter(this);
         this.isReady = false; // Readiness flag
+        this.adventureLogger = null;
+        this.collaboration = {
+            mode: 'survival',
+            owner: '',
+            teammates: [],
+            obeyOwner: true
+        };
     }
 
     async start(load_mem = false, init_message = null, count_id = 0) {
@@ -111,6 +124,7 @@ export class Agent {
 
         // Legacy compatibility: ensure this.prompter gets the combined profile
         this.prompter = new Prompter(this, finalProfile);
+        this._loadCollaborationSettings();
 
         // MindOS Core (Bootloader)
         this.core = new CoreSystem(this);
@@ -152,6 +166,11 @@ export class Agent {
         this.system2 = new System2Loop(this);
         this.evolution = new EvolutionEngine(this);
         this.mentalSnapshot = new MentalSnapshot(this);
+        this.physics = new PhysicsPredictor(this);
+        this.replayBuffer = new ReplayBuffer(this);
+        this.hitSelector = new HitSelector(this.bot);
+        this.swarm = new SwarmSync(this);
+        this.pathfindingWorker = new PathfindingWorkerController(this.bot);
 
         // Resource Locking - Uses AsyncMutex for Queued Control
         this.locks = {
@@ -187,6 +206,297 @@ export class Agent {
         void this._connectToMinecraft(save_data, init_message);
     }
 
+    _loadCollaborationSettings() {
+        const rawMode = String(this.config?.collaboration_mode || 'survival').toLowerCase().trim();
+        const mode = ['survival', 'assist', 'collaborator'].includes(rawMode) ? rawMode : 'survival';
+        const owner = String(this.config?.owner_username || '').trim();
+        const teammates = Array.isArray(this.config?.teammate_agents)
+            ? this.config.teammate_agents.map(v => String(v).trim()).filter(Boolean)
+            : [];
+        const obeyOwner = this.config?.obey_owner !== false;
+
+        this.collaboration = {
+            mode,
+            owner,
+            teammates,
+            obeyOwner
+        };
+
+        ActionLogger.debug('collaboration_config_loaded', {
+            mode,
+            owner: owner || '(none)',
+            teammates: teammates.length,
+            obeyOwner
+        });
+    }
+
+    _isOwner(source) {
+        const owner = this.collaboration?.owner;
+        if (!owner) return false;
+        return String(source || '').toLowerCase() === owner.toLowerCase();
+    }
+
+    _normalizeAssistMessage(message) {
+        return String(message || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    }
+
+    _isAssistAddressed(normalizedMessage) {
+        if (!normalizedMessage) return false;
+        const name = this._normalizeAssistMessage(this.name);
+        if (normalizedMessage.includes('hey mindos') || normalizedMessage.includes('midos') || normalizedMessage.includes('mindos')) {
+            return true;
+        }
+        if (name && normalizedMessage.includes(name)) {
+            return true;
+        }
+        const assistKeywords = ['giup', 'help', 'lam dum', 'lam giup', 'assist'];
+        return assistKeywords.some(k => normalizedMessage.includes(k));
+    }
+
+    _extractRequestedCount(normalizedMessage, fallback = 16) {
+        const m = normalizedMessage.match(/\b(\d{1,3})\b/);
+        if (!m) return fallback;
+        const value = Number(m[1]);
+        if (!Number.isFinite(value) || value <= 0) return fallback;
+        return Math.min(value, 512);
+    }
+
+    _parseAssistRequest(message) {
+        const normalized = this._normalizeAssistMessage(message);
+        if (!normalized) return null;
+
+        if (/(mode\s+assist|assist\s+on|bat\s+assist|mo\s+assist)/.test(normalized)) {
+            return { kind: 'mode_switch', mode: 'assist' };
+        }
+        if (/(mode\s+survival|assist\s+off|tat\s+assist)/.test(normalized)) {
+            return { kind: 'mode_switch', mode: 'survival' };
+        }
+        if (/(mode\s+collaborator|collab\s+on|team\s+on)/.test(normalized)) {
+            return { kind: 'mode_switch', mode: 'collaborator' };
+        }
+
+        if (/(follow me|di theo toi|theo toi|theo tao)/.test(normalized)) {
+            return { kind: 'follow_owner' };
+        }
+
+        if (/(come here|lai day|ve day|toi day)/.test(normalized)) {
+            return { kind: 'go_to_owner' };
+        }
+
+        const count = this._extractRequestedCount(normalized, 16);
+        const hasFetchVerb = /(lay|lấy|get|gather|farm|thu thap|collect|kiem|kiem cho|mang cho)/.test(normalized);
+        const hasResourceWord = /(go|wood|log|stone|da|coal|than|sat|iron)/.test(normalized);
+        const hasQuantity = /\b\d{1,3}\b/.test(normalized);
+        if (!hasResourceWord || (!hasFetchVerb && !hasQuantity)) return null;
+
+        const itemMap = [
+            { id: 'oak_log', aliases: ['oak log', 'oak wood', 'go soi'] },
+            { id: 'birch_log', aliases: ['birch log', 'go bach duong'] },
+            { id: 'spruce_log', aliases: ['spruce log', 'go thong'] },
+            { id: 'cobblestone', aliases: ['cobblestone', 'da cuoi', 'da', 'stone'] },
+            { id: 'coal', aliases: ['coal', 'than'] },
+            { id: 'iron_ore', aliases: ['iron ore', 'sat tho', 'quang sat'] }
+        ];
+        let item = null;
+        for (const candidate of itemMap) {
+            if (candidate.aliases.some(alias => normalized.includes(alias))) {
+                item = candidate.id;
+                break;
+            }
+        }
+        if (!item && /(wood|log|go)/.test(normalized)) {
+            item = 'any_log';
+        }
+        if (!item) return null;
+
+        return {
+            kind: 'fetch_item',
+            item,
+            count,
+            normalized
+        };
+    }
+
+    _buildAssistCode(request, ownerName) {
+        const safeOwner = String(ownerName || '').replace(/[^a-zA-Z0-9_]/g, '') || ownerName || 'player';
+        if (request.kind === 'follow_owner') {
+            return `
+if (skills.goToPlayer) {
+  await skills.goToPlayer(bot, '${safeOwner}', 2);
+}
+`.trim();
+        }
+        if (request.kind === 'go_to_owner') {
+            return `
+if (skills.goToPlayer) {
+  await skills.goToPlayer(bot, '${safeOwner}', 1);
+}
+`.trim();
+        }
+
+        if (request.kind !== 'fetch_item') return null;
+
+        const itemLiteral = JSON.stringify(request.item);
+        const countLiteral = Number(request.count) || 16;
+
+        return `
+await actions.eat_if_hungry({ threshold: 14, retries: 1 });
+const LOG_ITEMS = ['oak_log','birch_log','spruce_log','jungle_log','acacia_log','dark_oak_log','mangrove_log','cherry_log'];
+const targetCount = ${countLiteral};
+const requested = ${itemLiteral};
+const countItem = (name) => bot.inventory.items().filter(i => i.name === name).reduce((s, i) => s + i.count, 0);
+const anyLogCount = () => LOG_ITEMS.reduce((s, n) => s + countItem(n), 0);
+const pickRichestLog = () => {
+  let best = null;
+  let bestCount = 0;
+  for (const name of LOG_ITEMS) {
+    const c = countItem(name);
+    if (c > bestCount) { best = name; bestCount = c; }
+  }
+  return best;
+};
+const itemCount = () => requested === 'any_log' ? anyLogCount() : countItem(requested);
+
+let loops = 0;
+while (itemCount() < targetCount && loops < 4) {
+  loops++;
+  if (requested === 'any_log' || requested.endsWith('_log')) {
+    try {
+      await skills.gather_wood(bot, {
+        count: Math.min(6, targetCount - itemCount()),
+        maxPerRun: 3,
+        retries: 1,
+        maxDistance: 72,
+        maxRuntimeMs: 45000
+      });
+    } catch {}
+    try {
+      await actions.gather_nearby('log', Math.min(4, targetCount - itemCount()), {
+        maxDistance: 64,
+        retries: 1,
+        moveRetries: 1,
+        collectDrops: true,
+        continueOnError: true
+      });
+    } catch {}
+  } else if (requested === 'cobblestone') {
+    try {
+      await actions.gather_nearby('stone', Math.min(8, targetCount - itemCount()), {
+        maxDistance: 56,
+        retries: 1,
+        moveRetries: 1,
+        collectDrops: true,
+        continueOnError: true
+      });
+    } catch {}
+  } else if (requested === 'coal') {
+    try {
+      await skills.mine_ores(bot, { oreType: 'coal_ore', count: Math.min(6, targetCount - itemCount()), maxDistance: 56 });
+    } catch {}
+  } else if (requested === 'iron_ore') {
+    try {
+      await skills.mine_ores(bot, { oreType: 'iron_ore', count: Math.min(6, targetCount - itemCount()), maxDistance: 56 });
+    } catch {}
+  }
+  try { await actions.collect_drops({ radius: 10, maxItems: 8, continueOnError: true }); } catch {}
+}
+
+let deliverItem = requested;
+let available = itemCount();
+if (requested === 'any_log') {
+  deliverItem = pickRichestLog();
+  available = deliverItem ? countItem(deliverItem) : 0;
+}
+
+if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
+  try { await skills.goToPlayer(bot, '${safeOwner}', 3); } catch {}
+  try { await skills.giveToPlayer(bot, deliverItem, '${safeOwner}', Math.min(available, targetCount)); } catch {}
+}
+`.trim();
+    }
+
+    async _handleAssistRequest(source, message) {
+        const normalized = this._normalizeAssistMessage(message);
+        const request = this._parseAssistRequest(message);
+        if (!request) return false;
+
+        if (request.kind === 'mode_switch') {
+            const sourceIsOwner = this._isOwner(source);
+            if (this.collaboration.owner && this.collaboration.obeyOwner && !sourceIsOwner) {
+                await this.routeResponse(source, `Only owner ${this.collaboration.owner} can change collaboration mode.`);
+                return true;
+            }
+            this.collaboration.mode = request.mode;
+            await this.routeResponse(source, `Collaboration mode switched to ${request.mode}.`);
+            sendThoughtToServer(this.name, `[COLLAB] mode=${request.mode} source=${source}`);
+            return true;
+        }
+
+        const sourceIsOwner = this._isOwner(source);
+        const addressed = this._isAssistAddressed(normalized);
+        const shouldRunAssist =
+            this.collaboration.mode === 'assist' ||
+            this.collaboration.mode === 'collaborator' ||
+            (addressed && sourceIsOwner) ||
+            (addressed && !this.collaboration.owner);
+
+        if (!shouldRunAssist) return false;
+
+        if (addressed && this.collaboration.mode === 'survival') {
+            if (sourceIsOwner || !this.collaboration.owner) {
+                this.collaboration.mode = 'assist';
+                sendThoughtToServer(this.name, `[COLLAB] auto-switching to assist mode for ${source}`);
+            }
+        }
+
+        if (this.collaboration.owner && this.collaboration.obeyOwner && !sourceIsOwner) {
+            await this.routeResponse(source, `Assist mode is reserved for owner ${this.collaboration.owner}.`);
+            return true;
+        }
+
+        const ownerTarget = sourceIsOwner ? source : (this.collaboration.owner || source);
+        const code = this._buildAssistCode(request, ownerTarget);
+        if (!code) return false;
+
+        sendThoughtToServer(this.name, `[ASSIST] ${request.kind} -> ${request.item || ownerTarget} x${request.count || ''}`);
+        const result = await this.intelligence.execute(code);
+
+        if (result?.success) {
+            await this.routeResponse(source, `Assist task complete: ${request.kind}${request.item ? ` ${request.item}` : ''}.`);
+        } else {
+            const err =
+                result?.executionError?.message ||
+                result?.syntaxError ||
+                result?.error ||
+                'unknown error';
+            await this.routeResponse(source, `Assist task failed: ${err}`);
+        }
+        return true;
+    }
+
+    async _maybeAnnounceCollaboratorMode() {
+        if (this.collaboration.mode !== 'collaborator') return;
+        const teammates = (this.collaboration.teammates || []).filter(n => n && n !== this.name);
+        if (teammates.length === 0) return;
+
+        for (const teammate of teammates) {
+            if (!convoManager.isOtherAgent(teammate)) continue;
+            try {
+                const goal = this.config.profile?.objective || settings.objective || 'Beat Minecraft';
+                await convoManager.tryInitiateConversation(
+                    teammate,
+                    `Team sync: let's collaborate on "${goal}". Share resources and keep each other alive.`
+                );
+            } catch (error) {
+                console.warn(`[Collaborator] Failed to sync with ${teammate}:`, error.message);
+            }
+        }
+    }
+
     async update(delta) {
         if (!this.running) return;
 
@@ -203,6 +513,12 @@ export class Agent {
                 }
             }
 
+            // Phase 2: Physics-based reflexes (MLG)
+            if (this.physics && this.physics.shouldMLG()) {
+                console.log('[MindOS] 🌊 MLG Waterdrop required! Executing...');
+                await this.physics.performMLG();
+            }
+
             // Central Intelligence Processing
             await this.brain.update(delta);
 
@@ -213,6 +529,10 @@ export class Agent {
             if (this.errorCount > 0 && Date.now() - this.lastErrorTime > 10000) {
                 this.errorCount = 0;
             }
+
+            // Phase 3: High-fidelity buffers
+            if (this.replayBuffer) this.replayBuffer.capture();
+            if (this.hitSelector && this.bot?.entity) this.hitSelector.update();
 
         } catch (err) {
             console.error(`[MindOS] Loop error in ${this.name}: `, err.message);
@@ -356,6 +676,16 @@ export class Agent {
             }
         }
 
+        try {
+            this.adventureLogger = new AdventureLogger(this, {
+                enabled: this.config?.enable_adventure_log !== false
+            });
+            await this.adventureLogger.initialize();
+            console.log('[INIT] AdventureLogger initialized');
+        } catch (err) {
+            console.warn('[INIT] AdventureLogger failed:', err.message);
+        }
+
         // Cognee Memory Bridge (Optional Service)
         try {
             const cogneeServiceUrl = settings.cognee_service_url || 'http://localhost:8001';
@@ -428,6 +758,7 @@ export class Agent {
         // Phase 8: Fix Init Race Condition
         // We trigger ready state ONLY after heavy subsystems (AI/Memory) are loaded.
         this.state = BOT_STATE.READY;
+        if (this.swarm) this.swarm.startHeartbeat();
         console.log('[INIT] System Ready Triggered (Gate Open).');
     }
 
@@ -517,6 +848,12 @@ export class Agent {
         } catch (err) {
             console.error("Error loading save_data/init_message:", err);
         }
+
+        setTimeout(() => {
+            if (this.running) {
+                void this._maybeAnnounceCollaboratorMode();
+            }
+        }, 3000);
     }
 
     checkAllPlayersPresent() {
@@ -564,6 +901,10 @@ export class Agent {
             return false;
         }
 
+        if (await this._handleAssistRequest(source, message)) {
+            return true;
+        }
+
         // Phase 8: Command Locking
         // Check if agent is locked by critical system (e.g. Combat)
         if (await this.locks.move.acquire('user_command', 100)) { // 100ms wait
@@ -584,11 +925,23 @@ export class Agent {
         const from_other_bot = convoManager.isOtherAgent(source);
 
         // 1. PROCESS INPUT (Brain Decides)
+        sendSystem2TraceToServer(this.name, {
+            phase: 'plan',
+            stage: 'start',
+            message: `Processing input from ${source}`,
+            meta: { selfPrompt: self_prompt, fromOtherBot: from_other_bot }
+        });
         const history = this.history.getHistory();
         const processResult = await this.brain.process(message, history, {
             is_chat: !self_prompt, // If self-prompt, it's NOT simple chat, it's planning
             self_prompt: self_prompt,
             source: source
+        });
+        sendSystem2TraceToServer(this.name, {
+            phase: 'plan',
+            stage: 'result',
+            message: `Brain returned type=${processResult.type}`,
+            meta: { hasPlan: Boolean(processResult.plan) }
         });
 
         // 2. UPDATE HISTORY (Move before early returns)
@@ -618,6 +971,11 @@ export class Agent {
         // 4. AUTONOMOUS LOOP (Planning Mode)
         // If type was 'plan', we might want to continue thinking/acting
         if (processResult.type === 'plan') {
+            sendSystem2TraceToServer(this.name, {
+                phase: 'critic',
+                stage: 'start',
+                message: 'Runtime guard review (loop guard + sanitizer) is active'
+            });
             // Setup Loop Variables
             if (max_responses === null) max_responses = settings.max_commands === -1 ? Infinity : settings.max_commands;
             if (max_responses === -1) max_responses = Infinity;
@@ -641,6 +999,12 @@ export class Agent {
                     planObj = await this.brain.plan(this.history.getHistory());
                 }
                 if (!planObj) break;
+                sendSystem2TraceToServer(this.name, {
+                    phase: 'plan',
+                    stage: 'ready',
+                    message: `Plan step prepared (${i + 1})`,
+                    meta: { hasTask: Boolean(planObj.task), hasThought: Boolean(planObj.thought) }
+                });
 
                 // 1. Process Thought (Monologue)
                 if (planObj.thought) {
@@ -662,6 +1026,11 @@ export class Agent {
                     planObj.task = this._diversifyRepeatedTask(planObj.task, self_prompt);
                     planObj.task = this._sanitizeTaskForRuntime(planObj.task);
                     console.log(`[Agent] Received Task: ${planObj.task.type}`);
+                    sendSystem2TraceToServer(this.name, {
+                        phase: 'execute',
+                        stage: 'start',
+                        message: `Executing task type=${planObj.task.type}`
+                    });
 
                     if (planObj.task.type === 'code' && planObj.task.content) {
                         try {
@@ -672,6 +1041,11 @@ export class Agent {
                             if (execResult.success) {
                                 const successDetail = execResult.summary || execResult.result || 'completed';
                                 this.history.add('system', `Code Execution Success: ${successDetail}`);
+                                sendSystem2TraceToServer(this.name, {
+                                    phase: 'execute',
+                                    stage: 'success',
+                                    message: 'Code task executed successfully'
+                                });
                             } else {
                                 const failDetail =
                                     execResult.executionError?.message ||
@@ -680,12 +1054,28 @@ export class Agent {
                                     execResult.codeOutput ||
                                     'unknown';
                                 this.history.add('system', `Code Execution Failed: ${failDetail}`);
+                                sendSystem2TraceToServer(this.name, {
+                                    phase: 'execute',
+                                    stage: 'failed',
+                                    message: `Code task failed: ${failDetail}`
+                                });
                             }
                         } catch (err) {
                             console.error('[Agent] Task Execution Error:', err);
                             this.history.add('system', `Task Error: ${err.message}`);
+                            sendSystem2TraceToServer(this.name, {
+                                phase: 'execute',
+                                stage: 'error',
+                                message: `Task execution error: ${err.message}`
+                            });
                         }
                     }
+                } else {
+                    sendSystem2TraceToServer(this.name, {
+                        phase: 'execute',
+                        stage: 'skipped',
+                        message: 'No task to execute for this plan step'
+                    });
                 }
 
                 // Break after one plan step to allow re-evaluation (and prevent infinite loops)
@@ -819,14 +1209,26 @@ const recentShelter = bot._lastShelterState &&
 
 if (isNight) {
   if (recentShelter) {
-    try {
-      await actions.craft_first_available(
-        ['oak_planks','birch_planks','spruce_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','bamboo_planks'],
-        8,
-        { retries: 1 }
-      );
-    } catch {}
-    try { await actions.ensure_item('stick', 4, { retries: 1 }); } catch {}
+    if (logCount + plankCount > 0) {
+      try {
+        await actions.craft_first_available(
+          ['oak_planks','birch_planks','spruce_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','bamboo_planks'],
+          8,
+          { retries: 1 }
+        );
+      } catch {}
+      try { await actions.ensure_item('stick', 4, { retries: 1 }); } catch {}
+    } else {
+      try {
+        await actions.gather_nearby('log', 1, {
+          maxDistance: 28,
+          retries: 1,
+          moveRetries: 1,
+          collectDrops: true,
+          continueOnError: true
+        });
+      } catch {}
+    }
   } else {
     try { await skills.find_shelter(bot, { retries: 1 }); } catch {}
   }
@@ -1013,7 +1415,12 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
     startEvents() {
         // ... (Events same as before) ...
         this.bot.on('time', () => {
-            if (this.bot.time.timeOfDay == 0) this.bot.emit('sunrise');
+            if (this.bot.time.timeOfDay == 0) {
+                this.bot.emit('sunrise');
+                if (this.adventureLogger) {
+                    void this.adventureLogger.onSunrise();
+                }
+            }
             else if (this.bot.time.timeOfDay == 6000) this.bot.emit('noon');
             else if (this.bot.time.timeOfDay == 12000) this.bot.emit('sunset');
             else if (this.bot.time.timeOfDay == 18000) this.bot.emit('midnight');
@@ -1063,6 +1470,13 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
         this.bot.on('death', () => {
             this.actions.cancelResume();
             this.actions.stop();
+
+            // Phase 3: Emit Death Signal for Evolution
+            globalBus.emitSignal(SIGNAL.DEATH, {
+                position: this.bot.entity.position,
+                timestamp: Date.now()
+            });
+
             this.memory.absorb('experience', {
                 facts: [`I died at ${this.bot.entity.position} `],
                 metadata: { type: 'death', timestamp: Date.now() }
@@ -1267,6 +1681,7 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
         safeCleanup('Watchdog', () => this.watchdog?.stop());
         safeCleanup('HealthMonitor', () => this.healthMonitor?.stop());
         safeCleanup('Vision', () => this.vision_interpreter?.cleanup());
+        safeCleanup('AdventureLogger', () => { this.adventureLogger = null; });
         safeCleanup('Arbiter', () => this.arbiter?.cleanup());
         safeCleanup('Social', () => this.social?.cleanup());
         // CRITICAL FIX: this.combat -> this.combatReflex

@@ -417,11 +417,35 @@ export async function isClearPath(bot, target) {
 export function shouldPlaceTorch(bot) {
     const torchModeOn = !!(bot?.modes && typeof bot.modes.isOn === 'function' && bot.modes.isOn('torch_placing'));
     if (!torchModeOn || bot.interrupt_code) return false;
-    const pos = getPosition(bot);
+    const pos = getPosition(bot)?.floored ? getPosition(bot).floored() : getPosition(bot);
+    if (!pos) return false;
 
-    // Proper light level check (0-15)
-    // Minecraft mobs spawn at light level 0 (in 1.18+)
-    const light = bot.world.getLight(pos);
+    let light = null;
+    try {
+        if (bot?.world && typeof bot.world.getLight === 'function') {
+            light = bot.world.getLight(pos);
+        }
+    } catch {
+        light = null;
+    }
+
+    // Fallback path for versions/providers where world.getLight is unreliable.
+    if (typeof light !== 'number') {
+        const block = bot.blockAt(pos);
+        const blockLight = typeof block?.light === 'number' ? block.light : null;
+        const skyLight = typeof block?.skyLight === 'number' ? block.skyLight : null;
+        if (typeof blockLight === 'number' || typeof skyLight === 'number') {
+            light = Math.max(blockLight || 0, skyLight || 0);
+        } else {
+            const tod = bot?.time?.timeOfDay;
+            if (typeof tod === 'number') {
+                const isNight = tod > 13000 && tod < 23000;
+                light = isNight ? 0 : 15;
+            }
+        }
+    }
+
+    if (typeof light !== 'number') return false;
     if (light > 7) return false; // Bright enough
 
     let nearest_torch = getNearestBlock(bot, 'torch', 6);

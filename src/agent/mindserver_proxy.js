@@ -139,12 +139,32 @@ export function sendBotChatToServer(agentName, json) {
     return true;
 }
 
+function emitToServer(eventName, ...args) {
+    const socket = serverProxy.getSocket();
+    if (!socket) {
+        console.warn(`[MindServerProxy] Cannot emit '${eventName}': socket unavailable`);
+        return false;
+    }
+    socket.emit(eventName, ...args);
+    return true;
+}
+
 // for sending general output to server for display
 export function sendOutputToServer(agentName, message) {
-    serverProxy.getSocket().emit('bot-output', agentName, message);
+    return emitToServer('bot-output', agentName, message);
 }
 
 // for sending internal thoughts/plans to server for display
 export function sendThoughtToServer(agentName, thought) {
-    serverProxy.getSocket().emit('bot-thought', agentName, thought);
+    return emitToServer('bot-thought', agentName, thought);
+}
+
+// for sending structured planner/critic/executor traces
+export function sendSystem2TraceToServer(agentName, trace) {
+    return emitToServer('system2-trace', agentName, trace);
+}
+
+// for sending daily adventure logs to dashboard
+export function sendAdventureLogToServer(agentName, entry) {
+    return emitToServer('adventure-log', agentName, entry);
 }

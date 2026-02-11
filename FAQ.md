@@ -80,7 +80,25 @@
 ### Q: "Context length exceeded" errors.
 **A:** The bot's short-term memory is too full.
 *   **MindOS V1.0** includes a `ContextManager` that auto-summarizes history. If you see this, it means the summarizer is lagging.
-*   **Fix:** Restart the bot to clear RAM context (Long-term memory persists in `.brain`).
+*   **Fix:** Restart the bot to clear RAM context (Long-term memory persists in long-term storage).
+
+---
+
+## 🐝 Swarm & Multi-Agent / Hệ Thống Bầy Đàn
+
+### Q: How do I connect multiple bots to the same swarm?
+**A:** Simply spawn multiple bots on the same server. 
+1. The bots automatically detect each other via the **Sigma Protocol** (JSON over whispers).
+2. Ensure `SwarmSync` is enabled in `Agent.js` (default in v2.5).
+3. Bots will begin sharing heartbeats and targets instantly.
+
+### Q: Why do the bots "whisper" to each other constantly?
+**A:** This is the P2P communication layer. MindOS uses whispers because they are server-side "invisible" (if formatted correctly) and allow agents to coordinate without a central server.
+* **Note:** If you find this spammy, you can adjust the heartbeat rate in `SwarmSync.js`.
+
+### Q: What is "Backtracking" and why is it important?
+**A:** Backtracking is a technique used in **Phase 2: Warrior Reflexes**. It compensates for server lag by tracking where an entity *was* based on your current ping. 
+* It ensures that even if a target is running fast, your hits will land with high-precision (within 1-2 ticks).
 
 ---
 

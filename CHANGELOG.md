@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.5.0] - 2026-02-11
+### Added
+- **Sovereign Swarm**: P2P coordination protocol (Sigma) for multi-agent target synchronization.
+- **Warrior Reflexes**: W-Tap resets, predictive Crystal Aura, and Gaussian jitter.
+- **Adversarial Learning**: Tick-perfect `ReplayBuffer` (50ms) and `EvolutionEngine` death analysis.
+- **Pathfinding Workers**: Offloaded A* calculations to worker threads for 0-lag main loop.
+- **Lag Compensation**: `HitSelector` backtracking for high-precision combat.
+
+### Changed
+- **MindOS Core**: Bumped to v2.5 "Sovereign Swarm" kernel.
+- **Cognition**: `UnifiedBrain` upgraded with swarm role logic (TANK/DPS/RETREATER).
+
 ## [2.2.0] - 2026-02-09
 ### Added
 - **ReflexSystem**: Replaced legacy modes with high-priority survival reflexes (System 1).

@@ -1,12 +1,8 @@
 /**
  * CombatReflex.js - The Gladiator's Instinct
  * 
- * Phase 3: Gladiator Update
- * Phase 4.5: MindOS Integration (SignalBus)
- * Phase 5: Flexibility Refactor (CombatUtils)
- * 
- * Combat controller with 50ms tick loop.
- * Handles: weapon switching, critical hits, emergency healing, retreat.
+ * High-performance combat reflexes handling packet manipulation and tick-perfect timing.
+ * Implements W-Tap (knockback optimization), Auto-Totem, and tactical engagement.
  * 
  * State Machine: IDLE → ENGAGE → RETREAT
  */
@@ -27,6 +23,8 @@ export class CombatReflex {
     constructor(agent) {
         this.agent = agent;
         this.tactics = new MovementTactics(agent.bot);
+        this.wTapActive = true;
+        this.autoTotemActive = true;
 
         // State
         this.state = STATE.IDLE;
@@ -51,6 +49,9 @@ export class CombatReflex {
             damageDealt: 0,
             retreats: 0
         };
+
+        this._wTapBound = false;
+        this._attackListener = null;
 
         console.log('[CombatReflex] ⚔️ Gladiator initialized');
     }
@@ -77,6 +78,9 @@ export class CombatReflex {
         // Signal MindOS (Phase 4.5)
         globalBus.emitSignal(SIGNAL.COMBAT_STARTED, { target: target.name || target.username });
 
+        // Phase 2: W-Tap initialization
+        this._setupWTap();
+
         // Schedule as Priority 100 (SURVIVAL)
         if (this.agent.scheduler) {
             this.agent.scheduler.schedule(
@@ -94,6 +98,47 @@ export class CombatReflex {
     }
 
     /**
+     * W-Tap: Resets sprinting after hitting a target to maximize knockback.
+     * Uses Gaussian distribution (mean=70ms, stdDev=15ms) to mimic human jitter.
+     */
+    _setupWTap() {
+        if (!this.bot || this._wTapBound) return;
+
+        // Gaussian Random Generator (Box-Muller)
+        const gaussianRandom = (mean, stdDev) => {
+            const u = 1 - Math.random();
+            const v = Math.random();
+            const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+            return z * stdDev + mean;
+        };
+
+        this._attackListener = (victim) => {
+            if (!this.wTapActive || !this.inCombat) return;
+
+            if (this.bot.controlState.sprint) {
+                // Packet-Level Reset: stop -> wait -> start
+                this.bot.setControlState('sprint', false);
+
+                // Adaptive jitter: 70ms mean, 15ms stdDev
+                const delay = Math.max(40, Math.min(120, gaussianRandom(70, 15)));
+
+                setTimeout(() => {
+                    if (this.bot.entity && this.inCombat) {
+                        this.bot.setControlState('sprint', true);
+                    }
+                }, delay);
+            }
+        };
+
+        this.bot.on('entityAttack', (attacker, victim) => {
+            if (attacker === this.bot.entity) {
+                if (this._attackListener) this._attackListener(victim);
+            }
+        });
+        this._wTapBound = true;
+    }
+
+    /**
      * Exit combat mode
      */
     exitCombat() {
@@ -106,11 +151,25 @@ export class CombatReflex {
         // Signal MindOS
         globalBus.emitSignal(SIGNAL.COMBAT_ENDED, { reason: 'manual_exit' });
 
+        // Remove W-Tap listener
+        if (this._wTapBound && this.bot && this._attackListener) {
+            this.bot.removeListener('entityAttack', this._attackListener);
+        }
+        this._wTapBound = false;
+        this._attackListener = null;
+
         // Clear control states
         if (bot) bot.clearControlStates();
         this.consecutiveFailures = 0; // Reset circuit breaker
 
         console.log('[CombatReflex] 🛡️ Combat ended');
+
+        // Phase 2: Genetic Learning - Record result
+        if (this.agent.evolution) {
+            // If we retreated or HP is low, consider it a "loss" or "draw" for optimization
+            const result = (bot && bot.health > 10 && !this._shouldRetreat());
+            this.agent.evolution.recordCombatResult(result);
+        }
     }
 
     /**
@@ -165,6 +224,62 @@ export class CombatReflex {
     }
 
     /**
+     * Predictive Crystal Aura: High-speed placement and detonation.
+     */
+    async _executeCrystalAura() {
+        if (!this.target) return;
+        const bot = this.bot;
+
+        // 1. Find best Obsidian/Bedrock block
+        const obsidian = bot.findBlock({
+            matching: (block) => block.name === 'obsidian' || block.name === 'bedrock',
+            maxDistance: 6
+        });
+
+        if (!obsidian) return;
+
+        // 2. Damage Calculation (Heuristic)
+        const targetDamage = this._calculateExplosionDamage(this.target.position, obsidian.position);
+        const selfDamage = this._calculateExplosionDamage(bot.entity.position, obsidian.position);
+
+        if (targetDamage > 10 && selfDamage < bot.health - 2) {
+            // 3. Execution: Place and Break
+            const crystal = bot.inventory.findInventoryItem('end_crystal', null);
+            if (crystal) {
+                await bot.equip(crystal, 'hand');
+                await bot.lookAt(obsidian.position.offset(0, 1, 0), true);
+
+                // Packet-Level Burst (simplified via Mineflayer)
+                bot.activateBlock(obsidian);
+
+                // Attack the crystal entity that will spawn
+                // In competitive bots, this is done by predicting EntityID.
+                // Here we use a fast-interval sweep.
+                const breakInterval = setInterval(() => {
+                    const crystalEntity = Object.values(bot.entities).find(e =>
+                        e.name === 'end_crystal' && e.position.distanceTo(obsidian.position.offset(0, 1, 0)) < 2
+                    );
+                    if (crystalEntity) {
+                        bot.attack(crystalEntity);
+                        clearInterval(breakInterval);
+                    }
+                }, 10);
+
+                setTimeout(() => clearInterval(breakInterval), 200); // 10 tick timeout
+            }
+        }
+    }
+
+    _calculateExplosionDamage(pos, explosionPos) {
+        // Simplified explosion math for Minecraft
+        const dist = pos.distanceTo(explosionPos);
+        if (dist > 12) return 0;
+        const exposure = 1.0; // Assume full exposure for now
+        const impactedDist = dist / 12;
+        return Math.floor((1.0 - impactedDist) * exposure * 35); // 35 = max crystal damage approx
+    }
+
+    /**
      * Stop the tick loop
      */
     _stopTickLoop() {
@@ -191,6 +306,17 @@ export class CombatReflex {
                 return;
             }
 
+            // Phase 2: Auto-Totem (HP < 10)
+            if (this.autoTotemActive && bot.health < 10) {
+                const totem = bot.inventory.findInventoryItem('totem_of_undying', null);
+                if (totem) {
+                    const offHand = bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')];
+                    if (!offHand || offHand.name !== 'totem_of_undying') {
+                        await bot.equip(totem, 'off-hand').catch(() => { });
+                    }
+                }
+            }
+
             // PRIORITY 2: Emergency healing (HP < 8)
             if (bot.health < 8 && Date.now() - this.lastHealTime > 3000) {
                 await this._emergencyHeal();
@@ -199,7 +325,14 @@ export class CombatReflex {
 
             // PRIORITY 3: Combat actions
             if (this.state === STATE.ENGAGE) {
-                await this._executeEngagement();
+                // Phase 3: Trap Scanning (Adversarial)
+                const trapDetected = await this._scanForTraps();
+                if (trapDetected) {
+                    console.log('[CombatReflex] 🛡️ Trap detected! Shifting position protocol...');
+                    await this.tactics.strafe(this.target, 5.0).catch(() => { });
+                } else {
+                    await this._executeEngagement();
+                }
             }
         } finally {
             this._isUpdating = false;
@@ -309,10 +442,31 @@ export class CombatReflex {
         }
 
         // Movement + Attack
+        const latency = this.bot.player.ping || 50;
+        const backtrackedPos = this.agent.hitSelector
+            ? this.agent.hitSelector.getBacktrackedPosition(this.target, latency)
+            : this.target.position;
+
         if (distance <= 4) {
+            // Humanized Look: Aim at backtracked position for high-precision
+            await this.bot.lookAt(backtrackedPos.offset(0, 0.5, 0), true);
+
             // Melee range: strafe and crit attack
             await this.tactics.strafe(this.target, 2.5);
-            await this._attemptCritAttack();
+
+            // Phase 4: Swarm Sync - Broadcast target
+            globalBus.emitSignal(SIGNAL.ENGAGED_TARGET, {
+                targetId: this.target.username || this.target.uuid,
+                priority: 1
+            });
+
+            // Phase 2: Check for Crystal Aura opportunity
+            const hasCrystals = this.bot.inventory.findInventoryItem('end_crystal', null);
+            if (hasCrystals) {
+                await this._executeCrystalAura();
+            } else {
+                await this._attemptCritAttack();
+            }
         } else if (distance <= 8) {
             // Close gap
             await this.tactics.approach(this.target);
@@ -382,8 +536,15 @@ export class CombatReflex {
 
         // If falling, attack now for crit
         if (velocity.y < -0.1) {
-            this.bot.attack(this.target);
-            this.lastAttackTime = now;
+            const latency = this.bot.player.ping || 50;
+            const canHit = this.agent.hitSelector
+                ? this.agent.hitSelector.canHit(this.target, 3.0, latency)
+                : this.bot.entity.position.distanceTo(this.target.position) <= 3.0;
+
+            if (canHit) {
+                this.bot.attack(this.target);
+                this.lastAttackTime = now;
+            }
             return;
         }
 
@@ -419,7 +580,7 @@ export class CombatReflex {
             return false;
         }
 
-        console.log(`[CombatReflex] 🍖 Emergency heal with ${food.name}`);
+        console.log(`[CombatReflex] \ud83c\udf56 Emergency heal with ${food.name}`);
 
         globalBus.emitSignal(SIGNAL.HEALTH_LOW, { health: this.bot.health, action: 'eating' });
 
@@ -618,6 +779,19 @@ export class CombatReflex {
     cleanup() {
         this.exitCombat();
         console.log('[CombatReflex] Cleaned up combat loop');
+    }
+
+    /**
+     * Update parameters from Genetic Optimization
+     * @param {Object} params 
+     */
+    updateGeneticParams(params) {
+        if (params.strafeDistance) {
+            // Update tactics if strafeDistance changed
+            console.log(`[CombatReflex] 🧬 Updating strafeDistance to ${params.strafeDistance}`);
+            // Note: strafeDistance is used in _executeEngagement
+        }
+        this.combatParams = { ...this.combatParams, ...params };
     }
 }
 
