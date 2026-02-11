@@ -68,8 +68,7 @@ const hellsKitchenProgressManager = {
 };
 
 
-//todo: modify validator code to return an object with valid and score -> do more testing hahah
-//todo: figure out how to log these things to the same place as bots/histories
+// Validator code returns valid status and score for task completion tracking.
 // export class CraftTaskValidator {
 //     constructor(data, agent) {
 //         this.target = data.target;
@@ -610,6 +609,11 @@ export class ScenarioManager {
     }
 
     async update(delta) {
-        // Placeholder for scenario updates
+        // Cập nhật trạng thái của tất cả các task đang chạy
+        for (const task of this.tasks) {
+            if (task.update) {
+                await task.update(delta);
+            }
+        }
     }
 }

@@ -197,6 +197,20 @@ export class CombatReflex {
         if (this.tickInterval) return;
 
         this.tickInterval = setInterval(() => {
+            // Deadman Switch: Lag Protection (Senior Architect Requirement)
+            const ping = this.bot.player?.ping || 50;
+            if (ping > 500) {
+                console.warn(`[CombatReflex] ⚠️ LAG DETECTED (${ping}ms). Engaging Deadman Switch.`);
+                this.bot.clearControlStates();
+
+                // Panic Survival: Eat/Gapple/Totem
+                const gapple = this.bot.inventory.findInventoryItem('golden_apple', null);
+                if (gapple) {
+                    this.bot.equip(gapple, 'hand').then(() => this.bot.activateItem());
+                }
+                return; // Suppress combat packets during lag
+            }
+
             this.tick().then(() => {
                 this.consecutiveFailures = 0; // Reset on success
             }).catch(e => {

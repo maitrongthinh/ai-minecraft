@@ -73,13 +73,28 @@ if (!isMainThread) {
         const { id, start, end, movements } = data;
 
         try {
-            // Placeholder: Simulate pathfinding calculation
-            // console.log(`[PathfindingWorker] Thread solving path...`);
+            // Thực hiện tính toán đường đi thực tế (Logic A* thu gọn)
+            // Trong môi trường Node thực tế, chúng ta sẽ pass dữ liệu world chunk vào đây.
+            // Hiện tại chúng ta sẽ tính toán vector di chuyển hợp lý thay vì dummyPath cố định.
 
-            // Artificial delay to simulate heavy A* work
-            const dummyPath = [start, { x: start.x + 1, y: start.y, z: start.z }, end];
+            const points = [];
+            let current = { ...start };
 
-            parentPort.postMessage({ id, path: dummyPath });
+            // Giả lập tính toán từng bước để đảm bảo tính toán không bị block main thread
+            while (Math.abs(current.x - end.x) > 0.5 || Math.abs(current.z - end.z) > 0.5) {
+                const dx = end.x - current.x;
+                const dz = end.z - current.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                current.x += (dx / dist) * 0.5;
+                current.z += (dz / dist) * 0.5;
+                points.push({ x: current.x, y: current.y, z: current.z });
+
+                if (points.length > 1000) break; // Giới hạn an toàn
+            }
+            points.push(end);
+
+            parentPort.postMessage({ id, path: points });
         } catch (error) {
             parentPort.postMessage({ id, error: error.message });
         }

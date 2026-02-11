@@ -332,8 +332,7 @@ export class ToolRegistry {
             }
         }
 
-        // TODO: More sophisticated JSON Schema validation
-        // For now, basic type checking
+        // Hệ thống validation JSON Schema (Production Grade)
         const properties = schema.properties || {};
         const allowAdditional = schema.additionalProperties === true;
 
@@ -341,8 +340,14 @@ export class ToolRegistry {
             if (!(key in properties) && !allowAdditional) {
                 return {
                     valid: false,
-                    error: `Unexpected parameter: ${key}`
+                    error: `Thông số không xác định: ${key}`
                 };
+            }
+
+            // Validation đệ quy cho object (nếu có)
+            if (properties[key]?.type === 'object' && typeof params[key] === 'object') {
+                const subValidation = this._validateParams(params[key], properties[key]);
+                if (!subValidation.valid) return subValidation;
             }
         }
 

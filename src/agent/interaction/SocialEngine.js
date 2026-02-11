@@ -139,23 +139,30 @@ export class SocialEngine {
      */
     async handleChatInteraction(entityName, message) {
         const profile = this.getProfile(entityName);
-        console.log(`[SocialEngine] Interacting with ${entityName} (Trust: ${profile.trust})`);
+        const msg_low = message.toLowerCase();
 
-        // Update trust based on sentiment (Simple placeholder for now)
-        if (message.includes('good') || message.includes('thanks')) {
-            profile.addTrust(1);
-        } else if (message.includes('bad') || message.includes('kill')) {
-            profile.addTrust(-5);
+        console.log(`[SocialEngine] Interacting with ${entityName} (Current Trust: ${profile.trustScore})`);
+
+        // Hệ thống cảm xúc nâng cao (Thay thế placeholder)
+        const positive = ['good', 'thanks', 'cảm ơn', 'giỏi', 'hay', 'nice', 'friend', 'bạn'];
+        const negative = ['bad', 'kill', 'giết', 'ngu', 'die', 'chết', 'hate', 'ghét', 'trash'];
+
+        let sentiment = 0;
+        positive.forEach(word => { if (msg_low.includes(word)) sentiment += 2; });
+        negative.forEach(word => { if (msg_low.includes(word)) sentiment -= 5; });
+
+        if (sentiment !== 0) {
+            profile.trustScore = Math.max(0, Math.min(100, profile.trustScore + sentiment));
+            console.log(`[SocialEngine] Trust updated for ${entityName}: ${profile.trustScore} (Delta: ${sentiment})`);
         }
 
         // Emit signal for Brain to react
         globalBus.emitSignal(SIGNAL.SOCIAL_INTERACTION, {
             entity: entityName,
-            trust: profile.trust,
-            message
+            trust: profile.trustScore,
+            message,
+            sentiment: sentiment > 0 ? 'positive' : (sentiment < 0 ? 'negative' : 'neutral')
         });
-
-        // Auto-reply logic if trust is high? (Managed by Brain usually)
     }
 
     async updateSocialInitiative() {

@@ -89,6 +89,10 @@ if (process.platform === 'win32') {
     }
 }
 
+// Phase 8: Cognee Auto-Service
+import { cogneeManager } from './src/memory/CogneeServiceManager.js';
+await cogneeManager.start();
+
 Mindcraft.init(true, settings.mindserver_port, settings.auto_open_ui);
 
 for (let profile of settings.profiles) {
