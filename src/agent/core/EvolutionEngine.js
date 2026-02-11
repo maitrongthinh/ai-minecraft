@@ -212,6 +212,36 @@ export class EvolutionEngine {
         try {
             const skillLibrary = this.agent.skillLibrary;
             if (!skillLibrary) return false;
+
+            // Phase 5.4: Semantic Review (Deduplication)
+            const summary = await skillLibrary.getSummary();
+            const reviewPrompt = `
+            Task: ${snapshot.taskName}
+            New Code:
+            ${code.substring(0, 500)}
+            
+            Existing Skills:
+            ${summary}
+            
+            Analyze: Is this new code redundant with an existing skill?
+            Return JSON: {"isDuplicate": boolean, "mergeWith": "name_or_null", "reason": "string"}
+            `;
+
+            let decision = { isDuplicate: false };
+            try {
+                const response = await this.agent.brain.ask(reviewPrompt);
+                const cleanResponse = response.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1').trim();
+                decision = JSON.parse(cleanResponse);
+            } catch (e) {
+                console.warn('[EvolutionEngine] Semantic review failed, proceeding with safety default.');
+            }
+
+            if (decision.isDuplicate) {
+                console.log(`[EvolutionEngine] 🛑 Skill redundant with ${decision.mergeWith}. Reason: ${decision.reason}`);
+                // In production, we'd merge here. For now, we skip saving to prevent pollution.
+                return true;
+            }
+
             if (typeof skillLibrary.hotSwap === 'function') {
                 await skillLibrary.hotSwap(name, code, `Fix for ${snapshot.errorMessage}`);
             } else {

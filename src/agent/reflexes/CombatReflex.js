@@ -224,50 +224,45 @@ export class CombatReflex {
     }
 
     /**
-     * Predictive Crystal Aura: High-speed placement and detonation.
+     * Predictive Crystal Aura: Network-Level Burst.
+     * Bypasses standard event loop and bot.attack() for tick-perfect timing.
      */
-    async _executeCrystalAura() {
+    async _executeCrystalAura(targetBlockPos) {
         if (!this.target) return;
         const bot = this.bot;
 
-        // 1. Find best Obsidian/Bedrock block
-        const obsidian = bot.findBlock({
-            matching: (block) => block.name === 'obsidian' || block.name === 'bedrock',
-            maxDistance: 6
-        });
+        // 1. Gửi lệnh đặt Crystal lên khối Obsidian
+        bot.activateBlock(bot.blockAt(targetBlockPos));
 
-        if (!obsidian) return;
+        // 2. Transient Listener: Bắt gói tin sinh ra thực thể (spawn_entity)
+        const onEntitySpawn = (packet, meta) => {
+            // Type 51 (~ bản cũ) hoặc ObjectData cho End Crystal
+            if (meta.name === 'spawn_entity' && (packet.type === 51 || packet.objectData === 51)) {
+                const dx = Math.abs(packet.x - targetBlockPos.x);
+                const dy = Math.abs(packet.y - targetBlockPos.y);
+                const dz = Math.abs(packet.z - targetBlockPos.z);
 
-        // 2. Damage Calculation (Heuristic)
-        const targetDamage = this._calculateExplosionDamage(this.target.position, obsidian.position);
-        const selfDamage = this._calculateExplosionDamage(bot.entity.position, obsidian.position);
-
-        if (targetDamage > 10 && selfDamage < bot.health - 2) {
-            // 3. Execution: Place and Break
-            const crystal = bot.inventory.findInventoryItem('end_crystal', null);
-            if (crystal) {
-                await bot.equip(crystal, 'hand');
-                await bot.lookAt(obsidian.position.offset(0, 1, 0), true);
-
-                // Packet-Level Burst (simplified via Mineflayer)
-                bot.activateBlock(obsidian);
-
-                // Attack the crystal entity that will spawn
-                // In competitive bots, this is done by predicting EntityID.
-                // Here we use a fast-interval sweep.
-                const breakInterval = setInterval(() => {
-                    const crystalEntity = Object.values(bot.entities).find(e =>
-                        e.name === 'end_crystal' && e.position.distanceTo(obsidian.position.offset(0, 1, 0)) < 2
-                    );
-                    if (crystalEntity) {
-                        bot.attack(crystalEntity);
-                        clearInterval(breakInterval);
-                    }
-                }, 10);
-
-                setTimeout(() => clearInterval(breakInterval), 200); // 10 tick timeout
+                // Độ chính xác < 2 block
+                if (dx < 2 && dy < 2 && dz < 2) {
+                    // Gửi trực tiếp packet 'use_entity' (bypass bot.attack)
+                    bot._client.write('use_entity', {
+                        target: packet.entityId,
+                        mouse: 1 // Left click / Attack
+                    });
+                    cleanup();
+                }
             }
-        }
+        };
+
+        const cleanup = () => {
+            bot._client.removeListener('packet', onEntitySpawn);
+            clearTimeout(fallbackTimeout);
+        };
+
+        bot._client.on('packet', onEntitySpawn);
+
+        // Fallback: Tự hủy sau 250ms tránh leak bộ nhớ
+        const fallbackTimeout = setTimeout(cleanup, 250);
     }
 
     _calculateExplosionDamage(pos, explosionPos) {

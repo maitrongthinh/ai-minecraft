@@ -63,21 +63,16 @@ export class MotorCortex {
         this.isProcessing = true;
         const { targetPos, urgency, resolve } = this.lookQueue.shift();
 
-        const start = { yaw: this.bot.entity.yaw, pitch: this.bot.entity.pitch };
+        const startYaw = this.bot.entity.yaw;
+        const startPitch = this.bot.entity.pitch;
 
-        // Capture target angles
-        const originalYaw = this.bot.entity.yaw;
-        const originalPitch = this.bot.entity.pitch;
-        await this.bot.lookAt(targetPos, true);
-        const end = { yaw: this.bot.entity.yaw, pitch: this.bot.entity.pitch };
+        // Calculate target angles
+        const eyePos = this.bot.entity.position.offset(0, 1.62, 0);
+        const delta = targetPos.minus(eyePos);
+        const targetYaw = Math.atan2(-delta.x, -delta.z);
+        const targetPitch = Math.asin(-delta.y / delta.norm());
 
-        this.bot.entity.yaw = originalYaw;
-        this.bot.entity.pitch = originalPitch;
-
-        const cp1 = this._getControlPoint(start, end);
-        const cp2 = this._getControlPoint(start, end);
-
-        const duration = (Math.random() * 150 + 200) / urgency;
+        const duration = (Math.random() * 50 + 150) / urgency; // 150-200ms
         const startTime = Date.now();
 
         const interval = setInterval(() => {
@@ -85,23 +80,25 @@ export class MotorCortex {
             let t = elapsed / duration;
 
             if (t >= 1) {
-                this.bot.look(end.yaw, end.pitch);
+                this.bot.look(targetYaw, targetPitch, true);
                 clearInterval(interval);
                 resolve();
                 this._processLookQueue();
                 return;
             }
 
-            const tEase = 1 - Math.pow(1 - t, 3);
-            const currentYaw = this._cubicBezier(tEase, start.yaw, cp1.yaw, cp2.yaw, end.yaw);
-            const currentPitch = this._cubicBezier(tEase, start.pitch, cp1.pitch, cp2.pitch, end.pitch);
+            // Easing: Slow-Fast-Slow (Quadratic)
+            const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
-            this.noiseTime += 0.05;
-            const noiseX = this.noise2D(this.noiseTime, 0) * 0.008;
-            const noiseY = this.noise2D(0, this.noiseTime) * 0.008;
+            // Micro-jitter Simulation (Hand Tremor)
+            const jitter = (Math.random() - 0.5) * 0.02 * (1 - easeT);
 
-            this.bot.look(currentYaw + noiseX, currentPitch + noiseY);
-        }, 10);
+            const currentYaw = startYaw + (targetYaw - startYaw) * easeT + jitter;
+            const currentPitch = startPitch + (targetPitch - startPitch) * easeT + jitter;
+
+            // Force packet update
+            this.bot.look(currentYaw, currentPitch, true);
+        }, 50); // Tick-aligned (50ms)
     }
 }
 
