@@ -4,6 +4,7 @@ import { JsonSanitizer } from '../../utils/JsonSanitizer.js';
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
 import { ActionLogger } from '../../utils/ActionLogger.js';
 import { getBotOutputSummary } from '../../utils/mcdata.js';
+import { CodeSandbox } from '../core/CodeSandbox.js';
 
 /**
  * CodeEngine: Unified JS Execution & Learning System
@@ -18,10 +19,11 @@ export class CodeEngine {
     constructor(agent) {
         this.agent = agent;
         this.library = new SkillLibrary();
+        this.sandbox = new CodeSandbox({ timeout: 5000 });
         this.referenceCode = null;
 
         this._setupSignals();
-        console.log('[CodeEngine] 💻 Intelligence module armed.');
+        console.log('[CodeEngine] 💻 Hardened Intelligence module armed (isolated-vm).');
     }
 
     _setupSignals() {
@@ -221,160 +223,26 @@ export class CodeEngine {
     }
 
     async _stageCode(code) {
-        let code_clean = this._sanitizeCode(code);
+        const code_clean = this._sanitizeCode(code);
 
-        // Phase 8: AST Sanitization (DoS Prevention)
-        try {
-            const { CodeSanitizer } = await import('./CodeSanitizer.js');
-            code_clean = CodeSanitizer.sanitize(code_clean, 5000); // 5s timeout
-        } catch (e) {
-            console.warn('[CodeEngine] Sanitizer failed, proceeding with raw code:', e.message);
-        }
-
-        let src_lint_copy = "import * as skills from '../../skills/library/index.js';\nimport * as world from '../../skills/library/world.js';\nimport Vec3 from 'vec3';\nasync function main(bot) {\n" + code_clean + "\n}\nexport {main};";
-
-        // Dynamic evaluation in a compartment-like style or simple eval
-        // For Mindcraft environment:
-        try {
-            const wrappedCode = `(async () => {\n${code_clean}\n})()`;
-
-            // SECURITY UPDATE: Use Node.js VM for sandbox execution
-            const mainFn = async (bot) => {
-                const rawSkills = await import('../../skills/library/index.js');
-                const world = await import('../../skills/library/world.js');
-                const { default: Vec3 } = await import('vec3');
-                const vm = await import('vm');
-
-                const looksLikeBot = (value) =>
-                    !!value &&
-                    (typeof value.findBlock === 'function' ||
-                        typeof value.blockAt === 'function' ||
-                        typeof value.chat === 'function');
-
-                const looksLikeAgent = (value) => !!(value && value.bot && looksLikeBot(value.bot));
-
-                const ensureOutcome = (name, result) => {
-                    if (result && typeof result === 'object' && result.success === false) {
-                        const detail = result.message || result.error || 'failed';
-                        throw new Error(`[${name}] ${detail}`);
-                    }
-                    return result;
-                };
-
-                const invokeBoundSkill = (fn, arg1, arg2) => {
-                    if (!fn) return Promise.resolve({ success: false, message: 'Skill not available' });
-                    if (looksLikeBot(arg1) || looksLikeAgent(arg1)) {
-                        return Promise.resolve(fn(arg1, arg2 ?? {})).then(r => ensureOutcome(fn.name || 'skill', r));
-                    }
-                    if (arg2 !== undefined) {
-                        return Promise.resolve(fn(arg1, arg2)).then(r => ensureOutcome(fn.name || 'skill', r));
-                    }
-                    if (arg1 && typeof arg1 === 'object') {
-                        return Promise.resolve(fn(bot, arg1)).then(r => ensureOutcome(fn.name || 'skill', r));
-                    }
-                    return Promise.resolve(fn(bot, {})).then(r => ensureOutcome(fn.name || 'skill', r));
-                };
-
-                const boundSkills = {
-                    ...rawSkills,
-                    find_shelter: (arg1, arg2) => invokeBoundSkill(rawSkills.find_shelter, arg1, arg2),
-                    gather_wood: (arg1, arg2) => invokeBoundSkill(rawSkills.gather_wood, arg1, arg2),
-                    gather_resources: (arg1, arg2) => invokeBoundSkill(rawSkills.gather_resources, arg1, arg2),
-                    mine_ores: (arg1, arg2) => invokeBoundSkill(rawSkills.mine_ores, arg1, arg2),
-                    craft_items: (arg1, arg2) => invokeBoundSkill(rawSkills.craft_items, arg1, arg2),
-                    place_blocks: (arg1, arg2) => invokeBoundSkill(rawSkills.place_blocks, arg1, arg2),
-                    smelt_items: (arg1, arg2) => invokeBoundSkill(rawSkills.smelt_items, arg1, arg2),
-                    StrategicMovement: (arg1, arg2) => invokeBoundSkill(rawSkills.find_shelter, arg1, arg2)
-                };
-
-                const skills = new Proxy(boundSkills, {
-                    get(target, prop) {
-                        if (prop in target) {
-                            return target[prop];
-                        }
-                        if (typeof prop === 'string') {
-                            return async () => {
-                                throw new Error(`Unknown skill: ${prop}`);
-                            };
-                        }
-                        return undefined;
-                    }
-                });
-
-                const coreActions = this.agent?.actionAPI;
-                const actions = {
-                    move_to: async (position, options = {}) => {
-                        if (!coreActions) throw new Error('ActionAPI unavailable');
-                        return ensureOutcome('move_to', await coreActions.moveTo(position, options));
-                    },
-                    gather_nearby: async (matching, count = 1, options = {}) => {
-                        if (!coreActions) throw new Error('ActionAPI unavailable');
-                        return ensureOutcome('gather_nearby', await coreActions.gatherNearby(matching, count, options));
-                    },
-                    craft_first_available: async (items = [], count = 1, options = {}) => {
-                        if (!coreActions) throw new Error('ActionAPI unavailable');
-                        return ensureOutcome('craft_first_available', await coreActions.craftFirstAvailable(items, count, options));
-                    },
-                    ensure_item: async (itemName, targetCount = 1, options = {}) => {
-                        if (!coreActions) throw new Error('ActionAPI unavailable');
-                        return ensureOutcome('ensure_item', await coreActions.ensureItem(itemName, targetCount, options));
-                    },
-                    collect_drops: async (options = {}) => {
-                        if (!coreActions) throw new Error('ActionAPI unavailable');
-                        return ensureOutcome('collect_drops', await coreActions.collectDroppedItems(options));
-                    },
-                    eat_if_hungry: async (options = {}) => {
-                        if (!coreActions) throw new Error('ActionAPI unavailable');
-                        return ensureOutcome('eat_if_hungry', await coreActions.eatIfHungry(options));
-                    }
-                };
-
-                const skillAliases = {
-                    find_shelter: (options = {}) => skills.find_shelter?.(bot, options),
-                    gather_wood: (options = {}) => skills.gather_wood?.(bot, options),
-                    gather_resources: (options = {}) => skills.gather_resources?.(bot, options),
-                    mine_ores: (options = {}) => skills.mine_ores?.(bot, options),
-                    craft_items: (options = {}) => skills.craft_items?.(bot, options),
-                    place_blocks: (options = {}) => skills.place_blocks?.(bot, options),
-                    smelt_items: (options = {}) => skills.smelt_items?.(bot, options)
-                };
-
-                const sandbox = {
-                    bot,
-                    skills,
-                    actions,
-                    world,
-                    Vec3,
-                    ...skillAliases,
-                    console, // Allow logging
-                    setTimeout,
-                    clearTimeout,
-                    setInterval,
-                    clearInterval
-                };
-
-                vm.createContext(sandbox);
-
-                // Execute with timeout to prevent synchronous infinite loops
-                // Note: deeply nested async loops might still persist, but this catches tight loops
-                return await vm.runInContext(wrappedCode, sandbox, {
-                    timeout: 5000,
-                    displayErrors: true
-                });
+        const mainFn = async (bot) => {
+            const contextData = {
+                bot_health: bot.health,
+                bot_food: bot.food,
+                bot_position: bot.entity.position,
+                inventory_summary: bot.inventory.items().map(i => i.name)
             };
 
-            return { func: { main: mainFn }, src_lint_copy };
-        } catch (err) {
-            console.error('[CodeEngine] Staging Error:', err);
-            return {
-                func: null,
-                error: {
-                    name: err.name,
-                    message: err.message,
-                    stack: err.stack
-                }
-            };
-        }
+            const result = await this.sandbox.execute(code_clean, contextData);
+
+            if (!result.success) {
+                throw new Error(result.error);
+            }
+
+            return result.result;
+        };
+
+        return { func: { main: mainFn } };
     }
 
     _sanitizeCode(code) {

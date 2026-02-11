@@ -98,7 +98,7 @@ export class MotorCortex {
 
             // Force packet update
             this.bot.look(currentYaw, currentPitch, true);
-        }, 50); // Tick-aligned (50ms)
+        }, 10); // High-fidelity interpolation (10ms)
     }
 }
 

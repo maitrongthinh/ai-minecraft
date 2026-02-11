@@ -443,8 +443,8 @@ export class CombatReflex {
             : this.target.position;
 
         if (distance <= 4) {
-            // Humanized Look: Aim at backtracked position for high-precision
-            await this.bot.lookAt(backtrackedPos.offset(0, 0.5, 0), true);
+            // Humanized Look: Aim at backtracked position for high-precision (Anti-Cheat Bypass)
+            await this.agent.actionAPI.motorCortex.humanLook(backtrackedPos.offset(0, 0.5, 0), 1.5);
 
             // Melee range: strafe and crit attack
             await this.tactics.strafe(this.target, 2.5);
@@ -455,10 +455,20 @@ export class CombatReflex {
                 priority: 1
             });
 
-            // Phase 2: Check for Crystal Aura opportunity
+            // Phase 6: Proactive Crystal Aura (Senior Hardening)
             const hasCrystals = this.bot.inventory.findInventoryItem('end_crystal', null);
             if (hasCrystals) {
-                await this._executeCrystalAura();
+                // Determine obsidian block under/near target
+                const targetPos = this.target.position;
+                const crystalBase = this.bot.findBlock({
+                    point: targetPos,
+                    matching: (block) => block.name === 'obsidian' || block.name === 'bedrock',
+                    maxDistance: 4
+                });
+
+                if (crystalBase) {
+                    await this._executeCrystalAura(crystalBase.position);
+                }
             } else {
                 await this._attemptCritAttack();
             }
