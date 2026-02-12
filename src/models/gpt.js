@@ -16,7 +16,7 @@ export class GPT {
         if (hasKey('OPENAI_ORG_ID'))
             config.organization = getKey('OPENAI_ORG_ID');
 
-        config.apiKey = params?.apiKey || (params?.apiKeyEnv ? getKey(params.apiKeyEnv) : getKey('OPENAI_API_KEY'));
+        config.apiKey = params?.apiKey || (params?.apiKeyEnv ? getKey(params.apiKeyEnv) : (getKey('OPENAI_API_KEY') || 'sk-dummy-if-proxy-handles-it'));
 
         this.openai = new OpenAIApi(config);
     }

@@ -513,5 +513,3 @@ export class ActionAPI {
 }
 
 export default ActionAPI;
-
-export default ActionAPI;

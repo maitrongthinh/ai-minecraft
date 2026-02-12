@@ -10,7 +10,6 @@ import { globalBus, SIGNAL } from './SignalBus.js';
 export class SwarmSync {
     constructor(agent) {
         this.agent = agent;
-        this.bot = agent.bot;
         this.peers = new Map(); // Name -> { lastSeen: Number, position: Vec3, target: String, role: String }
         this.swarmId = 'SOVEREIGN_SWARM';
         this.heartbeatInterval = 2000;
@@ -18,20 +17,22 @@ export class SwarmSync {
         // Protocol markers
         this.PROTO_PREFIX = 'Σ'; // Sigma for Swarm
 
-        this._setupListeners();
+        // Instead of immediate setup, wait for spawn to avoid null bot crash
+        globalBus.subscribe(SIGNAL.BOT_SPAWNED, () => {
+            this._setupListeners();
+            this.startHeartbeat();
+        });
     }
 
     _setupListeners() {
         // Listen for incoming whispers from potential teammates
-        this.bot.on('whisper', (username, message) => {
+        this.agent.bot.on('whisper', (username, message) => {
             if (message.startsWith(this.PROTO_PREFIX)) {
                 this._handleProtocolMessage(username, message.slice(1));
             }
         });
 
         // Broadcast local state changes to the swarm
-        globalBus.subscribe(SIGNAL.BOT_SPAWNED, () => this.startHeartbeat());
-
         globalBus.subscribe(SIGNAL.ENGAGED_TARGET, (event) => {
             this.broadcast('TARGET_SHARED', {
                 targetId: event.payload.targetId,
@@ -44,11 +45,11 @@ export class SwarmSync {
         if (this.heartbeatTimer) return;
 
         this.heartbeatTimer = setInterval(() => {
-            if (!this.bot.entity) return;
+            if (!this.agent.bot.entity) return;
 
             this.broadcast('HEARTBEAT', {
-                pos: this.bot.entity.position,
-                hp: this.bot.health,
+                pos: this.agent.bot.entity.position,
+                hp: this.agent.bot.health,
                 target: this.agent.combatReflex?.target?.username || null,
                 role: this._determineRole()
             });
@@ -59,8 +60,8 @@ export class SwarmSync {
 
     _determineRole() {
         // Logic to determine role (TANK, DPS, SCOUT) based on equipment/health
-        if (this.bot.health < 10) return 'RETREATER';
-        const hasShield = this.bot.inventory.findInventoryItem('shield', null);
+        if (this.agent.bot.health < 10) return 'RETREATER';
+        const hasShield = this.agent.bot.inventory.findInventoryItem('shield', null);
         return hasShield ? 'TANK' : 'DPS';
     }
 
@@ -77,7 +78,7 @@ export class SwarmSync {
                 console.log(`[SwarmSync] 🎯 Shared Target received from ${sender}: ${payload.targetId}`);
                 // Notify CombatReflex if idle
                 if (this.agent.combatReflex && !this.agent.combatReflex.inCombat) {
-                    const entity = this.bot.nearestEntity(e => e.username === payload.targetId || e.uuid === payload.targetId);
+                    const entity = this.agent.bot.nearestEntity(e => e.username === payload.targetId || e.uuid === payload.targetId);
                     if (entity) this.agent.combatReflex.enterCombat(entity);
                 }
             }
@@ -92,7 +93,7 @@ export class SwarmSync {
 
         for (const name of teammates) {
             if (name === this.agent.name) continue;
-            this.bot.whisper(name, message);
+            this.agent.bot.whisper(name, message);
         }
     }
 
@@ -118,12 +119,12 @@ export class SwarmSync {
 
         for (const peer of this.peers.values()) {
             const peerPos = new vec3(peer.pos.x, peer.pos.y, peer.pos.z);
-            const dist = this.bot.entity.position.distanceTo(peerPos);
+            const dist = this.agent.bot.entity.position.distanceTo(peerPos);
 
             if (dist < 3) {
-                repulsion = repulsion.add(this.bot.entity.position.minus(peerPos).normalize());
+                repulsion = repulsion.add(this.agent.bot.entity.position.minus(peerPos).normalize());
             } else if (dist > 8) {
-                cohesion = cohesion.add(peerPos.minus(this.bot.entity.position).normalize());
+                cohesion = cohesion.add(peerPos.minus(this.agent.bot.entity.position).normalize());
             }
         }
 

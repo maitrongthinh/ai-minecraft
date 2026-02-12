@@ -22,7 +22,7 @@ const STATE = {
 export class CombatReflex {
     constructor(agent) {
         this.agent = agent;
-        this.tactics = new MovementTactics(agent.bot);
+        this.tactics = new MovementTactics(agent);
         this.wTapActive = true;
         this.autoTotemActive = true;
 

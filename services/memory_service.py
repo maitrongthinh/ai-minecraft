@@ -11,6 +11,8 @@ Endpoints:
 Run: uvicorn memory_service:app --port 8001 --reload
 """
 
+import time
+import os
 import logging
 import traceback
 from datetime import datetime
@@ -28,6 +30,9 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger("CogneeMemoryService")
+
+# Task 21: Cognify Debouncing State
+_last_cognify_time = 0
 
 # FastAPI app
 app = FastAPI(
@@ -182,8 +187,15 @@ async def remember(request: RememberRequest):
         for fact in tagged_facts:
             await cognee.add(fact)
         
-        # Process into knowledge graph
-        await cognee.cognify()
+        # Optimized cognify: Debounce heavy graph processing
+        global _last_cognify_time
+        now = time.time()
+        if now - _last_cognify_time > 30: # Only re-cognify every 30 seconds max
+            logger.info(f"[{request.world_id}] Triggering knowledge graph update (cognify)...")
+            await cognee.cognify()
+            _last_cognify_time = now
+        else:
+            logger.info(f"[{request.world_id}] Skipping redundant cognify. Using recently updated graph.")
         
         # Cache in memory
         if request.world_id not in _world_memories:

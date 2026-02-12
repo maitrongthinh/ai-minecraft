@@ -55,9 +55,17 @@ export class StateStack {
         // Check if this state already exists in stack
         const existingIndex = this.stack.findIndex(s => s.name === name);
         if (existingIndex >= 0) {
+            // Pause current state if it's not the one being promoted
+            if (this.stack.length > 0 && this.peek().name !== name) {
+                const current = this.peek();
+                current.pausedAt = Date.now();
+                console.log(`[StateStack] Pausing ${current.name} for promotion of ${name}`);
+            }
+
             // Move to top instead of duplicating
             const existing = this.stack.splice(existingIndex, 1)[0];
             existing.context = { ...existing.context, ...context };
+            existing.pausedAt = null;
             this.stack.push(existing);
             console.log(`[StateStack] Promoted ${name} to top`);
             return true;

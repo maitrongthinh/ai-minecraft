@@ -71,7 +71,7 @@ const settings = {
         "high_iq": {
             "api": "openai",
             "model": "minimaxai/minimax-m2",
-            "url": "https://quangdz.exe.xyz/v1",
+            "url": process.env.OPENAI_BASE_URL || "https://quangdz.exe.xyz/v1",
             "apiKeyEnv": "QUANGDZ_API_KEY",
             "uses": 1000,
             "rate_limit": 1000 // requests per 12h
@@ -79,7 +79,7 @@ const settings = {
         "fast": {
             "api": "openai",
             "model": "minimaxai/minimax-m2",
-            "url": "https://quangdz.exe.xyz/v1",
+            "url": process.env.OPENAI_BASE_URL || "https://quangdz.exe.xyz/v1",
             "apiKeyEnv": "QUANGDZ_API_KEY",
             "uses": 1000,
             "rate_limit": 1000 // requests per 12h (default)
@@ -96,8 +96,11 @@ const settings = {
         "check_interval_ms": 3000       // How often to check position
     },
 
-    "objective": "Beat Minecraft" // Default long-term goal
+    "objective": "Beat Minecraft", // Default long-term goal
 
+    // Survival Thresholds
+    "critical_health": 8,
+    "critical_food": 6
 }
 
 if (process.env.SETTINGS_JSON) {

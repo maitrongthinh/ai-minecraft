@@ -76,12 +76,9 @@ if (process.platform === 'win32') {
             const pid = parts[parts.length - 1];
             // Only kill if Listening and not self
             if (line.includes('LISTENING') && pid && pid !== '0' && pid !== process.pid.toString()) {
-                console.log(`[PortDoctor] 🩺 Found orphaned process ${pid} on port ${port}. Terminating...`);
-                try {
-                    execSync(`taskkill /F /PID ${pid} /T`);
-                } catch (killErr) {
-                    // Ignore already dead processes
-                }
+                console.warn(`[PortDoctor] ⚠️ Port ${port} is already in use by process ${pid}.`);
+                console.warn(`[PortDoctor] Please close the other process or change 'mindserver_port' in settings.js.`);
+                process.exit(1);
             }
         }
     } catch (e) {

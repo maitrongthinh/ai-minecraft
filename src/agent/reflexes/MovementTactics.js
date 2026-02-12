@@ -7,8 +7,8 @@
  */
 
 export class MovementTactics {
-    constructor(bot) {
-        this.bot = bot;
+    constructor(agent) {
+        this.agent = agent;
 
         // Strafe state
         this.strafeAngle = 0;
@@ -21,9 +21,9 @@ export class MovementTactics {
      * @param {number} radius - Desired distance
      */
     async strafe(target, radius = 2.5) {
-        if (!target?.position || !this.bot?.entity?.position) return;
+        if (!target?.position || !this.agent.bot?.entity?.position) return;
 
-        const botPos = this.bot.entity.position;
+        const botPos = this.agent.bot.entity.position;
         const targetPos = target.position;
 
         // Calculate angle from target to bot
@@ -45,10 +45,10 @@ export class MovementTactics {
         const newZ = targetPos.z + Math.sin(newAngle) * radius;
 
         // Look at target while moving
-        await this.bot.lookAt(targetPos.offset(0, 1.6, 0));
+        await this.agent.bot.lookAt(targetPos.offset(0, 1.6, 0));
 
         // PRIORITY: Flocking (Phase 4)
-        const flockingVec = this.bot.agent?.swarm ? await this.bot.agent.swarm.getFlockingVector() : { x: 0, y: 0, z: 0 };
+        const flockingVec = this.agent.bot.agent?.swarm ? await this.agent.bot.agent.swarm.getFlockingVector() : { x: 0, y: 0, z: 0 };
 
         // Move toward new position + flocking bias
         const goalPos = {
@@ -65,24 +65,24 @@ export class MovementTactics {
     async approach(target) {
         if (!target?.position) return;
 
-        await this.bot.lookAt(target.position.offset(0, 1.6, 0));
-        this.bot.setControlState('forward', true);
-        this.bot.setControlState('sprint', true);
+        await this.agent.bot.lookAt(target.position.offset(0, 1.6, 0));
+        this.agent.bot.setControlState('forward', true);
+        this.agent.bot.setControlState('sprint', true);
 
         await new Promise(r => setTimeout(r, 100));
 
-        this.bot.setControlState('forward', false);
-        this.bot.setControlState('sprint', false);
+        this.agent.bot.setControlState('forward', false);
+        this.agent.bot.setControlState('sprint', false);
     }
 
     /**
      * Run away from target
      */
     async runAway(target, distance = 20) {
-        if (!target?.position || !this.bot?.entity?.position) return;
+        if (!target?.position || !this.agent.bot?.entity?.position) return;
 
         // Calculate direction away from target
-        const botPos = this.bot.entity.position;
+        const botPos = this.agent.bot.entity.position;
         const targetPos = target.position;
 
         const dx = botPos.x - targetPos.x;
@@ -94,16 +94,16 @@ export class MovementTactics {
         const goalZ = botPos.z + (dz / dist) * distance;
 
         // Look away and run
-        await this.bot.lookAt({ x: goalX, y: botPos.y, z: goalZ });
+        await this.agent.bot.lookAt({ x: goalX, y: botPos.y, z: goalZ });
 
-        this.bot.setControlState('forward', true);
-        this.bot.setControlState('sprint', true);
+        this.agent.bot.setControlState('forward', true);
+        this.agent.bot.setControlState('sprint', true);
 
         // Run for 3 seconds
         await new Promise(r => setTimeout(r, 3000));
 
-        this.bot.setControlState('forward', false);
-        this.bot.setControlState('sprint', false);
+        this.agent.bot.setControlState('forward', false);
+        this.agent.bot.setControlState('sprint', false);
     }
 
     /**
@@ -122,22 +122,22 @@ export class MovementTactics {
         try {
             for (let i = 0; i < height; i++) {
                 // Look down
-                await this.bot.look(0, Math.PI / 2); // Pitch down
+                await this.agent.bot.look(0, Math.PI / 2); // Pitch down
 
                 // Jump and place
-                this.bot.setControlState('jump', true);
+                this.agent.bot.setControlState('jump', true);
                 await new Promise(r => setTimeout(r, 150));
 
                 // Place block under feet
-                const blockBelow = this.bot.blockAt(
-                    this.bot.entity.position.offset(0, -1, 0)
+                const blockBelow = this.agent.bot.blockAt(
+                    this.agent.bot.entity.position.offset(0, -1, 0)
                 );
 
                 if (blockBelow && block.count > 0) {
-                    await this.bot.placeBlock(blockBelow, { x: 0, y: 1, z: 0 });
+                    await this.agent.bot.placeBlock(blockBelow, { x: 0, y: 1, z: 0 });
                 }
 
-                this.bot.setControlState('jump', false);
+                this.agent.bot.setControlState('jump', false);
                 await new Promise(r => setTimeout(r, 100));
             }
 
@@ -153,24 +153,24 @@ export class MovementTactics {
      * @param {Vec3} safePos - Position to pearl toward
      */
     async pearlOut(safePos) {
-        const pearl = this.bot.inventory.items().find(i => i.name === 'ender_pearl');
+        const pearl = this.agent.bot.inventory.items().find(i => i.name === 'ender_pearl');
         if (!pearl) return false;
 
         console.log('[MovementTactics] 🟣 Pearl out!');
 
         try {
-            await this.bot.equip(pearl, 'hand');
+            await this.agent.bot.equip(pearl, 'hand');
 
             // Calculate throw angle
             if (safePos) {
-                await this.bot.lookAt(safePos);
+                await this.agent.bot.lookAt(safePos);
             } else {
                 // Just look forward and up slightly
-                await this.bot.look(this.bot.entity.yaw, -0.3);
+                await this.agent.bot.look(this.agent.bot.entity.yaw, -0.3);
             }
 
             // Throw pearl
-            this.bot.activateItem();
+            this.agent.bot.activateItem();
             await new Promise(r => setTimeout(r, 100));
 
             return true;
@@ -189,40 +189,40 @@ export class MovementTactics {
 
         try {
             // Look straight ahead at eye level
-            const yaw = this.bot.entity.yaw;
-            await this.bot.look(yaw, 0);
+            const yaw = this.agent.bot.entity.yaw;
+            await this.agent.bot.look(yaw, 0);
 
             // Dig forward
             for (let i = 0; i < depth; i++) {
-                const targetPos = this.bot.entity.position.offset(
+                const targetPos = this.agent.bot.entity.position.offset(
                     Math.sin(yaw) * (i + 1),
                     0,
                     Math.cos(yaw) * (i + 1)
                 );
 
-                const block = this.bot.blockAt(targetPos);
+                const block = this.agent.bot.blockAt(targetPos);
                 if (block && block.name !== 'air' && block.diggable) {
-                    await this.bot.dig(block);
+                    await this.agent.bot.dig(block);
                 }
 
                 // Move forward
-                this.bot.setControlState('forward', true);
+                this.agent.bot.setControlState('forward', true);
                 await new Promise(r => setTimeout(r, 300));
-                this.bot.setControlState('forward', false);
+                this.agent.bot.setControlState('forward', false);
             }
 
             // Place block behind to seal tunnel
             const sealBlock = this._getPlaceableBlock();
             if (sealBlock) {
-                const behind = this.bot.entity.position.offset(
+                const behind = this.agent.bot.entity.position.offset(
                     -Math.sin(yaw) * 1,
                     0,
                     -Math.cos(yaw) * 1
                 );
-                const refBlock = this.bot.blockAt(behind);
+                const refBlock = this.agent.bot.blockAt(behind);
                 if (refBlock) {
-                    await this.bot.equip(sealBlock, 'hand');
-                    await this.bot.placeBlock(refBlock, { x: 0, y: 0, z: 0 });
+                    await this.agent.bot.equip(sealBlock, 'hand');
+                    await this.agent.bot.placeBlock(refBlock, { x: 0, y: 0, z: 0 });
                 }
             }
 
@@ -237,7 +237,7 @@ export class MovementTactics {
      * Get placeable block from inventory (dirt, cobblestone, etc.)
      */
     _getPlaceableBlock() {
-        const items = this.bot.inventory.items();
+        const items = this.agent.bot.inventory.items();
 
         // Prefer cheap blocks
         const preferredBlocks = [
@@ -262,7 +262,7 @@ export class MovementTactics {
      * Move toward a position using control states
      */
     _moveToward(goalPos) {
-        const botPos = this.bot.entity.position;
+        const botPos = this.agent.bot.entity.position;
         const dx = goalPos.x - botPos.x;
         const dz = goalPos.z - botPos.z;
 
@@ -270,12 +270,12 @@ export class MovementTactics {
         const yaw = Math.atan2(-dx, -dz);
 
         // Set controls based on direction (simplified)
-        this.bot.setControlState('forward', true);
-        this.bot.entity.yaw = yaw;
+        this.agent.bot.setControlState('forward', true);
+        this.agent.bot.entity.yaw = yaw;
 
         // Clear after short duration
         setTimeout(() => {
-            this.bot.setControlState('forward', false);
+            this.agent.bot.setControlState('forward', false);
         }, 50);
     }
 }

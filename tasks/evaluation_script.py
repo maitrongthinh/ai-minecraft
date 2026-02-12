@@ -502,24 +502,29 @@ def run_script(task_path,
     make_script_file_and_run(script_content, script_file, session_name=session_name, run_in_tmux=run_in_tmux)
 
 
-def make_ops(agent_names, session_name):
-    """Make the agents operators in the Minecraft world."""
-    print('Making agents operators...')
+def make_ops(agent_names, session_name, max_retries=3):
+    """Make the agents operators in the Minecraft world with retries."""
+    for attempt in range(max_retries):
+        print(f'Attempt {attempt + 1}: Making agents operators...')
 
-    cmd = f"node main.js --task_path tasks/example_tasks.json --task_id debug_{len(agent_names)}_agent_timeout"
+        cmd = f"node main.js --task_path tasks/example_tasks.json --task_id debug_{len(agent_names)}_agent_timeout"
+        subprocess.run(["tmux", "send-keys", "-t", session_name, cmd, "C-m"])
 
-    subprocess.run(["tmux", "send-keys", "-t", session_name, cmd, "C-m"])
+        # Wait for agents to join potentially
+        time.sleep(30)
 
-    time.sleep(30)
+        subprocess.run(["tmux", "send-keys", "-t", "server_" + session_name, f"/op @a", "C-m"])
+        time.sleep(2) # Small wait for ops.json to update
 
-    subprocess.run(["tmux", "send-keys", "-t", "server_" + session_name, f"/op @a", "C-m"])
-
-    agents_op = check_agent_ops(agent_names, ops_file=f"./tasks/server_data_{session_name}/ops.json")
-    if agents_op:
-        print("Agents are operators! You are good to go :D")
-    else: 
-        print("Agents are not operators! We will need to try making them operators again!")
-        make_ops(agent_names, session_name)
+        ops_file = f"./tasks/server_data_{session_name}/ops.json"
+        if os.path.exists(ops_file) and check_agent_ops(agent_names, ops_file=ops_file):
+            print("Agents are operators! You are good to go :D")
+            return True
+        
+        print("Agents are not operators yet. Retrying...")
+    
+    print("FAILED to make agents operators after multiple attempts.")
+    return False
 
 def check_agent_ops(agent_names, ops_file="ops.json"):
     with open(ops_file, "r") as f:
@@ -762,9 +767,12 @@ def main():
     
     if not args.no_launch_world:
         try: 
-            subprocess.run(['tmux', 'kill-server'], check=True)
+            # Targeted cleanup: Kill only experiment-related sessions
+            subprocess.run(['tmux', 'kill-session', '-t', 'server_0'], stderr=subprocess.DEVNULL)
+            subprocess.run(['tmux', 'kill-session', '-t', '0'], stderr=subprocess.DEVNULL)
+            print("Cleaned up existing experiment sessions.")
         except: 
-            print("No tmux session to kill")
+            pass
     
     # delete all server files
     if not args.no_launch_world:

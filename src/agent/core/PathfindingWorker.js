@@ -13,8 +13,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export class PathfindingWorkerController {
-    constructor(bot) {
-        this.bot = bot;
+    constructor(agent) {
+        this.agent = agent;
         this.worker = null;
         this.pendingRequests = new Map();
         this.requestIdCounter = 0;

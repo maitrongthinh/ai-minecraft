@@ -46,6 +46,8 @@ import { ReplayBuffer } from './core/ReplayBuffer.js';
 import { HitSelector } from './reflexes/HitSelector.js';
 import { SwarmSync } from './core/SwarmSync.js';
 import { PathfindingWorkerController } from './core/PathfindingWorker.js';
+import fs from 'fs';
+import path from 'path';
 
 export class Agent {
     constructor() {
@@ -85,10 +87,6 @@ export class Agent {
             const profilePath = settings.profiles.find(p => p.includes(settings.base_profile)) || settings.profiles[0];
             if (profilePath) {
                 console.log(`[MindOS] Loading profile: ${profilePath}`);
-                // Fix: JSON Import Attribute Requirement -> Use fs.readFileSync
-                // profileData = await import('../../' + profilePath.replace('./', '')).then(m => m.default || m);
-                const fs = await import('fs');
-                const path = await import('path');
                 const p = path.resolve(process.cwd(), profilePath);
                 profileData = JSON.parse(fs.readFileSync(p, 'utf8'));
             }
@@ -168,9 +166,9 @@ export class Agent {
         this.mentalSnapshot = new MentalSnapshot(this);
         this.physics = new PhysicsPredictor(this);
         this.replayBuffer = new ReplayBuffer(this);
-        this.hitSelector = new HitSelector(this.bot);
+        this.hitSelector = new HitSelector(this);
         this.swarm = new SwarmSync(this);
-        this.pathfindingWorker = new PathfindingWorkerController(this.bot);
+        this.pathfindingWorker = new PathfindingWorkerController(this);
 
         // Resource Locking - Uses AsyncMutex for Queued Control
         this.locks = {

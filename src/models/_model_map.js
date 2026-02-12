@@ -72,8 +72,10 @@ export function selectAPI(profile) {
     if (!apiMap[profile.api]) {
         throw new Error('Unknown api:', profile.api);
     }
-    let model_name = profile.model.replace(profile.api + '/', ''); // remove prefix
-    profile.model = model_name === "" ? null : model_name; // if model is empty, set to null
+    if (profile.model && (typeof profile.model === 'string' || profile.model instanceof String)) {
+        let model_name = profile.model.replace(profile.api + '/', ''); // remove prefix
+        profile.model = model_name === "" ? null : model_name; // if model is empty, set to null
+    }
     return profile;
 }
 
@@ -86,6 +88,7 @@ export function createModel(profile) {
     if (!apiMap[profile.api]) {
         throw new Error('Unknown api:', profile.api);
     }
-    const model = new apiMap[profile.api](profile.model, profile.url, profile.params);
+    // Pass the entire profile as 'params' so constructors can access custom fields like apiKeyEnv
+    const model = new apiMap[profile.api](profile.model, profile.url, { ...profile, ...profile.params });
     return model;
 }

@@ -14,7 +14,11 @@ const DANGER_PATTERNS = [
     { pattern: /for\s*\(\s*;\s*;\s*\)/, reason: 'Infinite loops are forbidden' },
     { pattern: /fs\./, reason: 'Filesystem access is forbidden' },
     { pattern: /child_process/, reason: 'Child process is forbidden' },
-    { pattern: /\.exit\s*\(/, reason: 'exit() is forbidden' }
+    { pattern: /\.exit\s*\(/, reason: 'exit() is forbidden' },
+    { pattern: /__proto__/, reason: 'Access to __proto__ is forbidden' },
+    { pattern: /prototype/, reason: 'Access to prototype is forbidden' },
+    { pattern: /constructor/, reason: 'Access to constructor is forbidden' },
+    { pattern: /global\./, reason: 'Access to global is forbidden' }
 ];
 
 export class CodeSandbox {

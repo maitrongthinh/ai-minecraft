@@ -7,8 +7,8 @@
  */
 
 export class HitSelector {
-    constructor(bot, options = {}) {
-        this.bot = bot;
+    constructor(agent, options = {}) {
+        this.agent = agent;
         this.maxBufferTicks = options.maxBufferTicks || 20; // 1 second history
         this.history = new Map(); // UUID -> [Snapshots]
     }
@@ -17,8 +17,10 @@ export class HitSelector {
      * Capture snapshots of all nearby entities
      */
     update() {
+        const bot = this.agent.bot;
+        if (!bot || !bot.entities) return;
         const now = Date.now();
-        for (const entity of Object.values(this.bot.entities)) {
+        for (const entity of Object.values(bot.entities)) {
             if (entity.type === 'player' || entity.type === 'mob') {
                 let snapshots = this.history.get(entity.uuid) || [];
 
@@ -71,8 +73,10 @@ export class HitSelector {
      * Validates if the target can be hit at a given distance with lag compensation
      */
     canHit(target, reach = 3.0, latencyMs = 0) {
+        const bot = this.agent.bot;
+        if (!bot || !bot.entity) return false;
         const backPos = this.getBacktrackedPosition(target, latencyMs);
-        const dist = this.bot.entity.position.distanceTo(backPos);
+        const dist = bot.entity.position.distanceTo(backPos);
         return dist <= reach;
     }
 }
