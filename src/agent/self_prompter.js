@@ -66,7 +66,7 @@ export class SelfPrompter {
         this.loop_active = true;
         let no_response_count = 0;
         const MAX_NO_RESPONSE = 3;
-        while (!this.interrupt) {
+        while (!this.interrupt && this.agent.running) {
             let msg = `You are self-prompting with the goal: '${this.prompt}'.
 Return VALID JSON only with keys: thought, chat, task.
 task must be actionable code whenever possible; do not leave task null unless absolutely blocked.
@@ -176,10 +176,14 @@ Do not ask clarifying questions during self-prompting. Execute the next concrete
 
     async stop(stop_action = true) {
         this.interrupt = true;
-        if (stop_action)
-            await this.agent.actions.stop();
-        this.stopLoop();
+        if (stop_action) {
+            if (this.agent.actions && typeof this.agent.actions.stop === 'function') {
+                await this.agent.actions.stop();
+            }
+        }
+        await this.stopLoop();
         this.state = STOPPED;
+        console.log('[SelfPrompter] Stopped.');
     }
 
     async pause() {

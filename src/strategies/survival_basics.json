@@ -1,0 +1,91 @@
+{
+    "id": "survival_basics",
+    "name": "Survival Basics",
+    "description": "Early game survival progression: wood → tools → shelter → food → stone → iron",
+    "steps": [
+        {
+            "id": "gather_wood",
+            "instruction": "Punch trees to gather at least 8 oak/birch/spruce logs. Use your fists if you have no tools.",
+            "requires": [],
+            "done_when": "inventory has >= 8 logs (any wood type)"
+        },
+        {
+            "id": "craft_planks_and_table",
+            "instruction": "Craft and place a crafting_table. (Do not worry about intermediate steps like planks).",
+            "requires": [
+                "logs >= 4"
+            ],
+            "done_when": "crafting_table placed in world"
+        },
+        {
+            "id": "craft_wooden_tools",
+            "instruction": "Craft a wooden_pickaxe and wooden_sword. (Use the crafting table you just placed).",
+            "requires": [
+                "crafting_table",
+                "logs >= 2"
+            ],
+            "done_when": "inventory has wooden_pickaxe AND wooden_sword"
+        },
+        {
+            "id": "mine_stone",
+            "instruction": "Find exposed stone or dig down to find stone. Mine at least 12 cobblestone with your wooden pickaxe.",
+            "requires": [
+                "wooden_pickaxe"
+            ],
+            "done_when": "inventory has cobblestone >= 12"
+        },
+        {
+            "id": "craft_stone_tools",
+            "instruction": "Craft a stone_pickaxe, stone_sword, and stone_axe at the crafting table.",
+            "requires": [
+                "cobblestone >= 9",
+                "stick >= 6",
+                "crafting_table"
+            ],
+            "done_when": "inventory has stone_pickaxe AND stone_sword"
+        },
+        {
+            "id": "find_food",
+            "instruction": "Find food to survive. Kill animals (cow, pig, chicken, sheep) for raw meat, then cook it in a furnace. Or find wheat seeds and start a small farm.",
+            "requires": [
+                "stone_sword"
+            ],
+            "done_when": "inventory has >= 8 cooked food items"
+        },
+        {
+            "id": "build_shelter",
+            "instruction": "Build a small enclosed shelter with walls, a roof, a door, and a torch inside. This protects you from night mobs.",
+            "requires": [
+                "planks or cobblestone >= 20",
+                "torch >= 2"
+            ],
+            "done_when": "enclosed structure exists with door and torch"
+        },
+        {
+            "id": "craft_furnace",
+            "instruction": "Craft a furnace using 8 cobblestone. Place it inside your shelter.",
+            "requires": [
+                "cobblestone >= 8"
+            ],
+            "done_when": "furnace placed near shelter"
+        },
+        {
+            "id": "mine_iron",
+            "instruction": "Mine underground to find iron_ore. You need at least 11 iron ingots total (for bucket, shield, iron pickaxe, iron sword). Smelt iron_ore in your furnace.",
+            "requires": [
+                "stone_pickaxe",
+                "furnace"
+            ],
+            "done_when": "inventory has iron_ingot >= 11"
+        },
+        {
+            "id": "craft_iron_gear",
+            "instruction": "Craft an iron_pickaxe, iron_sword, bucket, and shield at the crafting table.",
+            "requires": [
+                "iron_ingot >= 11",
+                "crafting_table"
+            ],
+            "done_when": "inventory has iron_pickaxe AND iron_sword AND bucket"
+        }
+    ]
+}

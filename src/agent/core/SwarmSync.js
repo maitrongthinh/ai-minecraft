@@ -25,6 +25,13 @@ export class SwarmSync {
     }
 
     _setupListeners() {
+        // CRITICAL: Safety check - bot must exist and be spawned
+        if (!this.agent.bot || !this.agent.bot.entity) {
+            console.warn('[SwarmSync] ⚠️ _setupListeners called before bot ready. Deferring...');
+            setTimeout(() => this._setupListeners(), 500);
+            return;
+        }
+
         // Listen for incoming whispers from potential teammates
         this.agent.bot.on('whisper', (username, message) => {
             if (message.startsWith(this.PROTO_PREFIX)) {
@@ -43,9 +50,16 @@ export class SwarmSync {
 
     startHeartbeat() {
         if (this.heartbeatTimer) return;
+        
+        // Safety: Ensure bot is ready before heartbeat
+        if (!this.agent.bot || !this.agent.bot.entity) {
+            console.warn('[SwarmSync] ⚠️ startHeartbeat called before bot ready. Deferring...');
+            setTimeout(() => this.startHeartbeat(), 500);
+            return;
+        }
 
         this.heartbeatTimer = setInterval(() => {
-            if (!this.agent.bot.entity) return;
+            if (!this.agent.bot?.entity) return;
 
             this.broadcast('HEARTBEAT', {
                 pos: this.agent.bot.entity.position,
@@ -88,12 +102,19 @@ export class SwarmSync {
     }
 
     broadcast(type, payload) {
+        // Safety check for bot
+        if (!this.agent.bot) return;
+        
         const message = this.PROTO_PREFIX + JSON.stringify({ type, payload });
         const teammates = this.agent.collaboration?.teammates || [];
 
         for (const name of teammates) {
             if (name === this.agent.name) continue;
-            this.agent.bot.whisper(name, message);
+            try {
+                this.agent.bot.whisper(name, message);
+            } catch (err) {
+                console.warn(`[SwarmSync] Failed to whisper to ${name}:`, err.message);
+            }
         }
     }
 

@@ -32,6 +32,10 @@ export class Watchdog {
     }
 
     start() {
+        if (!this.enabled) {
+            console.log('[Watchdog] Disabled in settings. Not starting.');
+            return;
+        }
         if (this.timer) clearInterval(this.timer);
         const profile = this.agent.config?.profile;
         this.CHECK_INTERVAL = profile?.timeouts?.recovery_interval || settings.watchdog?.check_interval_ms || 3000;
@@ -41,6 +45,7 @@ export class Watchdog {
 
     stop() {
         if (this.timer) clearInterval(this.timer);
+        this.timer = null;
     }
 
     check() {

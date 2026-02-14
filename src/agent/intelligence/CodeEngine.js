@@ -226,11 +226,25 @@ export class CodeEngine {
         const code_clean = this._sanitizeCode(code);
 
         const mainFn = async (bot) => {
+            // Snapshot of Bot State for Sandbox
+            const botState = {
+                health: bot.health,
+                food: bot.food,
+                entity: { position: bot.entity.position },
+                inventory: {
+                    items: bot.inventory.items().map(i => ({ name: i.name, count: i.count, type: i.type, displayName: i.displayName }))
+                },
+                // Add commonly accessed properties
+                username: bot.username,
+                game: bot.game
+            };
+
             const contextData = {
+                botState, // Pass the structured state
+                // Keep backward compatibility if needed, though we should transition to using botState
                 bot_health: bot.health,
                 bot_food: bot.food,
-                bot_position: bot.entity.position,
-                inventory_summary: bot.inventory.items().map(i => i.name)
+                bot_position: bot.entity.position
             };
 
             const result = await this.sandbox.execute(code_clean, contextData);
@@ -247,11 +261,11 @@ export class CodeEngine {
 
     _sanitizeCode(code) {
         code = code.trim();
-        const remove_strs = ['Javascript', 'javascript', 'js']
-        for (let r of remove_strs) {
-            if (code.toLowerCase().startsWith(r)) {
-                return code.slice(r.length).trim();
-            }
+        if (code.slice(0, 10).toLowerCase() === 'javascript') {
+            return code.slice(10).trim();
+        }
+        if (code.slice(0, 2).toLowerCase() === 'js') {
+            return code.slice(2).trim();
         }
         return code;
     }

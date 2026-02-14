@@ -8,9 +8,18 @@
  * 4. Self-Criticism (Risk Assessment)
  */
 
-export function getStrategicPrompt(bot, objective = null) {
+export function getStrategicPrompt(bot, objective = null, manifest = null) {
     if (!bot || !bot.entity) {
         return `You are an intelligent Minecraft agent. Goal: ${objective || "Survive and thrive."}`;
+    }
+
+    // Strategy Context
+    let strategyContext = "";
+    if (manifest && manifest.strategies && manifest.strategies.active) {
+        strategyContext = `\nACTIVE STRATEGY: ${manifest.strategies.active.toUpperCase()}\n`;
+        if (manifest.strategies.active_step) {
+            strategyContext += `CURRENT STEP: ${manifest.strategies.active_step}\n`;
+        }
     }
 
     const health = bot.health;
@@ -62,6 +71,7 @@ export function getStrategicPrompt(bot, objective = null) {
 You are a Super Autonomous Agent in Minecraft.
 Your primary directive is SELF-PRESERVATION.
 STRATEGIC OBJECTIVE: ${objective}
+${strategyContext}
 
 CURRENT STATUS:
 Health: ${health.toFixed(0)}/20

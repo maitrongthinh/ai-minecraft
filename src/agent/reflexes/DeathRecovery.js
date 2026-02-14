@@ -128,10 +128,18 @@ export class DeathRecovery {
     async recoverItems() {
         if (this.isRecovering) return;
         this.isRecovering = true;
+
+        if (!this.lastDeath || !this.lastDeath.position) {
+            this.isRecovering = false;
+            return;
+        }
+
         const targetPos = this.lastDeath.position;
 
         try {
-            await this.agent.bot.pathfinder.setGoal(new goals.GoalNear(targetPos.x, targetPos.y, targetPos.z, 2));
+            // Fix: setGoal is sync and doesn't wait. Use goto() to wait for arrival.
+            const goal = new goals.GoalNear(targetPos.x, targetPos.y, targetPos.z, 2);
+            await this.agent.bot.pathfinder.goto(goal);
             console.log('[DeathRecovery] Arrived at death location. Scanning for items...');
 
             // Wait a bit for items to be picked up (magnet range)

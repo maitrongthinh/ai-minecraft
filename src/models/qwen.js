@@ -27,15 +27,26 @@ export class Qwen {
             ...(this.params || {})
         };
 
+        // Support reasoning parameters (Qwen Responses API schema)
+        if (this.params?.reasoning) {
+            pack.reasoning = this.params.reasoning;
+        }
+
         let res = null;
         try {
-            console.log('Awaiting Qwen api response...');
+            console.log(`Awaiting Qwen response${this.params?.reasoning ? ` (reasoning: ${this.params.reasoning.effort})` : ''}...`);
             // console.log('Messages:', messages);
             let completion = await this.openai.chat.completions.create(pack);
             if (completion.choices[0].finish_reason == 'length')
                 throw new Error('Context length exceeded');
             console.log('Received.');
-            res = completion.choices[0].message.content;
+            
+            // Handle reasoning output if present
+            let res = completion.choices[0].message.content;
+            if (completion.choices[0].message.reasoning) {
+                console.log(`[Reasoning: ${completion.choices[0].message.reasoning}]`);
+            }
+            return res;
         }
         catch (err) {
             if ((err.message == 'Context length exceeded' || err.code == 'context_length_exceeded') && turns.length > 1) {

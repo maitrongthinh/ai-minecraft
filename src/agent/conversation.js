@@ -59,6 +59,7 @@ class ConversationManager {
     }
 
     _getConvo(name) {
+        if (!agent) throw new Error("ConversationManager: Agent not initialized. Call initAgent() first.");
         if (!this.convos[name])
             this.convos[name] = new Conversation(name);
         return this.convos[name];

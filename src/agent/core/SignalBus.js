@@ -34,12 +34,19 @@ export const SIGNAL = {
 
     // Learning & Evolution
     SKILL_LEARNED: 'skill.learned',
-    SKILL_FAILED: 'skill.failed',
+    SKILL_FORGOTTEN: 'skill.forgotten',
+
+    // Evolution
+    GENOME_MUTATED: 'evolution.genome_mutated',
+    GENERATION_COMPLETE: 'evolution.generation_complete',
+
     CODE_GENERATED: 'code.generated',
+    LEARNING_PROMOTION_PASSED: 'learning.promotion_passed',
+    LEARNING_PROMOTION_FAILED: 'learning.promotion_failed',
 
     // Health & Survival
-    HEALTH_LOW: 'health.low',
     HEALTH_CRITICAL: 'health.critical',
+    HEALTH_LOW: 'health.low',
     HUNGRY: 'health.hungry', // < 6 food
     DEATH: 'death',
     RESPAWN: 'respawn',
@@ -60,19 +67,36 @@ export const SIGNAL = {
     BLOCK_FOUND: 'block.found',
     ENVIRONMENT_SCAN: 'environment.scan', // Background scan
 
+    // Environment Monitor Signals (Phase 2)
+    ENV_CLIFF_AHEAD: 'environment.cliff_ahead',
+    ENV_LAVA_NEARBY: 'environment.lava_nearby',
+    ENV_HOLE_BELOW: 'environment.hole_below',
+    ENV_NIGHTFALL: 'environment.nightfall',
+    ENV_DAWN: 'environment.dawn',
+    ENV_THUNDERSTORM: 'environment.thunderstorm',
+    ENV_PLAYER_DETECTED: 'environment.player_detected',
+    ENV_HOSTILE_APPROACHING: 'environment.hostile_approaching',
+    ENV_LOOT_NEARBY: 'environment.loot_nearby',
+    ENV_BLOCK_CHANGE: 'environment.block_change',
+    ENV_EXPLOSION: 'environment.explosion',
+    ENV_LOW_LIGHT: 'environment.low_light',
+
+    // Environment Monitor Signals (Phase 2) defined above
+
+
     // Legacy Bridge Signals (and Observability)
     ACTION_STARTED: 'action.started',
     ACTION_COMPLETED: 'action.completed',
     ACTION_FAILED: 'action.failed',
 
-
     // Coding
     CODE_REQUEST: 'code.request',
-    CODE_GENERATED: 'code.generated',
+    // CODE_GENERATED is defined above
 
     // Chat
     CHAT_RECEIVED: 'chat.received',
     COMMAND_RECEIVED: 'command.received',
+    SOCIAL_INTERACTION: 'social.interaction',
 
     // System 2 Lifecycle (Dual-Loop Architecture)
     SYSTEM2_START: 'system2.planning_start',
@@ -88,7 +112,24 @@ export const SIGNAL = {
     SKILL_EXECUTED: 'skill.executed',
 
     // System Ready
-    SYSTEM_READY: 'system.ready'
+    SYSTEM_READY: 'system.ready',
+
+    // Tool Creation
+    TOOL_NEEDED: 'tool.needed',
+    TOOL_CREATED: 'tool.created',
+
+    // Mission Phases
+    MISSION_PHASE_CHANGED: 'mission.phase_changed',
+    MISSION_MILESTONE_COMPLETED: 'mission.milestone_completed',
+
+    // System Errors & Recovery
+    SYSTEM_ERROR: 'system.error',
+    EMERGENCY_RECALL: 'system.emergency_recall',
+
+    // Behavior Rules
+    RULE_LEARNED: 'rule.learned',
+    RULE_APPLIED: 'rule.applied',
+    RULE_REVERTED: 'rule.reverted'
 };
 
 /**
@@ -187,7 +228,7 @@ class SignalBus extends EventEmitter {
         }
 
         // Debug log (only for important signals)
-        if (!signal.startsWith('memory.') && !signal.startsWith('entity.')) {
+        if (!signal.startsWith('memory.') && !signal.startsWith('entity.') && !signal.startsWith('bot.')) {
             console.log(`[SignalBus] ⚡ ${signal}`, payload.reason || payload.name || '');
         }
     }

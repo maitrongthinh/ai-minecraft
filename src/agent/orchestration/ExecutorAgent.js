@@ -129,16 +129,10 @@ export class ExecutorAgent {
                     const result = await this._executeViaRegistry(step);
 
                     if (result.success) {
-                        executionResult = result;
-                        break; // Success, exit retry loop
+                        return result; // Immediately return success to exit retry loop and function
                     }
 
-                    // All retries failed
-                    return {
-                        success: false,
-                        message: lastError || 'Unknown error after retries',
-                        abort: false
-                    };
+                    lastError = result.message || 'Unknown error';
                 } catch (error) {
                     console.warn(`[ExecutorAgent] execution error: ${error.message}`);
                     lastError = error.message;
@@ -162,7 +156,7 @@ export class ExecutorAgent {
      * @private
      */
     async _executeViaRegistry(step) {
-        const skill = this.agent.toolRegistry.getSkill(step.task);
+        const skill = this.agent.toolRegistry.findSkill(step.task);
         if (skill) {
             console.log(`[ExecutorAgent] Using ToolRegistry: ${step.task}`);
             return await this.agent.toolRegistry.executeSkill(step.task, step.params);

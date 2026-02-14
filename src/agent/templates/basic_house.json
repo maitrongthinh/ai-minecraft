@@ -1,0 +1,443 @@
+{
+    "name": "basic_safe_house",
+    "dimensions": {
+        "width": 5,
+        "height": 4,
+        "depth": 5
+    },
+    "origin": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+    },
+    "blocks": [
+        {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 0,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 2,
+            "y": 0,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 3,
+            "y": 0,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 4,
+            "y": 0,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 0,
+            "z": 1,
+            "type": "cobblestone"
+        },
+        {
+            "x": 4,
+            "y": 0,
+            "z": 1,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 0,
+            "z": 2,
+            "type": "cobblestone"
+        },
+        {
+            "x": 4,
+            "y": 0,
+            "z": 2,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 0,
+            "z": 3,
+            "type": "cobblestone"
+        },
+        {
+            "x": 4,
+            "y": 0,
+            "z": 3,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 0,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 0,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 2,
+            "y": 0,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 3,
+            "y": 0,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 4,
+            "y": 0,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 1,
+            "z": 0,
+            "type": "oak_planks"
+        },
+        {
+            "x": 4,
+            "y": 1,
+            "z": 0,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 1,
+            "z": 1,
+            "type": "oak_planks"
+        },
+        {
+            "x": 4,
+            "y": 1,
+            "z": 1,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 1,
+            "z": 2,
+            "type": "oak_planks"
+        },
+        {
+            "x": 4,
+            "y": 1,
+            "z": 2,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 1,
+            "z": 3,
+            "type": "oak_planks"
+        },
+        {
+            "x": 4,
+            "y": 1,
+            "z": 3,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 1,
+            "z": 4,
+            "type": "oak_planks"
+        },
+        {
+            "x": 2,
+            "y": 1,
+            "z": 0,
+            "type": "oak_door",
+            "properties": {
+                "half": "lower"
+            }
+        },
+        {
+            "x": 4,
+            "y": 1,
+            "z": 4,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 2,
+            "z": 0,
+            "type": "oak_planks"
+        },
+        {
+            "x": 4,
+            "y": 2,
+            "z": 0,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 2,
+            "z": 1,
+            "type": "glass_pane"
+        },
+        {
+            "x": 4,
+            "y": 2,
+            "z": 1,
+            "type": "glass_pane"
+        },
+        {
+            "x": 0,
+            "y": 2,
+            "z": 2,
+            "type": "glass_pane"
+        },
+        {
+            "x": 4,
+            "y": 2,
+            "z": 2,
+            "type": "glass_pane"
+        },
+        {
+            "x": 0,
+            "y": 2,
+            "z": 3,
+            "type": "oak_planks"
+        },
+        {
+            "x": 4,
+            "y": 2,
+            "z": 3,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 2,
+            "z": 4,
+            "type": "oak_planks"
+        },
+        {
+            "x": 2,
+            "y": 2,
+            "z": 0,
+            "type": "oak_door",
+            "properties": {
+                "half": "upper"
+            }
+        },
+        {
+            "x": 4,
+            "y": 2,
+            "z": 4,
+            "type": "oak_planks"
+        },
+        {
+            "x": 0,
+            "y": 3,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 3,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 2,
+            "y": 3,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 3,
+            "y": 3,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 4,
+            "y": 3,
+            "z": 0,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 3,
+            "z": 1,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 3,
+            "z": 1,
+            "type": "oak_slab"
+        },
+        {
+            "x": 2,
+            "y": 3,
+            "z": 1,
+            "type": "oak_slab"
+        },
+        {
+            "x": 3,
+            "y": 3,
+            "z": 1,
+            "type": "oak_slab"
+        },
+        {
+            "x": 4,
+            "y": 3,
+            "z": 1,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 3,
+            "z": 2,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 3,
+            "z": 2,
+            "type": "oak_slab"
+        },
+        {
+            "x": 2,
+            "y": 3,
+            "z": 2,
+            "type": "torch"
+        },
+        {
+            "x": 3,
+            "y": 3,
+            "z": 2,
+            "type": "oak_slab"
+        },
+        {
+            "x": 4,
+            "y": 3,
+            "z": 2,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 3,
+            "z": 3,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 3,
+            "z": 3,
+            "type": "oak_slab"
+        },
+        {
+            "x": 2,
+            "y": 3,
+            "z": 3,
+            "type": "oak_slab"
+        },
+        {
+            "x": 3,
+            "y": 3,
+            "z": 3,
+            "type": "oak_slab"
+        },
+        {
+            "x": 4,
+            "y": 3,
+            "z": 3,
+            "type": "cobblestone"
+        },
+        {
+            "x": 0,
+            "y": 3,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 3,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 2,
+            "y": 3,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 3,
+            "y": 3,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 4,
+            "y": 3,
+            "z": 4,
+            "type": "cobblestone"
+        },
+        {
+            "x": 1,
+            "y": 1,
+            "z": 1,
+            "type": "chest",
+            "properties": {
+                "facing": "east"
+            }
+        },
+        {
+            "x": 1,
+            "y": 1,
+            "z": 2,
+            "type": "crafting_table"
+        },
+        {
+            "x": 1,
+            "y": 1,
+            "z": 3,
+            "type": "furnace",
+            "properties": {
+                "facing": "east"
+            }
+        },
+        {
+            "x": 3,
+            "y": 1,
+            "z": 3,
+            "type": "white_bed",
+            "properties": {
+                "facing": "north",
+                "part": "head"
+            }
+        },
+        {
+            "x": 3,
+            "y": 1,
+            "z": 2,
+            "type": "white_bed",
+            "properties": {
+                "facing": "north",
+                "part": "foot"
+            }
+        }
+    ]
+}

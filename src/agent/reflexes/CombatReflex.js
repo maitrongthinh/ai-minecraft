@@ -50,10 +50,46 @@ export class CombatReflex {
             retreats: 0
         };
 
+        // Training Mode (Phase 6)
+        this.trainingMode = false;
+        this.trainingDifficulty = 1.0;
+
         this._wTapBound = false;
         this._attackListener = null;
 
         console.log('[CombatReflex] ⚔️ Gladiator initialized');
+
+        // Phase 3 Fix: Wire up THREAT_DETECTED Listener
+        globalBus.subscribe(SIGNAL.THREAT_DETECTED, (event) => {
+            if (this.trainingMode) return; // Don't interrupt training
+
+            const { source, type, amount } = event.payload || {};
+            console.log(`[CombatReflex] 🚨 Threat Detected: ${type || source} (Damage: ${amount || 0})`);
+
+            // If threat is from an entity (e.g. mob attack), engage logic is handled 
+            // by 'entityAttack' or 'damage' event usually, but this signal ensures 
+            // we catch indirect threats or 'stuck' states if needed.
+
+            // For now, if high damage taken, ensure we are ready
+            if (amount > 4 && !this.inCombat) {
+                // We don't have a target from just "damage" signal usually, 
+                // unless ReflexSystem passes it. 
+                // ReflexSystem passes { source: 'damage', amount: ... }
+                // Use hitSelector/Observation to find nearest hostile?
+                if (this.agent.hitSelector) {
+                    const target = this.agent.hitSelector.findThreat();
+                    if (target) {
+                        this.enterCombat(target);
+                    }
+                }
+            }
+        });
+    }
+
+    setTrainingMode(active, difficulty = 1.0) {
+        this.trainingMode = active;
+        this.trainingDifficulty = difficulty;
+        console.log(`[CombatReflex] 🥊 Training Mode: ${active} (Difficulty: ${difficulty.toFixed(1)})`);
     }
 
     _syncBot() {
@@ -61,6 +97,54 @@ export class CombatReflex {
         this.bot = bot;
         this.tactics.bot = bot;
         return bot;
+    }
+
+    _getRulePolicy() {
+        // 1. Genetic Instincts (Evolution)
+        if (this.agent?.evolution) {
+            const strafe = this.agent.evolution.getTrait('combat_strafe_distance');
+            const urgency = this.agent.evolution.getTrait('combat_attack_urgency');
+            const reach = this.agent.evolution.getTrait('combat_reach_distance');
+
+            if (strafe !== null) {
+                return {
+                    strafeDistance: strafe,
+                    attackUrgency: urgency || 1.0,
+                    reachDistance: reach || 3.0,
+                    // Keep original fallback for flags
+                    forceShield: false,
+                    forceTotem: false,
+                    totemThreshold: 10,
+                    retreatHealthThreshold: 6
+                };
+            }
+        }
+
+        if (!this.agent?.behaviorRuleEngine || typeof this.agent.behaviorRuleEngine.getCombatPolicy !== 'function') {
+            return {
+                forceShield: false,
+                forceTotem: false,
+                totemThreshold: 10,
+                retreatHealthThreshold: 6,
+                strafeDistance: 2.5,
+                attackUrgency: 1.0
+            };
+        }
+
+        try {
+            return this.agent.behaviorRuleEngine.getCombatPolicy({
+                health: this.bot?.health,
+                inCombat: this.inCombat,
+                state: this.state
+            });
+        } catch {
+            return {
+                forceShield: false,
+                forceTotem: false,
+                totemThreshold: 10,
+                retreatHealthThreshold: 6
+            };
+        }
     }
 
     /**
@@ -120,7 +204,12 @@ export class CombatReflex {
                 this.bot.setControlState('sprint', false);
 
                 // Adaptive jitter: 70ms mean, 15ms stdDev
-                const delay = Math.max(40, Math.min(120, gaussianRandom(70, 15)));
+                // Modulate by attackUrgency (1.0 = normal, 1.5 = faster/more aggressive)
+                const policy = this._getRulePolicy();
+                const urgency = policy.attackUrgency || 1.0;
+                const baseMean = 70 / urgency;
+
+                const delay = Math.max(40, Math.min(120, gaussianRandom(baseMean, 15)));
 
                 setTimeout(() => {
                     if (this.bot.entity && this.inCombat) {
@@ -306,6 +395,7 @@ export class CombatReflex {
         if (!bot) return;
         if (!this.inCombat || !this.target || this._isUpdating) return;
         this._isUpdating = true;
+        const policy = this._getRulePolicy();
 
         try {
             // PRIORITY 1: Check retreat conditions
@@ -316,7 +406,8 @@ export class CombatReflex {
             }
 
             // Phase 2: Auto-Totem (HP < 10)
-            if (this.autoTotemActive && bot.health < 10) {
+            const totemThreshold = policy?.totemThreshold ?? 10;
+            if ((this.autoTotemActive || policy?.forceTotem) && bot.health < totemThreshold) {
                 const totem = bot.inventory.findInventoryItem('totem_of_undying', null);
                 if (totem) {
                     const offHand = bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')];
@@ -330,6 +421,11 @@ export class CombatReflex {
             if (bot.health < 8 && Date.now() - this.lastHealTime > 3000) {
                 await this._emergencyHeal();
                 return;
+            }
+
+            // PRIORITY 2.5: Defensive Reflexes (Shield/Totem)
+            if (await this._checkDefensiveNeeds(policy)) {
+                return; // Blocked action, skip attack
             }
 
             // PRIORITY 3: Combat actions
@@ -349,199 +445,84 @@ export class CombatReflex {
     }
 
     /**
-     * Check if should retreat
+     * Check if we need to block with shield
      */
-    _shouldRetreat() {
-        const bot = this._syncBot();
-        if (!bot) return true;
+    async _checkDefensiveNeeds(policy) {
+        const bot = this.bot;
+        if (!bot) return false;
 
-        // Critical health (< 3 hearts)
-        if (bot.health < 6) return true;
+        // 1. Scan for incoming projectiles
+        const projectiles = Object.values(bot.entities).filter(e =>
+            (e.type === 'projectile' || e.name === 'arrow' || e.name === 'trident' || e.name === 'fireball') &&
+            e.velocity.distanceTo(new Vec3(0, 0, 0)) > 0.1 // Moving
+        );
 
-        // No weapon available (Check if inventory is already synced)
-        const hasMelee = this._getBestWeapon('melee');
-        const hasRange = this._getBestWeapon('range');
+        let incoming = false;
+        const botPos = bot.entity.position.offset(0, 1, 0);
 
-        // Wait at least 2 seconds after combat start before retreating for "no weapon"
-        // to allow inventory sync (Phase 3 Fix)
-        const combatDuration = Date.now() - this.lastAttackTime;
-        if (!hasMelee && !hasRange && combatDuration > 2000) {
-            return true;
+        for (const proj of projectiles) {
+            // Check if vector points to us
+            const dist = proj.position.distanceTo(botPos);
+            if (dist > 30) continue;
+
+            const trajectory = proj.velocity.clone().normalize();
+            const toBot = botPos.minus(proj.position).normalize();
+            const dot = trajectory.dot(toBot);
+
+            if (dot > 0.9) { // 90% aligned towards us
+                incoming = true;
+                // Face the projectile to block it
+                await bot.lookAt(proj.position);
+                break;
+            }
         }
 
-        // Armor almost broken
-        const armor = this._getArmorDurability();
-        if (armor.lowest < 5 && armor.lowest > 0) return true;
+        // 2. Scan for fusing Creepers
+        const nearbyCreepers = Object.values(bot.entities).filter(e =>
+            e.type === 'mob' && e.mobType === 'Creeper' &&
+            e.position.distanceTo(botPos) < 5 &&
+            e.metadata?.[16] === 1 // Fusing state (check version specific metadata, often 16 or 15)
+            // For 1.20.1 it is usually index 16 for state (1=fused, -1=idle) or similar.
+            // Safe bet: if it's close and we are fighting it, block? 
+            // Actually, metadata[16] == 1 is fusion.
+        );
+
+        if (nearbyCreepers.length > 0) {
+            incoming = true;
+            await bot.lookAt(nearbyCreepers[0].position);
+        }
+
+        // Action
+        const shield = bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')];
+        const hasShield = shield && shield.name === 'shield';
+
+        if ((incoming || policy?.forceShield) && hasShield) {
+            bot.activateItem(true); // secondary hand check? usually activateItem(true) is offhand
+            // But mineflayer: activateItem(offhand?)
+            // bot.activateItem(true) means offhand in some versions? 
+            // Standard: bot.activateItem() uses main hand.
+            // If shield is in offhand, we need bot.activateItem(true) ? No, bot.activateItem() acts on current held item??
+            // Actually, blocking with shield in offhand happens when using right click (activateItem).
+            bot.activateItem();
+            return true;
+        } else if (incoming && !hasShield) {
+            // Dodge!
+            const target = nearbyCreepers[0] || projectiles[0];
+            if (target) {
+                this.tactics.strafe(target, 8); // Run away
+            }
+            return false; // Not blocking, but handling
+        }
+
+        // Lower shield if strictly safe and not forced
+        if (!incoming && !policy?.forceShield) {
+            bot.deactivateItem();
+        }
 
         return false;
     }
 
-    /**
-     * Execute retreat protocol
-     */
-    async _executeRetreat() {
-        console.log('[CombatReflex] 🏃 RETREAT TRIGGERED');
-
-        // Signal Critical Health
-        if (this.bot.health < 6) {
-            globalBus.emitSignal(SIGNAL.HEALTH_CRITICAL, { health: this.bot.health });
-        }
-
-        this.stats.retreats++;
-
-        // Priority 1: Pearl out
-        if (await this.tactics.pearlOut(this._getSafePosition())) {
-            this.exitCombat();
-            return;
-        }
-
-        // Priority 2: Pillar up
-        if (await this.tactics.pillarUp(5)) {
-            // Stay on pillar, heal, then exit
-            await this._emergencyHeal();
-            this.exitCombat();
-            return;
-        }
-
-        // Priority 3: Run away
-        await this.tactics.runAway(this.target, 20);
-        this.exitCombat();
-    }
-
-    /**
-     * Execute combat engagement
-     */
-    async _executeEngagement() {
-        if (!this._syncBot()) return;
-        if (!this._isValidTarget(this.target)) {
-            this.exitCombat();
-            return;
-        }
-
-        const distance = this._getDistance(this.target);
-
-        // Equip appropriate weapon
-        if (distance <= 4) {
-            await this._equipBestWeapon('melee');
-        } else if (distance > 8 && this._hasAmmo()) {
-            await this._equipBestWeapon('range');
-        }
-
-        // Shield management
-        if (this._isTargetAttacking()) {
-            this.bot.activateItem(); // Raise shield
-        } else {
-            this.bot.deactivateItem(); // Lower shield
-        }
-
-        // PRIORITY: LOS Check
-        const hasLOS = this._hasLineOfSight(this.target);
-        if (!hasLOS && distance < 10) {
-            console.log('[CombatReflex] 🧱 Target obscured by wall. Repositioning...');
-            await this.tactics.strafe(this.target, distance); // Reposition
-            return;
-        }
-
-        // PRIORITY: Terrain Safety
-        if (!this._isTerrainSafe()) {
-            console.log('[CombatReflex] ⚠️ Dangerous terrain (cliff/void)! Backing up...');
-            this.bot.setControlState('back', true);
-            setTimeout(() => this.bot.setControlState('back', false), 500);
-            return;
-        }
-
-        // Movement + Attack
-        const latency = this.bot.player.ping || 50;
-        const backtrackedPos = this.agent.hitSelector
-            ? this.agent.hitSelector.getBacktrackedPosition(this.target, latency)
-            : this.target.position;
-
-        if (distance <= 4) {
-            // Humanized Look: Aim at backtracked position for high-precision (Anti-Cheat Bypass)
-            await this.agent.actionAPI.motorCortex.humanLook(backtrackedPos.offset(0, 0.5, 0), 1.5);
-
-            // Melee range: strafe and crit attack
-            await this.tactics.strafe(this.target, 2.5);
-
-            // Phase 4: Swarm Sync - Broadcast target
-            globalBus.emitSignal(SIGNAL.ENGAGED_TARGET, {
-                targetId: this.target.username || this.target.uuid,
-                priority: 1
-            });
-
-            // Phase 6: Proactive Crystal Aura (Senior Hardening)
-            const hasCrystals = this.bot.inventory.findInventoryItem('end_crystal', null);
-            if (hasCrystals) {
-                // Determine obsidian block under/near target
-                const targetPos = this.target.position;
-                const crystalBase = this.bot.findBlock({
-                    point: targetPos,
-                    matching: (block) => block.name === 'obsidian' || block.name === 'bedrock',
-                    maxDistance: 4
-                });
-
-                if (crystalBase) {
-                    await this._executeCrystalAura(crystalBase.position);
-                }
-            } else {
-                await this._attemptCritAttack();
-            }
-        } else if (distance <= 8) {
-            // Close gap
-            await this.tactics.approach(this.target);
-        } else {
-            // Range attack
-            await this._rangedAttack();
-        }
-    }
-
-    /**
-     * Check if bot has Line of Sight to target (no blocks blocking)
-     */
-    _hasLineOfSight(target) {
-        const bot = this._syncBot();
-        if (!target) return false;
-        if (!bot?.entity?.position || !bot.world?.raycast) return false;
-
-        const eyePos = bot.entity.position.offset(0, 1.6, 0);
-        const targetPos = target.position.offset(0, 1.6, 0); // Head height
-
-        const direction = targetPos.minus(eyePos).normalize();
-        const dist = eyePos.distanceTo(targetPos);
-
-        // Raycast up to the distance of target
-        const block = bot.world.raycast(eyePos, direction, dist);
-
-        // If no block found, or block is transparent/non-solid
-        if (!block) return true;
-
-        // Double check if block found is actually "solid"
-        return block.boundingBox === 'empty';
-    }
-
-    /**
-     * Check if the bot is in a safe position (not edge of cliff)
-     */
-    _isTerrainSafe() {
-        const bot = this._syncBot();
-        if (!bot?.entity?.position) return false;
-        const botPos = bot.entity.position;
-
-        // Check 1 block ahead in moving direction
-        const velocity = bot.entity.velocity;
-        const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
-        if (speed < 0.01) return true;
-
-        const direction = velocity.normalize();
-        const checkPos = botPos.plus(direction.scaled(1.2));
-
-        // Check block directly underneath
-        const blockBelow = bot.blockAt(checkPos.offset(0, -1, 0));
-        const blockTwoBelow = bot.blockAt(checkPos.offset(0, -2, 0));
-
-        // Both blocks must be solid enough to avoid stepping into a cliff edge.
-        return !!(blockBelow && blockBelow.type !== 0 && blockTwoBelow && blockTwoBelow.type !== 0);
-    }
+    // ... existing code ...
 
     /**
      * Attempt critical hit (jump + fall + attack)
@@ -549,13 +530,25 @@ export class CombatReflex {
     async _attemptCritAttack() {
         if (!this._syncBot()) return;
         const now = Date.now();
-        if (now - this.lastAttackTime < this.attackCooldown) return;
+
+        // Training Mode Adjustment
+        let cooldown = this.attackCooldown;
+        if (this.trainingMode) {
+            cooldown = this.attackCooldown / this.trainingDifficulty;
+        }
+
+        if (now - this.lastAttackTime < cooldown) return;
 
         const velocity = this.bot.entity.velocity;
 
-        // If falling, attack now for crit
-        if (velocity.y < -0.1) {
-            const latency = this.bot.player.ping || 50;
+        // CRIT CONDITION: Falling (Standard Minecraft Crit)
+        // Verify with PhysicsPredictor logic or simple velocity check
+        // standard gravity is -0.0784000015258789
+        const isFalling = velocity.y < -0.078;
+
+        if (isFalling) {
+            const latency = this.bot.player.ping || 50; // default 50ms
+            // Use HitSelector if available for accuracy
             const canHit = this.agent.hitSelector
                 ? this.agent.hitSelector.canHit(this.target, 3.0, latency)
                 : this.bot.entity.position.distanceTo(this.target.position) <= 3.0;
@@ -563,14 +556,16 @@ export class CombatReflex {
             if (canHit) {
                 this.bot.attack(this.target);
                 this.lastAttackTime = now;
+                // Emit crit particle feedback via logic? (Client side only)
             }
             return;
         }
 
-        // Otherwise, initiate jump
+        // Initiate Jump if on ground to start crit chain
         if (this.bot.entity.onGround) {
             this.bot.setControlState('jump', true);
-            setTimeout(() => this.bot.setControlState('jump', false), 100);
+            // Short burst
+            setTimeout(() => this.bot.setControlState('jump', false), 50);
         }
     }
 
@@ -811,6 +806,15 @@ export class CombatReflex {
             // Note: strafeDistance is used in _executeEngagement
         }
         this.combatParams = { ...this.combatParams, ...params };
+    }
+
+    /**
+     * Determine if we should retreat based on health/situation
+     */
+    _shouldRetreat() {
+        if (!this.bot) return false;
+        const threshold = this.combatPolicy?.retreatHealthThreshold || 8;
+        return this.bot.health < threshold;
     }
 }
 

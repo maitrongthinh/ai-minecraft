@@ -66,8 +66,30 @@ export class CodeSandbox {
 
             await jail.set('contextData', new ivm.ExternalCopy(contextData).copyInto());
 
-            const mockBot = this.createMockBotState();
-            await jail.set('bot', new ivm.ExternalCopy(mockBot).copyInto());
+            // Reconstruct Bot Object (Prioritize Real State -> Mock)
+            const botData = contextData.botState || this.createMockBotState();
+
+            // We use evalClosure to create the bot object with methods matching the API
+            await context.evalClosure(`
+                global.bot = {
+                    health: $0.health,
+                    food: $0.food,
+                    entity: { 
+                        position: $0.entity.position 
+                    },
+                    inventory: {
+                        items: () => $0.inventory.items, // Maps array to function
+                        count: $0.inventory.items.length
+                    },
+                    username: $0.username || 'Bot',
+                    chat: (msg) => log('[Sandbox:Chat]', msg),
+                    navigate: (dest) => log('[Sandbox:Navigate]', dest),
+                    // Add other safe stubs here
+                };
+            `, [botData], { arguments: { copy: true } });
+
+            // Deprecated: Remove direct set of 'bot' to avoid overwrite
+            // await jail.set('bot', new ivm.ExternalCopy(mockBot).copyInto());
 
             const script = await isolate.compileScript(codeString);
             const result = await script.run(context, { timeout: this.timeout });

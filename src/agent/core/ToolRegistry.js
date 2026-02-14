@@ -28,8 +28,15 @@ export class ToolRegistry {
 
     /**
      * Auto-discover all skills from the skills library
+     * Called during heavy subsystems initialization
      */
     async discoverSkills() {
+        // Safety check: skillLibrary must be initialized
+        if (!this.agent.skillLibrary) {
+            console.warn('[ToolRegistry] ⚠️ SkillLibrary not initialized. Deferring discovery...');
+            return;
+        }
+
         console.log('[ToolRegistry] Discovering skills...');
 
         try {
@@ -40,12 +47,21 @@ export class ToolRegistry {
                 return;
             }
 
-            const files = fs.readdirSync(skillsPath)
-                .filter(f => f.endsWith('.js'));
+            // Recursive file discovery
+            const getFiles = (dir) => {
+                const dirents = fs.readdirSync(dir, { withFileTypes: true });
+                const files = dirents.map((dirent) => {
+                    const res = path.resolve(dir, dirent.name);
+                    return dirent.isDirectory() ? getFiles(res) : res;
+                });
+                return Array.prototype.concat(...files);
+            };
+
+            const files = getFiles(skillsPath).filter(f => f.endsWith('.js'));
 
             for (const file of files) {
                 try {
-                    await this._loadSkill(path.join(skillsPath, file));
+                    await this._loadSkill(file); // Passed absolute path
                 } catch (error) {
                     console.error(`[ToolRegistry] Error loading skill ${file}:`, error.message);
                 }
@@ -424,6 +440,29 @@ export class ToolRegistry {
         }
 
         return skills;
+    }
+
+    // Dynamic Tool Support
+
+    registerDynamicTool(name, schema, implementation) {
+        if (!this.dynamicTools) this.dynamicTools = new Map();
+        this.dynamicTools.set(name, { schema, implementation });
+        this.skills.set(name, { ...schema, execute: implementation, dynamic: true });
+        console.log(`[ToolRegistry] 🔌 Dynamic tool registered: ${name}`);
+    }
+
+    async executeTool(name, args, agent) {
+        let skill = this.skills.get(name);
+        if (!skill && this.dynamicTools?.has(name)) {
+            skill = this.dynamicTools.get(name);
+        }
+
+        if (skill) {
+            // Direct execution for dynamic tools or wrapped skills
+            if (skill.implementation) return await skill.implementation(agent, args);
+            if (skill.execute) return await skill.execute(agent, args);
+        }
+        return null;
     }
 
     /**

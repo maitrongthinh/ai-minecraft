@@ -101,13 +101,36 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn = 'bottom', do
         await goToPosition(bot, targetBlock.position.x, targetBlock.position.y, targetBlock.position.z, 4);
     }
 
+    // Proximity Check: Back up if too close
+    const dist = bot.entity.position.distanceTo(targetBlock.position.offset(0.5, 0.5, 0.5));
+    if (dist < 1.3) {
+        log(bot, `Too close to placement target (${dist.toFixed(2)}m). Backing up...`);
+        await bot.lookAt(targetBlock.position.offset(0.5, 0.5, 0.5), true);
+        bot.setControlState('back', true);
+        await new Promise(r => setTimeout(r, 250));
+        bot.setControlState('back', false);
+    }
+
     try {
         await bot.equip(block_item, 'hand');
+
+        // Final sanity check for entity obstruction
+        if (bot.entities) {
+            const entitiesInWay = Object.values(bot.entities).filter(e =>
+                e.id !== bot.entity.id &&
+                e.position.distanceTo(targetBlock.position.offset(0.5, 0.5, 0.5)) < 0.8
+            );
+            if (entitiesInWay.length > 0) {
+                const eNames = entitiesInWay.map(e => e.name || e.type).join(', ');
+                log(bot, `Cannot place: Entity in the way (${eNames})`);
+            }
+        }
+
         await bot.placeBlock(buildOffBlock, faceVec);
         log(bot, `Placed ${blockType}.`);
         return true;
     } catch (err) {
-        log(bot, `Failed to place ${blockType}.`);
+        log(bot, `Failed to place ${blockType}: ${err.message}`);
         return false;
     }
 }

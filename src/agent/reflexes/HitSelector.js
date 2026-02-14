@@ -69,15 +69,87 @@ export class HitSelector {
         return snapshots[0].position;
     }
 
-    /**
-     * Validates if the target can be hit at a given distance with lag compensation
-     */
     canHit(target, reach = 3.0, latencyMs = 0) {
         const bot = this.agent.bot;
         if (!bot || !bot.entity) return false;
         const backPos = this.getBacktrackedPosition(target, latencyMs);
         const dist = bot.entity.position.distanceTo(backPos);
         return dist <= reach;
+    }
+
+    /**
+     * Phase 3: Find nearest valid threat from history/current state
+     */
+    findThreat() {
+        const bot = this.agent.bot;
+        if (!bot || !bot.entities) return null;
+
+        let bestTarget = null;
+        let maxScore = -1;
+
+        const TEAMMATES = this.agent.collaboration?.teammates || [];
+
+        for (const entity of Object.values(bot.entities)) {
+            if (entity === bot.entity) continue;
+
+            const isMob = entity.type === 'mob';
+            const isPlayer = entity.type === 'player';
+
+            if (isMob || isPlayer) {
+                // 1. FILTER: Teammates & Passive
+                if (isPlayer) {
+                    if (TEAMMATES.includes(entity.username)) continue;
+                    if (entity.metadata?.[6] === 4) continue; // Creative/Spectator (approx check)
+                }
+
+                // 2. FILTER: Hostility
+                // TODO: Check SocialEngine for dynamic hostility
+                if (isMob && ['Villager', 'Iron Golem', 'Trader Llama', 'Wandering Trader', 'Cat', 'Wolf', 'Horse', 'Donkey', 'Mule', 'Parrot'].includes(entity.mobType)) continue;
+
+                // 3. SCORE CALCULATION
+                let score = 0;
+
+                // Base Priority (Danger Level)
+                switch (entity.mobType) {
+                    case 'Creeper': score = 100; break;
+                    case 'Phantom': score = 90; break;
+                    case 'Witch': score = 85; break;
+                    case 'Skeleton': score = 80; break;
+                    case 'Stray': score = 80; break;
+                    case 'Pillager': score = 75; break;
+                    case 'Blaze': score = 75; break;
+                    case 'Drowned': score = 70; break; // Only if holding trident?
+                    case 'Spider': score = 60; break;
+                    case 'Cave Spider': score = 65; break;
+                    case 'Zombie': score = 40; break;
+                    case 'Husk': score = 40; break;
+                    case 'Enderman': score = 30; break; // Neutral unless provoked
+                    case 'Piglin': score = 30; break;   // Neutral with gold
+                    default: score = 50; // Unknown/Player
+                }
+
+                if (isPlayer) score = 150; // Players are highest threat usually
+
+                // Distance Multiplier (Closer = Higher)
+                const dist = bot.entity.position.distanceTo(entity.position);
+                if (dist > 16) continue; // Out of range
+                score += (16 - dist) * 2;
+
+                // Health Multiplier (Lower = Higher to finish off)
+                if (entity.health > 0) {
+                    score += (20 - entity.health) * 0.5;
+                }
+
+                // Line of Sight Bonus
+                // (Expensive check, maybe skip or simplify)
+
+                if (score > maxScore) {
+                    maxScore = score;
+                    bestTarget = entity;
+                }
+            }
+        }
+        return bestTarget;
     }
 }
 

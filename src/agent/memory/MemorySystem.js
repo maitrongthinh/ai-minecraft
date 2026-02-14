@@ -118,6 +118,27 @@ export class MemorySystem {
                 });
             }
         }));
+
+        // Phase 3 Fix: Wire up SOCIAL_INTERACTION
+        this._unsubscribers.push(globalBus.subscribe(SIGNAL.SOCIAL_INTERACTION, async (event) => {
+            const { entity, message, sentiment } = event.payload || {};
+            if (entity && message) {
+                // Don't memorize own thoughts usually, but this event comes from SocialEngine interacting with others
+                console.log(`[MemorySystem] 🧠 Memorizing social: ${entity}`);
+                await this.absorb(DATA_TYPE.CHAT, {
+                    role: entity,
+                    content: message
+                });
+
+                // Also store as experience if significant
+                if (sentiment && sentiment !== 'neutral') {
+                    await this.absorb(DATA_TYPE.EXPERIENCE, {
+                        facts: [`User ${entity} said "${message}" with ${sentiment} sentiment.`],
+                        metadata: { source: 'social', entity, sentiment }
+                    });
+                }
+            }
+        }));
     }
 
     add(role, content) {
@@ -147,6 +168,35 @@ export class MemorySystem {
         }
         this._savePending = false;
         this.save();
+    }
+
+    save() {
+        if (this._savePending) return;
+        this._savePending = true;
+
+        if (this._saveTimer) clearTimeout(this._saveTimer);
+
+        this._saveTimer = setTimeout(() => {
+            try {
+                const data = {
+                    memory: this.memory,
+                    turns: this.turns,
+                    errors: this.errors,
+                    ram: this.ram
+                };
+
+                // Ensure directory exists
+                const dir = this.memory_fp.substring(0, this.memory_fp.lastIndexOf('/'));
+                if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+                writeFileSync(this.memory_fp, JSON.stringify(data, null, 2));
+                this._savePending = false;
+                // console.log('[MemorySystem] 💾 Saved memory to disk');
+            } catch (err) {
+                console.error('[MemorySystem] ❌ Save failed:', err);
+                this._savePending = false;
+            }
+        }, 1000); // Debounce 1s
     }
 
     addError(task, error) {
@@ -217,44 +267,6 @@ export class MemorySystem {
         this.ram[id] = data;
         this.save();
     }
-
-    shutdown() {
-        if (this._saveTimer) {
-            clearTimeout(this._saveTimer);
-            this._saveTimer = null;
-        }
-
-        // Unsubscribe all listeners
-        if (this._unsubscribers) {
-            this._unsubscribers.forEach(unsub => unsub());
-            this._unsubscribers = [];
-        }
-
-        console.log('[MemorySystem] 🛑 Shutdown: Timer cleared & Listeners removed.');
-    }
-
-    async persistToDisk() {
-        if (this._savePending) return;
-        this._savePending = true;
-        try {
-            const data = JSON.stringify({
-                memory: this.memory,
-                turns: this.turns,
-                errors: this.errors,
-                ram: this.ram, // Save RAM too
-                self_prompting_state: this.agent.self_prompter?.state,
-                last_update: Date.now()
-            }, null, 2);
-            await writeFile(this.memory_fp, data, 'utf8');
-            // console.log('[MemorySystem] Saved to disk.');
-        } catch (err) {
-            console.error('[MemorySystem] Save failed:', err.message);
-        } finally {
-            this._savePending = false;
-        }
-    }
-
-    async save() { await this.persistToDisk(); }
 
     load() {
         try {

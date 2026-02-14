@@ -18,16 +18,16 @@ export class Dreamer {
         console.log(`[Dreamer] Entering REM sleep (${reason})...`);
 
         try {
-            await this.agent.bot.chat('I am organizing my memories... (Dreaming)');
-            this.agent.bot.modes.pause('all'); // Safety first
-
             // 1. Retrieve Recent History
             const history = this.agent.history.getHistory();
             if (history.length < 5) {
                 console.log('[Dreamer] Not enough history to dream.');
-                this.isDreaming = false;
-                this.agent.bot.modes.unPauseAll();
+                // unpause handled in finally
                 return;
+            }
+
+            if (this.agent.bot && this.agent.bot.modes) {
+                this.agent.bot.modes.pause('all');
             }
 
             // 2. Synthesize Memories (Summarization)
@@ -39,10 +39,6 @@ export class Dreamer {
 
             // Use DualBrain (Fast Model preferred for summarization)
             let response = '';
-            // Assuming DualBrain routing, likely chat() is FastModel. 
-            // We can also ask prompter directly if we want specific model.
-            // Using agent.prompter to be safe or this.agent.brain if we exposed it.
-            // Agent.js has this.brain.
 
             if (this.agent.brain) {
                 response = await this.agent.brain.chat(prompt);
@@ -70,15 +66,11 @@ export class Dreamer {
                     await this.vectorStore.add(mem, { source: 'dream' });
             }
 
-            // 4. Clean Slate (Pruning)
-            // Ideally we keep some recent context.
-            // For now, we rely on `Agent.history` managing its own size or we explicitely clear it?
-            // Agent History implementation usually keeps last N messages.
-            // We won't wipe it completely, as short term memory is useful.
-            // But we might archive it?
+            // 4. Archive & Clean
             this.agent.history.save(); // ensure saved.
-
             this.agent.bot.chat('I feel refreshed. Memories updated.');
+            console.log(`[Dreamer] Processed ${memories.length} memories.`);
+
         } catch (err) {
             console.error('[Dreamer] Nightmare (Error):', err);
         } finally {

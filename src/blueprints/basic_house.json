@@ -1,0 +1,67 @@
+{
+    "name": "basic_house",
+    "size": {
+        "x": 7,
+        "y": 5,
+        "z": 7
+    },
+    "materials": {
+        "W": "oak_planks",
+        "D": "oak_door",
+        "G": "glass_pane",
+        "S": "cobblestone",
+        "T": "oak_stairs",
+        "B": "bed",
+        "C": "chest",
+        "F": "crafting_table",
+        "L": "torch",
+        ".": "air"
+    },
+    "layers": [
+        [
+            "SSSSSSS",
+            "SSSSSSS",
+            "SSSSSSS",
+            "SSSSSSS",
+            "SSSSSSS",
+            "SSSSSSS",
+            "SSSSSSS"
+        ],
+        [
+            "WWWWWWW",
+            "W.....W",
+            "W.B.C.W",
+            "D.....W",
+            "W.F...W",
+            "W.....W",
+            "WWGWGWW"
+        ],
+        [
+            "WWWWWWW",
+            "W.....W",
+            "W.....W",
+            "D.....W",
+            "W.....W",
+            "W.....W",
+            "WWGWGWW"
+        ],
+        [
+            "WWWWWWW",
+            "W.....W",
+            "W.....W",
+            "W.....W",
+            "W.....W",
+            "W.....W",
+            "WWWWWWW"
+        ],
+        [
+            "SSSSSSS",
+            "S.....S",
+            "S.....S",
+            "S.....S",
+            "S.....S",
+            "S.....S",
+            "SSSSSSS"
+        ]
+    ]
+}

@@ -21,6 +21,10 @@ import { sendSystem2TraceToServer } from '../mindserver_proxy.js';
 export class System2Loop {
     constructor(agent) {
         this.agent = agent;
+        
+        // CRITICAL: Brain may not be initialized yet - defer sub-agent creation
+        this.brain = agent.brain;
+        this.initialized = false;
 
         // Initialize sub-agents
         this.planner = new PlannerAgent(agent);

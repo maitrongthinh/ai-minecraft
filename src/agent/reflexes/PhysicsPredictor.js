@@ -77,6 +77,79 @@ export class PhysicsPredictor {
             return { success: false, error: e.message };
         }
     }
+
+    /**
+     * Calculates the estimated fall height in blocks.
+     * @returns {number} blocks
+     */
+    getFallHeight() {
+        if (this.bot.entity.onGround) return 0;
+
+        let pos = this.bot.entity.position.clone();
+        let y = pos.y;
+
+        // Cast a ray down
+        for (let i = 1; i <= 50; i++) {
+            const block = this.bot.blockAt(pos.offset(0, -i, 0));
+            if (block && block.boundingBox !== 'empty') {
+                return i - 1 + (y - Math.floor(y)); // Accurate distance
+            }
+        }
+        return 50; // > 50 blocks
+    }
+
+    /**
+     * Predicts where the bot will land based on current velocity.
+     * @returns {Vec3|null}
+     */
+    predictLandingPosition() {
+        if (this.bot.entity.onGround) return this.bot.entity.position.clone();
+
+        let pos = this.bot.entity.position.clone();
+        let vel = this.bot.entity.velocity.clone();
+        const gravity = 0.08;
+        const drag = 0.98;
+
+        for (let ticks = 0; ticks < 60; ticks++) { // 3 seconds max
+            vel.y = (vel.y - gravity) * drag;
+            pos.add(vel);
+
+            const block = this.bot.blockAt(pos.floored());
+            if (block && block.boundingBox !== 'empty') {
+                return pos.floored();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Calculates potential fall damage from a given height.
+     * Damage = ceil(distance - 3)
+     * @param {Number} distance 
+     * @returns {Number} damage (hearts * 2) - actually it returns health points
+     */
+    calculateFallDamage(distance) {
+        if (distance <= 3) return 0;
+        return Math.ceil(distance - 3);
+    }
+
+    /**
+     * Predicts potential fall damage if the bot walks off the current edge.
+     * @returns {Object} { damage, risk }
+     */
+    predictFallRisk() {
+        const height = this.getFallHeight();
+        if (height > 3) {
+            const damage = this.calculateFallDamage(height);
+            return {
+                damage,
+                risk: damage >= 20 ? 'fatal' : (damage > 5 ? 'high' : 'medium'),
+                height
+            };
+        }
+        return { damage: 0, risk: 'none', height };
+    }
+
 }
 
 export default PhysicsPredictor;

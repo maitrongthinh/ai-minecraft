@@ -1,0 +1,91 @@
+{
+    "id": "end_expedition",
+    "name": "End Expedition",
+    "description": "Reach The End and defeat the Ender Dragon: craft eyes of ender, find stronghold, activate portal, fight dragon",
+    "steps": [
+        {
+            "id": "craft_blaze_powder",
+            "instruction": "Convert blaze_rods into blaze_powder at a crafting table. Each rod gives 2 powder. You need at least 14 blaze_powder (7 for eyes + extras).",
+            "requires": [
+                "blaze_rod >= 7"
+            ],
+            "done_when": "inventory has blaze_powder >= 14"
+        },
+        {
+            "id": "collect_ender_pearls",
+            "instruction": "Kill Endermen to collect at least 12 ender_pearls. Endermen spawn at night in the overworld or abundantly in the Nether warped_forest biome. Look at their feet to provoke them, then attack.",
+            "requires": [
+                "sword"
+            ],
+            "done_when": "inventory has ender_pearl >= 12"
+        },
+        {
+            "id": "craft_eyes_of_ender",
+            "instruction": "Craft ender_eyes by combining ender_pearl + blaze_powder. Craft at least 12 eyes_of_ender.",
+            "requires": [
+                "ender_pearl >= 12",
+                "blaze_powder >= 12"
+            ],
+            "done_when": "inventory has ender_eye >= 12"
+        },
+        {
+            "id": "locate_stronghold",
+            "instruction": "Use (throw) an ender_eye into the air. It will float toward the nearest stronghold. Follow the direction it points. Throw another eye every 200-300 blocks. When the eye goes downward, dig straight down to find the stronghold.",
+            "requires": [
+                "ender_eye >= 12"
+            ],
+            "done_when": "found stronghold structure underground (stone_bricks)"
+        },
+        {
+            "id": "find_end_portal",
+            "instruction": "Explore inside the stronghold (underground stone brick structure) to find the End Portal room. The portal is a 3x3 ring of end_portal_frame blocks over a pool of lava.",
+            "requires": [],
+            "done_when": "end_portal_frame blocks found nearby"
+        },
+        {
+            "id": "activate_end_portal",
+            "instruction": "Place ender_eyes into each end_portal_frame block that is missing one. When all 12 frames have eyes, the portal activates. Some frames may already have eyes.",
+            "requires": [
+                "ender_eye >= 12"
+            ],
+            "done_when": "end_portal block appears (purple portal)"
+        },
+        {
+            "id": "prepare_for_dragon",
+            "instruction": "Before jumping into the End Portal, prepare: diamond armor (full set), diamond sword, bow + 64 arrows, 2+ stacks of building blocks, golden apples, water bucket, bed (optional for respawn).",
+            "requires": [
+                "full diamond or better armor",
+                "bow",
+                "arrows >= 64"
+            ],
+            "done_when": "fully equipped for dragon fight"
+        },
+        {
+            "id": "enter_the_end",
+            "instruction": "Jump into the active End Portal. You will be teleported to The End dimension on an obsidian platform.",
+            "requires": [
+                "activated end portal"
+            ],
+            "done_when": "current dimension is the_end"
+        },
+        {
+            "id": "destroy_end_crystals",
+            "instruction": "The Ender Dragon heals from End Crystals on top of obsidian pillars. Destroy all crystals first. Shoot them with arrows or climb up and hit them. Be careful — some are in iron cages that need pickaxe to break.",
+            "requires": [
+                "bow",
+                "arrows"
+            ],
+            "done_when": "all end crystals destroyed"
+        },
+        {
+            "id": "defeat_ender_dragon",
+            "instruction": "Fight the Ender Dragon! When it perches on the fountain, hit it with your sword. When it's flying, shoot arrows. Avoid its charge attack and the dragon breath. When it's defeated, collect the XP and enter the portal that spawns on the fountain.",
+            "requires": [
+                "all crystals destroyed",
+                "sword",
+                "bow"
+            ],
+            "done_when": "ender_dragon defeated, exit portal appears"
+        }
+    ]
+}

@@ -64,6 +64,8 @@ export function selectAPI(profile) {
                 profile.api = 'qwen';
             else if (profile.model.includes('minimax'))
                 profile.api = 'openai';
+            else if (profile.model.includes('groq'))
+                profile.api = 'groq';
         }
         if (!profile.api) {
             throw new Error('Unknown model:', profile.model);

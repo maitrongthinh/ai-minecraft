@@ -1,4 +1,12 @@
 import { globalBus, SIGNAL } from './SignalBus.js';
+import { CombatReflex } from '../reflexes/CombatReflex.js';
+import { SelfPreservationReflex } from '../reflexes/SelfPreservationReflex.js';
+import { PhysicsPredictor } from '../reflexes/PhysicsPredictor.js';
+import { HitSelector } from '../reflexes/HitSelector.js';
+import { DeathRecovery } from '../reflexes/DeathRecovery.js';
+import { Watchdog } from '../reflexes/Watchdog.js';
+import { FallDamageReflex } from '../reflexes/FallDamageReflex.js';
+// ResourceReflex excluded (file missing)
 
 /**
  * ReflexSystem - autonomic Nervous System
@@ -13,6 +21,25 @@ export class ReflexSystem {
         this.lastFood = 20;
         this.cooldowns = new Map();
         this.activeListeners = new Map(); // Track transient listeners
+        this.dynamicReflexes = new Map(); // Phase 4: Dynamic Reflexes
+
+        // Initialize Reflex Modules
+        this.physics = new PhysicsPredictor(agent);
+        this.hitSelector = new HitSelector(agent);
+
+        // Complex Reflexes
+        this.reflexes = {
+            combat: new CombatReflex(agent),
+            selfPreservation: new SelfPreservationReflex(agent),
+            watchdog: new Watchdog(agent),
+            recovery: new DeathRecovery(agent),
+            fallDamage: new FallDamageReflex(agent)
+        };
+
+        // Backward compatibility aliases
+        this.combat = this.reflexes.combat;
+        this.selfPreservation = this.reflexes.selfPreservation;
+        this.fall = this.reflexes.fallDamage;
     }
 
     /**
@@ -27,6 +54,26 @@ export class ReflexSystem {
 
         console.log('[ReflexSystem] 🔗 Attaching core monitors...');
         this._setupCoreMonitors(bot);
+
+        // Initialize/Connect Child Reflexes
+        for (const [name, reflex] of Object.entries(this.reflexes)) {
+            if (reflex && typeof reflex.start === 'function') {
+                try {
+                    reflex.start();
+                    console.log(`[ReflexSystem] Started ${name}`);
+                } catch (err) {
+                    console.warn(`[ReflexSystem] Failed to start ${name}:`, err);
+                }
+            } else if (reflex && typeof reflex.init === 'function') {
+                reflex.init(); // Legacy support
+            }
+        }
+
+        // Load Dynamic Reflexes (Phase 4)
+        if (this.agent.evolution && this.agent.evolution.reflexCreator) {
+            const loaded = this.agent.evolution.reflexCreator.loadReflexes();
+            loaded.forEach(r => this.registerDynamicReflex(r));
+        }
     }
 
     /**
@@ -136,6 +183,12 @@ export class ReflexSystem {
         if (this._deathListener) bot.removeListener('death', this._deathListener);
         if (this._packetListener) bot._client.removeListener('packet', this._packetListener);
 
+        // Remove dynamic signal listeners
+        for (const [id, reflex] of this.dynamicReflexes) {
+            globalBus.unsubscribe(reflex.trigger.signal, reflex._listener);
+        }
+        this.dynamicReflexes.clear();
+
         for (const eventName of this.activeListeners.keys()) {
             this.removeTransient(eventName);
         }
@@ -143,5 +196,38 @@ export class ReflexSystem {
         this._healthListener = null;
         this._deathListener = null;
         this._packetListener = null;
+
+        // Recursively cleanup child reflexes
+        for (const reflex of Object.values(this.reflexes)) {
+            if (reflex && typeof reflex.cleanup === 'function') {
+                try { reflex.cleanup(); } catch (err) { console.warn('[ReflexSystem] Child cleanup error:', err); }
+            }
+        }
+    }
+
+    /**
+     * Phase 4: Register a dynamic reflex
+     * @param {DynamicReflex} reflex 
+     */
+    registerDynamicReflex(reflex) {
+        if (!reflex || !reflex.id) return;
+
+        // Remove existing if any (hot-swap)
+        if (this.dynamicReflexes.has(reflex.id)) {
+            const old = this.dynamicReflexes.get(reflex.id);
+            globalBus.unsubscribe(old.trigger.signal, old._listener);
+        }
+
+        // Create listener wrapper
+        reflex._listener = async (data) => {
+            if (reflex.matchesSignal(reflex.trigger.signal, data)) {
+                await reflex.execute(this.agent.bot, this.agent);
+            }
+        };
+
+        // Subscribe to SignalBus
+        globalBus.subscribe(reflex.trigger.signal, reflex._listener);
+        this.dynamicReflexes.set(reflex.id, reflex);
+        console.log(`[ReflexSystem] 🧠 Dynamic Reflex Registered: ${reflex.id}`);
     }
 }

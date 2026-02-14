@@ -10,21 +10,13 @@ import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { UnifiedBrain } from '../brain/UnifiedBrain.js';
 import { PlannerAgent } from './orchestration/PlannerAgent.js';
-import { DeathRecovery } from './reflexes/DeathRecovery.js';
-import { Watchdog } from './reflexes/Watchdog.js';
-import { MinecraftWiki } from '../tools/MinecraftWiki.js';
+
 import { ActionLogger } from '../utils/ActionLogger.js';
 import { randomUUID } from 'crypto';
 import settings from '../../settings.js';
 import { HealthMonitor } from '../process/HealthMonitor.js';
 import { MentalSnapshot } from '../utils/MentalSnapshot.js';
-import { ToolRegistry } from './core/ToolRegistry.js';
-import { System2Loop } from './orchestration/System2Loop.js';
-import EvolutionEngine from './core/EvolutionEngine.js';
 import { CoreSystem } from './core/CoreSystem.js';
-import AdventureLogger from './core/AdventureLogger.js';
-import { CombatReflex } from './reflexes/CombatReflex.js';
-import { SelfPreservationReflex } from './reflexes/SelfPreservationReflex.js';
 import { RetryHelper } from '../utils/RetryHelper.js';
 import { AsyncMutex } from '../utils/AsyncLock.js';
 import { BOT_STATE } from './core/BotState.js';
@@ -42,10 +34,25 @@ import { UtilityEngine } from './intelligence/UtilityEngine.js';
 import { SelfPrompter } from './self_prompter.js';
 import { Task } from './tasks/ScenarioManager.js';
 import { PhysicsPredictor } from './reflexes/PhysicsPredictor.js';
+import { DeathRecovery } from './reflexes/DeathRecovery.js';
+import { Watchdog } from './reflexes/Watchdog.js';
 import { ReplayBuffer } from './core/ReplayBuffer.js';
 import { HitSelector } from './reflexes/HitSelector.js';
 import { SwarmSync } from './core/SwarmSync.js';
 import { PathfindingWorkerController } from './core/PathfindingWorker.js';
+import MissionDirector from './core/MissionDirector.js';
+import AdvancementLadder from './core/AdvancementLadder.js';
+import SpawnBaseManager from './core/SpawnBaseManager.js';
+import DefenseController from './core/DefenseController.js';
+import BehaviorRuleEngine from './core/BehaviorRuleEngine.js';
+import ChatInstructionLearner from './core/ChatInstructionLearner.js';
+import { AdventureLogger } from './core/AdventureLogger.js';
+import { EnvironmentMonitor } from './core/EnvironmentMonitor.js';
+import { CombatAcademy } from './core/CombatAcademy.js';
+import { PlayerTrainingMode } from './core/PlayerTrainingMode.js';
+import { ToolCreatorEngine } from './core/ToolCreatorEngine.js';
+import { KnowledgeStore } from './core/KnowledgeStore.js';
+import { MinecraftWiki } from '../tools/MinecraftWiki.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -139,8 +146,9 @@ export class Agent {
         this.scheduler = this.core.scheduler;
         this.bus = globalBus;
 
-        // Nervous System
-        this.brain = new UnifiedBrain(this, this.prompter);
+        // Nervous System - DEFERRED until heavy subsystems load
+        // This prevents circular dependencies (brain needs CogneeMemory + SkillLibrary)
+        this.brain = null;
 
         // Feature Modules
         this.history = this.memory; // Legacy compatibility (Unified Phase 4)
@@ -157,18 +165,37 @@ export class Agent {
         this.healthMonitor = new HealthMonitor(this);
         this.healthMonitor.start();
 
-        // Reflexes & Optimization
-        this.combatReflex = new CombatReflex(this);
-        this.selfPreservation = new SelfPreservationReflex(this);
-        this.toolRegistry = new ToolRegistry(this);
-        this.system2 = new System2Loop(this);
-        this.evolution = new EvolutionEngine(this);
+        // -------------------------------------------------------------
+        // UNIFIED CORE LINKING (Refactor Phase 5)
+        // -------------------------------------------------------------
+
+        // 1. Core Modules (Aliases for Backward Compatibility)
+        this.evolution = this.core.evolution;
+        this.toolRegistry = this.core.toolRegistry;
+        this.system2 = this.core.system2;
+        this.combatAcademy = this.core.combatAcademy;
+        this.extractor = this.core.extractor;
+
+        // 2. Reflexes (Managed by ReflexSystem)
+        this.reflexes = this.core.reflexSystem.reflexes;
+
+        // Aliases for frequently accessed reflexes
+        this.combatReflex = this.reflexes.combat;
+        this.physics = this.core.reflexSystem.physics;
+        this.hitSelector = this.core.reflexSystem.hitSelector;
+        this.watchdog = this.reflexes.watchdog;
+        this.selfPreservation = this.reflexes.selfPreservation;
+        this.deathRecovery = this.reflexes.recovery;
+
         this.mentalSnapshot = new MentalSnapshot(this);
-        this.physics = new PhysicsPredictor(this);
+        // Physics/Replay instanced in ReflexSystem, but ReplayBuffer is separate?
+        // Agent.js originally: this.replayBuffer = new ReplayBuffer(this);
         this.replayBuffer = new ReplayBuffer(this);
-        this.hitSelector = new HitSelector(this);
+
         this.swarm = new SwarmSync(this);
         this.pathfindingWorker = new PathfindingWorkerController(this);
+
+        // Mission + Learning Runtime
 
         // Resource Locking - Uses AsyncMutex for Queued Control
         this.locks = {
@@ -200,8 +227,9 @@ export class Agent {
         this.mentalSnapshot.load();
 
         let save_data = load_mem ? this.history.load() : null;
-        this.isReady = true; // Mark as ready before connecting
-        void this._connectToMinecraft(save_data, init_message);
+        // CRITICAL: Do NOT set isReady before bot and heavy subsystems are loaded!
+        // await _connectToMinecraft will set isReady = true when ready
+        await this._connectToMinecraft(save_data, init_message);
     }
 
     _loadCollaborationSettings() {
@@ -495,67 +523,7 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         }
     }
 
-    async update(delta) {
-        if (!this.running) return;
 
-        // Phase 2: State Guard
-        // Do not run main brain loop if not READY
-        if (!this.isReady || this.state !== BOT_STATE.READY) return;
-
-        try {
-            // High Frequency Reflex Update (50ms)
-            if (this.combatReflex && this.combatReflex.inCombat) {
-                // Combat attempts to acquire locks with 0 timeout (non-blocking if busy, but priority)
-                if (await this.locks.look.acquire('combat', 0) && await this.locks.move.acquire('combat', 0)) {
-                    await this.combatReflex.tick();
-                }
-            }
-
-            // Phase 2: Physics-based reflexes (MLG)
-            if (this.physics && this.physics.shouldMLG()) {
-                console.log('[MindOS] 🌊 MLG Waterdrop required! Executing...');
-                await this.physics.performMLG();
-            }
-
-            // Central Intelligence Processing
-            await this.brain.update(delta);
-
-            // Social Territorial Check (Optimized)
-            this._territorialUpdate();
-
-            // Success resets error counter (Circuit Breaker)
-            if (this.errorCount > 0 && Date.now() - this.lastErrorTime > 10000) {
-                this.errorCount = 0;
-            }
-
-            // Phase 3: High-fidelity buffers
-            if (this.replayBuffer) this.replayBuffer.capture();
-            if (this.hitSelector && this.bot?.entity) this.hitSelector.update();
-
-        } catch (err) {
-            console.error(`[MindOS] Loop error in ${this.name}: `, err.message);
-
-            // Circuit Breaker Logic
-            this.errorCount++;
-            this.lastErrorTime = Date.now();
-
-            if (this.errorCount > 5) {
-                console.error('[MindOS] 🚨 CRITICAL: Infinite Loop Error detected. Triggering Emergency Reset.');
-                this.state = BOT_STATE.ERROR;
-
-                // Emergency Reset Procedure
-                try {
-                    this.brain = new UnifiedBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
-                    console.log('[MindOS] Brain Soft-Reset completed.');
-                    this.errorCount = 0;
-                    this.state = BOT_STATE.READY;
-                } catch (resetErr) {
-                    console.error('[MindOS] ☠️ FATAL: Reset failed. Shutting down.', resetErr);
-                    this.shutdown('Fatal Error Loop');
-                }
-            }
-        }
-    }
 
 
     /**
@@ -600,7 +568,7 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         this.bot.once('spawn', async () => {
             try {
                 if (!this.running) return;
-                console.log(`[INIT] ${this.name} spawned.Stabilizing...`);
+                console.log(`[INIT] ${this.name} spawned. Stabilizing...`);
 
                 // Phase 5: Safe Initialization
                 this.core.connectBot(this.bot);
@@ -655,12 +623,22 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         this._handleReconnect(save_data, init_message, attempt);
     }
 
+    // ... (existing imports)
+
     /**
      * Phase 3: Initialize heavy AI subsystems in background
      * This runs via TaskScheduler to avoid blocking main thread
      */
     async _initHeavySubsystems(count_id, load_mem) {
         console.log('[INIT] ⏳ Starting heavy subsystems initialization...');
+
+        // Initialize Knowledge Store (Manifest & Docs)
+        try {
+            this.knowledge = new KnowledgeStore(this);
+            this.knowledge.init();
+        } catch (err) {
+            console.error('[INIT] ❌ KnowledgeStore initialization failed:', err);
+        }
 
         // Vision Interpreter (heavy - uses canvas)
         if (settings.allow_vision) {
@@ -674,6 +652,24 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             }
         }
 
+        // Phase 2: Environment Monitor (Proactive Perception)
+        try {
+            this.envMonitor = new EnvironmentMonitor(this);
+            this.envMonitor.start(); // Auto-starts background scanning
+            console.log('[INIT] ✓ EnvironmentMonitor started');
+        } catch (err) {
+            console.warn('[INIT] ⚠ EnvironmentMonitor failed:', err.message);
+        }
+
+        // Phase 6: Player Training Mode
+        try {
+            // this.combatAcademy = new CombatAcademy(this); // Handled by CoreSystem
+            this.playerTraining = new PlayerTrainingMode(this);
+            console.log('[INIT] ✓ PlayerTrainingMode loaded');
+        } catch (err) {
+            console.warn('[INIT] ⚠ PlayerTrainingMode failed:', err.message);
+        }
+
         try {
             this.adventureLogger = new AdventureLogger(this, {
                 enabled: this.config?.enable_adventure_log !== false
@@ -684,7 +680,6 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             console.warn('[INIT] AdventureLogger failed:', err.message);
         }
 
-        // Cognee Memory Bridge (Optional Service)
         try {
             const cogneeServiceUrl = settings.cognee_service_url || 'http://localhost:8001';
 
@@ -712,32 +707,65 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             await this.toolRegistry.discoverSkills();
             console.log('[INIT] ✓ ToolRegistry discovered skills');
 
-            // Reinitialize UnifiedBrain with full context
-            this.brain = new UnifiedBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
-            console.log('[INIT] ✓ UnifiedBrain enhanced with Cognee + Skills');
+            // Phase 7: Tool Creator Engine
+            this.toolCreator = new ToolCreatorEngine(this);
+
+            // Phase 2 Fix: Wire up Instruction Learner
+            this.instructionLearner = new ChatInstructionLearner(this);
+            console.log('[INIT] ✓ ToolCreatorEngine initialized');
 
         } catch (err) {
             console.warn('[INIT] ⚠ External AI Services Unavailable (Cognee/Skills).');
-            console.warn(`[INIT] Running in OFFLINE MODE.Error: ${err.message} `);
-            // Fallback: Ensure critical components exist even if empty
-            if (!this.brain) this.brain = new UnifiedBrain(this, this.prompter);
+            console.warn(`[INIT] Running in OFFLINE MODE. Error: ${err.message}`);
         }
 
-        // Dreamer (VectorDB)
-        if (this.dreamer) {
-            RetryHelper.retry(() => this.dreamer.init(), { context: 'DreamerInit', maxRetries: 2 })
-                .catch(err => console.warn('[INIT] ⚠ Dreamer init failed:', err.message));
+        // CRITICAL: Initialize UnifiedBrain EXACTLY ONCE with full context
+        // This is the proper time - after CogneeMemory and SkillLibrary are ready
+        try {
+            if (!this.brain) {
+                this.brain = new UnifiedBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
+                console.log('[INIT] ✓ UnifiedBrain initialized with Cognee + Skills');
+            }
+        } catch (err) {
+            console.error('[INIT] ❌ Failed to initialize UnifiedBrain:', err.message);
+            // Fallback with minimal features
+            this.brain = new UnifiedBrain(this, this.prompter);
+            console.log('[INIT] ⚠ UnifiedBrain initialized with fallback (no Cognee/Skills)');
         }
 
-        // Task initialization
+        // Dreamer (VectorDB) - With proper error handling
+        // Dreamer (VectorDB) - With proper error handling
+        if (settings.allow_dreamer) {
+            try {
+                // Lazy load Dreamer here if not already loaded
+                if (!this.dreamer) {
+                    const { Dreamer } = await import('./Dreamer.js');
+                    this.dreamer = new Dreamer(this);
+                }
+                await RetryHelper.retry(() => this.dreamer.init(), { context: 'DreamerInit', maxRetries: 2 });
+                console.log('[INIT] ✓ Dreamer initialized');
+            } catch (err) {
+                console.warn('[INIT] ⚠ Dreamer init failed:', err.message);
+            }
+        }
+
+        // Task initialization - With proper error handling
         if (!load_mem) {
             if (this.task) {
-                void this.task.initBotTask();
-                void this.task.setAgentGoal();
+                try {
+                    await this.task.initBotTask();
+                    await this.task.setAgentGoal();
+                } catch (err) {
+                    console.warn('[INIT] ⚠ Task initialization failed:', err.message);
+                }
             }
         } else {
             if (this.task) {
-                void this.task.setAgentGoal();
+                try {
+                    await this.task.setAgentGoal();
+                } catch (err) {
+                    console.warn('[INIT] ⚠ Task goal setting failed:', err.message);
+                }
             }
         }
 
@@ -746,17 +774,34 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         if (this.running) this.checkAllPlayersPresent();
 
         // Initialize Reflexes
-        this.deathRecovery = new DeathRecovery(this);
-        this.watchdog = new Watchdog(this);
-        this.watchdog.start();
+        // Fix: Do not re-instantiate. Use existing instances from ReflexSystem.
+        if (this.watchdog) {
+            this.watchdog.start();
+        } else {
+            console.warn('[Agent] Watchdog not found in reflexes!');
+        }
         await this.deathRecovery.onSpawn();
+
+        // Initialize Mission Director (Autonomous Brain)
+        try {
+            // cleanup old instance ifexists
+            if (this.missionDirector) {
+                this.missionDirector.stop();
+            }
+            this.missionDirector = new MissionDirector(this);
+            this.missionDirector.init();
+            console.log('[INIT] MissionDirector instantiated.');
+        } catch (err) {
+            console.error('[INIT] Failed to instantiate MissionDirector:', err);
+        }
 
         console.log('[INIT] ✅ All heavy subsystems initialized.');
 
-        // Phase 8: Fix Init Race Condition
-        // We trigger ready state ONLY after heavy subsystems (AI/Memory) are loaded.
+        // CRITICAL: Mark as ready ONLY after all subsystems are initialized
+        this.isReady = true;
         this.state = BOT_STATE.READY;
         if (this.swarm) this.swarm.startHeartbeat();
+        if (this.missionDirector) this.missionDirector.start();
         console.log('[INIT] System Ready Triggered (Gate Open).');
     }
 
@@ -899,6 +944,19 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             return false;
         }
 
+        if (
+            source !== 'system' &&
+            source !== this.name &&
+            this.chatInstructionLearner &&
+            !convoManager.isOtherAgent(source)
+        ) {
+            try {
+                this.chatInstructionLearner.handleChatMessage(source, message);
+            } catch (error) {
+                console.warn(`[Agent] Chat instruction learner failed: ${error.message}`);
+            }
+        }
+
         if (await this._handleAssistRequest(source, message)) {
             return true;
         }
@@ -919,6 +977,13 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         }
 
         // UNIFIED BRAIN CONTROL LOOP
+        // Safety check: Brain must be initialized
+        if (!this.brain) {
+            console.warn(`[Agent] Brain not initialized. Cannot process message from ${source}.`);
+            this.routeResponse(source, `[System Error] Brain not initialized. Please try again later.`);
+            return false;
+        }
+
         const self_prompt = source === 'system' || source === this.name;
         const from_other_bot = convoManager.isOtherAgent(source);
 
@@ -1565,6 +1630,9 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
 
             try {
                 // Phase 3: Reflex Update (High Frequency - 50ms)
+                // Phase 3: Reflex Update (High Frequency - 50ms)
+                // Note: CombatReflex is also ticked in update(), but we removed update().
+                // So include it here.
                 if (this.combatReflex) this.combatReflex.tick();
                 if (this.selfPreservation) await this.selfPreservation.tick();
 
@@ -1573,13 +1641,8 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
                     this.lastBrainUpdate = now;
 
                     // 1. Brain Update (State Stack)
-                    if (this.brain && this.brain.update) {
-                        try {
-                            await this.brain.update(now - lastTick);
-                        } catch (e) {
-                            console.error('[Agent] Brain update failed:', e);
-                        }
-                    }
+                    // Fix: UnifiedBrain does not have update(). It uses process() via handleMessage.
+                    // Removed await this.brain.update(now - lastTick);
 
                     if (this.social) {
                         // this._territorialUpdate(); // Handled by separate trigger or social engine
@@ -1676,14 +1739,19 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
         if (this.core) safeCleanup('Core', () => this.core.shutdown());
 
         // 2. Subsystem Cleanup (Safe Wrapping)
+        // 2. Subsystem Cleanup (Safe Wrapping)
         safeCleanup('Watchdog', () => this.watchdog?.stop());
         safeCleanup('HealthMonitor', () => this.healthMonitor?.stop());
         safeCleanup('Vision', () => this.vision_interpreter?.cleanup());
         safeCleanup('AdventureLogger', () => { this.adventureLogger = null; });
         safeCleanup('Arbiter', () => this.arbiter?.cleanup());
         safeCleanup('Social', () => this.social?.cleanup());
-        // CRITICAL FIX: this.combat -> this.combatReflex
-        safeCleanup('CombatReflex', () => this.combatReflex?.cleanup());
+        safeCleanup('MissionDirector', () => this.missionDirector?.cleanup?.());
+        safeCleanup('DefenseController', () => this.defenseController?.stop?.());
+        safeCleanup('BehaviorRuleEngine', () => this.behaviorRuleEngine?.cleanup?.());
+        safeCleanup('ChatInstructionLearner', () => this.chatInstructionLearner?.cleanup?.());
+        safeCleanup('SpawnBaseManager', () => this.spawnBaseManager?.cleanup?.());
+        // Reflex cleanup handled by CoreSystem -> ReflexSystem
 
         // 3. Bot Teardown
         if (this.bot) {
@@ -1758,7 +1826,9 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
                     contextManager: !!this.core?.contextManager,
                     toolRegistry: !!this.toolRegistry,
                     system2: !!this.system2,
-                    evolution: !!this.evolution
+                    evolution: !!this.evolution,
+                    missionDirector: !!this.missionDirector,
+                    behaviorRuleEngine: !!this.behaviorRuleEngine
                 },
                 reflexes: {
                     combat: !!this.combatReflex,

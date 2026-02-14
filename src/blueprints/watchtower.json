@@ -1,0 +1,73 @@
+{
+    "name": "watchtower",
+    "size": {
+        "x": 5,
+        "y": 8,
+        "z": 5
+    },
+    "materials": {
+        "S": "cobblestone",
+        "W": "oak_planks",
+        "F": "oak_fence",
+        "L": "torch",
+        ".": "air"
+    },
+    "layers": [
+        [
+            "SSSSS",
+            "SSSSS",
+            "SSSSS",
+            "SSSSS",
+            "SSSSS"
+        ],
+        [
+            "SSSSS",
+            "S...S",
+            "S...S",
+            "S...S",
+            "SSSSS"
+        ],
+        [
+            "SSSSS",
+            "S...S",
+            "S...S",
+            "S...S",
+            "SSSSS"
+        ],
+        [
+            "SSSSS",
+            "S...S",
+            "S...S",
+            "S...S",
+            "SSSSS"
+        ],
+        [
+            "SSSSS",
+            "S...S",
+            "S...S",
+            "S...S",
+            "SSSSS"
+        ],
+        [
+            "SSSSS",
+            "S...S",
+            "S...S",
+            "S...S",
+            "SSSSS"
+        ],
+        [
+            "WWWWW",
+            "WWWWW",
+            "WWWWW",
+            "WWWWW",
+            "WWWWW"
+        ],
+        [
+            "FFFFF",
+            "F...F",
+            "F...F",
+            "F...F",
+            "FFFFF"
+        ]
+    ]
+}

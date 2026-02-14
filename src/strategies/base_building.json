@@ -1,0 +1,73 @@
+{
+    "id": "base_building",
+    "name": "Base Building",
+    "description": "Build a proper survival base with shelter, storage, farms, and defenses",
+    "steps": [
+        {
+            "id": "choose_location",
+            "instruction": "Find a flat area near your spawn point for your base. Ideally near water, with trees nearby. Remember this location.",
+            "requires": [],
+            "done_when": "base location chosen and remembered"
+        },
+        {
+            "id": "build_walls",
+            "instruction": "Build 4 walls using cobblestone or planks. The house should be at least 5x5x3 blocks (width x length x height). Leave a 1-block opening for the door.",
+            "requires": [
+                "cobblestone or planks >= 40"
+            ],
+            "done_when": "4 walls built with door opening"
+        },
+        {
+            "id": "add_roof",
+            "instruction": "Cover the top of your house with blocks to form a roof. Use slabs or full blocks.",
+            "requires": [
+                "building blocks >= 25"
+            ],
+            "done_when": "roof covers entire house"
+        },
+        {
+            "id": "place_door_and_light",
+            "instruction": "Craft and place a wooden door in the opening. Place torches inside and outside the house to prevent mob spawning.",
+            "requires": [
+                "planks >= 6",
+                "torch >= 4"
+            ],
+            "done_when": "door placed and house is lit"
+        },
+        {
+            "id": "place_essentials",
+            "instruction": "Place a crafting_table, furnace, and chest inside your house. These are your basic work stations.",
+            "requires": [
+                "crafting_table",
+                "furnace",
+                "chest"
+            ],
+            "done_when": "crafting_table, furnace, and chest placed inside house"
+        },
+        {
+            "id": "build_farm",
+            "instruction": "Outside your house, create a small wheat farm: hoe dirt blocks near water to make farmland, plant wheat_seeds. A 4x4 farm with water in the center is ideal.",
+            "requires": [
+                "wooden_hoe",
+                "wheat_seeds >= 4"
+            ],
+            "done_when": "farmland blocks with wheat seeds planted"
+        },
+        {
+            "id": "build_animal_pen",
+            "instruction": "Build a fenced area near your base for animals. Use fence blocks to create a pen. Lure animals in using their preferred food (wheat for cows/sheep, seeds for chickens, carrots for pigs).",
+            "requires": [
+                "fence >= 16"
+            ],
+            "done_when": "fenced animal pen exists"
+        },
+        {
+            "id": "light_perimeter",
+            "instruction": "Place torches around the outside of your base in every direction, every 7 blocks. This prevents hostile mobs from spawning near your base.",
+            "requires": [
+                "torch >= 16"
+            ],
+            "done_when": "torches placed around base perimeter"
+        }
+    ]
+}

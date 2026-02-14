@@ -172,11 +172,7 @@ export class PlannerAgent {
         // Use DualBrain if available
         if (this.agent.brain) {
             try {
-                const response = await this.agent.brain.plan(goal, {
-                    systemPrompt: prompt,
-                    maxTokens: 2000,
-                    temperature: 0.3
-                });
+                const response = await this.agent.brain.code(prompt);
 
                 // Parse structured output
                 return this._parsePlanResponse(response);
@@ -199,7 +195,6 @@ export class PlannerAgent {
             .join('\n');
 
         const inventoryList = context.inventory.items
-            .slice(0, 10)
             .map(i => `- ${i.name}: ${i.count}`)
             .join('\n') || '(empty)';
 
@@ -231,12 +226,15 @@ OUTPUT FORMAT (JSON array):
 ]
 
 Rules:
-1. Use only available skills
-2. Order tasks logically (gather before build)
-3. Consider current inventory
-4. Use memories to inform decisions
-5. Maximum ${this.maxSteps} steps
-6. Each step must be concrete and executable`;
+1. Use only available skills.
+2. **HIGH-LEVEL PLANNING**: Do NOT decompose crafting steps if you have raw materials.
+   - Example 1: If you have logs, just output ONE step: { "task": "craft_items", "params": { "itemName": "crafting_table", "count": 1 } }. The underlying system will automatically craft planks.
+   - Example 2: If you have planks & sticks, just output: { "task": "craft_items", "params": { "itemName": "wooden_pickaxe", "count": 1 } }.
+   - Example 3: If you have a crafting table, PLACE IT first, then craft complex items.
+3. **CHECK INVENTORY**: Do NOT craft items if you already have them in INVENTORY.
+4. Order tasks logically (gather -> craft -> place -> use).
+5. Use memories to inform decisions.
+6. Maximum ${this.maxSteps} steps.`;
     }
 
     /**
@@ -244,20 +242,49 @@ Rules:
      * @private
      */
     _parsePlanResponse(response) {
+        if (!response) return [];
+        let cleaned = response.trim();
+
         try {
-            // Try to extract JSON from response
-            const jsonMatch = response.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                const plan = JSON.parse(jsonMatch[0]);
-                return Array.isArray(plan) ? plan : [];
+            // 1. Handle markdown code blocks
+            if (cleaned.includes('```')) {
+                const match = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (match) cleaned = match[1].trim();
             }
 
-            // Try parsing whole response as JSON
-            const parsed = JSON.parse(response);
-            return Array.isArray(parsed) ? parsed : [];
+            // 2. Try to find the first [ and last ]
+            const startBracket = cleaned.indexOf('[');
+            const endBracket = cleaned.lastIndexOf(']');
+
+            if (startBracket !== -1 && endBracket !== -1 && endBracket > startBracket) {
+                let candidate = cleaned.substring(startBracket, endBracket + 1);
+
+                // Strip comments before parsing (LLMs sometimes add them)
+                candidate = candidate.replace(/\/\/.*$/gm, ""); // Single line
+                candidate = candidate.replace(/\/\*[\s\S]*?\*\//g, ""); // Multi-line
+
+                const jsonCandidates = [
+                    candidate,
+                    cleaned // Fallback to original
+                ];
+
+                for (const jsonStr of jsonCandidates) {
+                    try {
+                        const parsed = JSON.parse(jsonStr);
+                        if (Array.isArray(parsed)) return parsed;
+                    } catch (e) {
+                        // Continue to next candidate
+                    }
+                }
+            }
+
+            // 3. Last ditch: try parsing the whole thing
+            const finalParsed = JSON.parse(cleaned);
+            return Array.isArray(finalParsed) ? finalParsed : [];
 
         } catch (error) {
             console.warn('[PlannerAgent] Failed to parse plan response:', error.message);
+            console.debug('[PlannerAgent] Problematic response:', response);
             return [];
         }
     }

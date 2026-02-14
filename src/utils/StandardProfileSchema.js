@@ -55,6 +55,19 @@ export const StandardProfileSchema = {
         pvp_enabled: true
     },
 
+    mission: {
+        ladder_type: 'vanilla',
+        phase_mode: 'beat_minecraft_then_defend',
+        execution_mode: 'roadmap_validation_only'
+    },
+
+    learning: {
+        teaching_scope: 'all_players_with_trust_score',
+        apply_mode: 'hard_immediate_override',
+        override_scope: 'global',
+        promotion_cadence: 'nightly_gated'
+    },
+
     // Subsystem Services
     services: {
         cognee_url: "http://localhost:8001"

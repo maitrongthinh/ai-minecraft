@@ -88,7 +88,11 @@ if (process.platform === 'win32') {
 
 // Phase 8: Cognee Auto-Service
 import { cogneeManager } from './src/memory/CogneeServiceManager.js';
-await cogneeManager.start();
+try {
+    await cogneeManager.start();
+} catch (err) {
+    console.warn('[Main] Cognee Manager failed to start (non-critical):', err.message);
+}
 
 Mindcraft.init(true, settings.mindserver_port, settings.auto_open_ui);
 

@@ -1,4 +1,3 @@
-
 import { globalBus, SIGNAL } from './SignalBus.js';
 import { MemorySystem } from '../memory/MemorySystem.js';
 import { TaskScheduler } from './TaskScheduler.js';
@@ -9,13 +8,23 @@ import { CodeEngine } from '../intelligence/CodeEngine.js';
 import { ScenarioManager } from '../tasks/ScenarioManager.js';
 import settings from '../../../settings.js';
 
+// Phase 2-4 Modules
+import { ToolRegistry } from './ToolRegistry.js';
+import { System2Loop } from '../orchestration/System2Loop.js';
+import EvolutionEngine from './EvolutionEngine.js';
+import { CombatAcademy } from './CombatAcademy.js';
+import { CoreExtractor } from './CoreExtractor.js';
+import { BehaviorRuleEngine } from './BehaviorRuleEngine.js';
+import { ChatInstructionLearner } from './ChatInstructionLearner.js';
+import { SwarmSync } from './SwarmSync.js';
+
 /**
  * CoreSystem.js - The Central Hub of MindOS
  * 
  * Responsibilities:
- * 1. Initialize Kernel Components (Bus, Memory, Scheduler)
+ * 1. Initialize Kernel Components(Bus, Memory, Scheduler)
  * 2. Manage System Lifecycle
- * 3. Implement Omega Safeguards (Zombie Killer, Watchdogs)
+ * 3. Implement Omega Safeguards(Zombie Killer, Watchdogs)
  */
 export class CoreSystem {
     constructor(agent) {
@@ -56,12 +65,30 @@ export class CoreSystem {
 
         // 2. Initialize Subsystems
         await this.memory.init();
+
+        // 2.1 Rule Engine & Learning (The "Conscience")
+        this.ruleEngine = new BehaviorRuleEngine(this.agent);
+        this.ruleEngine.init();
+        this.agent.ruleEngine = this.ruleEngine; // Expose to agent
+
+        this.instructionLearner = new ChatInstructionLearner(this.agent, this.ruleEngine);
+        this.agent.instructionLearner = this.instructionLearner; // Expose to agent
+
         // Unified Subsystem Initialization
         this.social = new SocialEngine(this.agent);
         this.intelligence = new CodeEngine(this.agent);
         this.scenarios = new ScenarioManager(null, this.agent);
 
-        console.log('[CoreSystem] ✓ Subsystems (Social, Code, Scenarios) Loaded');
+        // Phase 2-4 Modules Initialization
+        this.toolRegistry = new ToolRegistry(this.agent);
+        this.system2 = new System2Loop(this.agent);
+        this.evolution = new EvolutionEngine(this.agent);
+        this.combatAcademy = new CombatAcademy(this.agent);
+        this.combatAcademy = new CombatAcademy(this.agent);
+        this.extractor = new CoreExtractor(this.agent);
+        this.swarmSync = new SwarmSync(this.agent);
+
+        console.log('[CoreSystem] ✓ Subsystems (Social, Code, Scenarios, Evolution, Academy) Loaded');
 
         // 3. Initialize Scheduler
         // this.scheduler already initialized in constructor
@@ -203,6 +230,9 @@ export class CoreSystem {
             this.scheduler.interruptPhysicalTasks();
             this.scheduler.queue = [];
         }
+
+        if (this.system2) this.system2 = null; // System2 doesn't have stop() yet, but prepare for it
+        if (this.combatAcademy) this.combatAcademy.active = false;
 
         this.bus.clearAllListeners(); // Prevent memory leaks
         console.log('[CoreSystem] ⏏️ Kernel Halted');

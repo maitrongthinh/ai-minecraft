@@ -10,6 +10,10 @@ export class SocialProfile {
         this.lastGreeting = 0;
         this.interactions = [];
         this.metadata = {};
+        this.instruction_reliability = 0;
+        this.accepted_rules = 0;
+        this.reverted_rules = 0;
+        this.last_rule_outcome = null;
     }
 
     addTrust(amount) {
@@ -19,6 +23,22 @@ export class SocialProfile {
 
     get trust() {
         return this.trustScore;
+    }
+
+    recordRuleOutcome(outcome, details = {}) {
+        if (outcome === 'accepted') {
+            this.accepted_rules += 1;
+            this.instruction_reliability += 1;
+        } else if (outcome === 'reverted') {
+            this.reverted_rules += 1;
+            this.instruction_reliability -= 2;
+        }
+
+        this.last_rule_outcome = {
+            outcome,
+            details,
+            timestamp: Date.now()
+        };
     }
 
     isTrusted(actionType = 'normal') {

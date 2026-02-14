@@ -260,7 +260,7 @@ export default async function execute(agent, params = {}) {
         await withTimeout(bot.dig(latest, true), digTimeoutMs, 'dig');
         await new Promise(resolve => setTimeout(resolve, 250));
         if (agent.actionAPI) {
-            await agent.actionAPI.collectDroppedItems({
+            await agent.actionAPI.collect_drops({
                 radius: 6,
                 maxItems: 2,
                 retries: 0,

@@ -20,43 +20,46 @@ export class MovementTactics {
      * @param {Entity} target - Target to circle
      * @param {number} radius - Desired distance
      */
-    async strafe(target, radius = 2.5) {
+    async strafe(target, radius = 3.0) {
         if (!target?.position || !this.agent.bot?.entity?.position) return;
 
-        const botPos = this.agent.bot.entity.position;
+        const bot = this.agent.bot;
+        const botPos = bot.entity.position;
         const targetPos = target.position;
 
-        // Calculate angle from target to bot
-        const dx = botPos.x - targetPos.x;
-        const dz = botPos.z - targetPos.z;
-        const currentAngle = Math.atan2(dz, dx);
+        // 1. Look at target (Aim)
+        // We use lookAt which handles yaw/pitch
+        await bot.lookAt(targetPos.offset(0, 1.6, 0));
 
-        // Increment angle for strafing
-        this.strafeAngle += 0.15 * this.strafeDirection; // ~8.5° per tick
+        // 2. Calculate Distance
+        const dist = botPos.distanceTo(targetPos);
 
-        // Randomly change direction to be unpredictable
-        if (Math.random() < 0.02) {
+        // 3. Maintain Distance (Forward/Back)
+        bot.setControlState('forward', dist > radius);
+        bot.setControlState('back', dist < radius * 0.8); // Allow some buffer
+
+        // 4. Orbit (Left/Right)
+        // Randomly switch direction occasionally
+        if (Math.random() < 0.05) {
             this.strafeDirection *= -1;
         }
 
-        // Calculate new position
-        const newAngle = currentAngle + this.strafeAngle;
-        const newX = targetPos.x + Math.cos(newAngle) * radius;
-        const newZ = targetPos.z + Math.sin(newAngle) * radius;
+        if (this.strafeDirection > 0) {
+            bot.setControlState('right', true);
+            bot.setControlState('left', false);
+        } else {
+            bot.setControlState('right', false);
+            bot.setControlState('left', true);
+        }
 
-        // Look at target while moving
-        await this.agent.bot.lookAt(targetPos.offset(0, 1.6, 0));
+        // 5. Jump Strafing (Criticals or Hard to hit)
+        if (bot.entity.onGround && Math.random() < 0.1) {
+            bot.setControlState('jump', true);
+            setTimeout(() => bot.setControlState('jump', false), 100);
+        }
 
-        // PRIORITY: Flocking (Phase 4)
-        const flockingVec = this.agent.bot.agent?.swarm ? await this.agent.bot.agent.swarm.getFlockingVector() : { x: 0, y: 0, z: 0 };
-
-        // Move toward new position + flocking bias
-        const goalPos = {
-            x: newX + (flockingVec.x || 0),
-            y: botPos.y,
-            z: newZ + (flockingVec.z || 0)
-        };
-        this._moveToward(goalPos);
+        // Sprint if far
+        bot.setControlState('sprint', dist > radius + 2);
     }
 
     /**

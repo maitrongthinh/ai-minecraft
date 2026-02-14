@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "agentName": "Agent",
+    "exportedAt": "2026-02-12T11:47:03.257Z",
+    "version": "1.0.0"
+  },
+  "genome": {
+    "survival_health_threshold": 5.5,
+    "survival_panic_distance": 10,
+    "survival_drowning_tolerance": 10,
+    "combat_strafe_distance": 2.5,
+    "combat_attack_urgency": 1,
+    "combat_reach_distance": 3
+  },
+  "actionStats": {
+    "mine": {
+      "attempts": 50,
+      "successes": 48,
+      "avgDuration": 1200
+    }
+  },
+  "combatStats": {
+    "fights": 0,
+    "wins": 0,
+    "losses": 0
+  },
+  "reflexPolicies": {
+    "selfPreservation": {
+      "low_health_threshold": 5.5,
+      "panic_distance": 10,
+      "drowning_tolerance": 10
+    },
+    "combat": {
+      "strafeDistance": 2.5,
+      "attackUrgency": 1,
+      "reachDistance": 3,
+      "forceShield": false,
+      "forceTotem": false,
+      "totemThreshold": 10,
+      "retreatHealthThreshold": 6
+    }
+  }
+}

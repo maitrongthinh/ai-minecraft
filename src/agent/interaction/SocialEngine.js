@@ -134,6 +134,7 @@ export class SocialEngine {
     }
 
 
+
     /**
      * Unified interaction handler
      */
@@ -141,9 +142,51 @@ export class SocialEngine {
         const profile = this.getProfile(entityName);
         const msg_low = message.toLowerCase();
 
-        console.log(`[SocialEngine] Interacting with ${entityName} (Current Trust: ${profile.trustScore})`);
+        console.log(`[SocialEngine] Interacting with ${entityName}: "${message}"`);
 
-        // Hệ thống cảm xúc nâng cao (Thay thế placeholder)
+        // 1. Instruction Learning (Rule-based)
+        if (this.agent.instructionLearner) {
+            const rule = this.agent.instructionLearner.handleChatMessage(entityName, message);
+            if (rule) {
+                this.agent.speak(`Understood. I will ${rule.intent.replace(/_/g, ' ')}.`);
+                return;
+            }
+        }
+
+        // 2. Wiki Knowledge Query
+        // Detect questions: "how to", "what is", "recipe for"
+        if (msg_low.includes('how to') || msg_low.includes('what is') || msg_low.includes('recipe') || msg_low.includes('craft')) {
+            if (this.agent.wiki) {
+                this.agent.speak(`Let me check the archives for "${message}"...`);
+
+                // Heuristic: Extract keyword
+                let term = message.replace(/how to|what is|recipe for|craft/gi, '').replace(/\?/g, '').trim();
+
+                // Recipe specific
+                if (msg_low.includes('recipe') || msg_low.includes('craft')) {
+                    const recipe = await this.agent.wiki.searchRecipe(term);
+                    if (recipe && recipe.recipes && recipe.recipes.length > 0) {
+                        const r = recipe.recipes[0];
+                        this.agent.speak(`To craft ${r.output}, you need: ${r.ingredients.join(', ')}.`);
+                        return;
+                    }
+                }
+
+                // General info
+                const info = await this.agent.wiki.searchGeneral(term);
+                if (info && info.summary) {
+                    // Summarize for chat (first sentence)
+                    const shortSummary = info.summary.split('.')[0] + '.';
+                    this.agent.speak(`${info.title}: ${shortSummary}`);
+                    return;
+                }
+
+                this.agent.speak(`I couldn't find anything about ${term} in the archives.`);
+                return;
+            }
+        }
+
+        // 3. Sentiment & Trust (Legacy)
         const positive = ['good', 'thanks', 'cảm ơn', 'giỏi', 'hay', 'nice', 'friend', 'bạn'];
         const negative = ['bad', 'kill', 'giết', 'ngu', 'die', 'chết', 'hate', 'ghét', 'trash'];
 
@@ -156,7 +199,7 @@ export class SocialEngine {
             console.log(`[SocialEngine] Trust updated for ${entityName}: ${profile.trustScore} (Delta: ${sentiment})`);
         }
 
-        // Emit signal for Brain to react
+        // Emit signal for Brain to react (LLM Fallback)
         globalBus.emitSignal(SIGNAL.SOCIAL_INTERACTION, {
             entity: entityName,
             trust: profile.trustScore,

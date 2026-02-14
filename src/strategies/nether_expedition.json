@@ -1,0 +1,93 @@
+{
+    "id": "nether_expedition",
+    "name": "Nether Expedition",
+    "description": "Reach the Nether: get diamonds, mine obsidian, build portal, explore Nether fortress, collect blaze rods",
+    "steps": [
+        {
+            "id": "mine_diamonds",
+            "instruction": "Mine at depth Y=-59 to Y=16 to find diamond_ore. You need at least 5 diamonds. Use iron_pickaxe or better. Branch mine at Y=-59 for best results.",
+            "requires": [
+                "iron_pickaxe"
+            ],
+            "done_when": "inventory has diamond >= 5"
+        },
+        {
+            "id": "craft_diamond_pickaxe",
+            "instruction": "Craft a diamond_pickaxe using 3 diamonds and 2 sticks at a crafting table.",
+            "requires": [
+                "diamond >= 3",
+                "stick >= 2",
+                "crafting_table"
+            ],
+            "done_when": "inventory has diamond_pickaxe"
+        },
+        {
+            "id": "get_water_bucket",
+            "instruction": "Fill a bucket with water from a water source. You need this to create obsidian.",
+            "requires": [
+                "bucket"
+            ],
+            "done_when": "inventory has water_bucket"
+        },
+        {
+            "id": "mine_obsidian",
+            "instruction": "Find a lava pool. Pour water on lava source blocks to create obsidian. Then mine the obsidian with your diamond_pickaxe. You need at least 10 obsidian.",
+            "requires": [
+                "diamond_pickaxe",
+                "water_bucket"
+            ],
+            "done_when": "inventory has obsidian >= 10"
+        },
+        {
+            "id": "craft_flint_and_steel",
+            "instruction": "Craft flint_and_steel using 1 iron_ingot and 1 flint. Get flint by mining gravel blocks.",
+            "requires": [
+                "iron_ingot >= 1"
+            ],
+            "done_when": "inventory has flint_and_steel"
+        },
+        {
+            "id": "build_nether_portal",
+            "instruction": "Build a Nether portal: place obsidian in a 4-wide by 5-tall frame (minimum). The corners can be any block. Then use flint_and_steel on the inside of the frame to light it.",
+            "requires": [
+                "obsidian >= 10",
+                "flint_and_steel"
+            ],
+            "done_when": "nether_portal block exists within 10 blocks"
+        },
+        {
+            "id": "prepare_for_nether",
+            "instruction": "Before entering the Nether, prepare: bring at least 1 stack of cobblestone (64), food (16+), iron/diamond armor, sword, pickaxe, bow + arrows if possible.",
+            "requires": [
+                "food >= 16",
+                "cobblestone >= 64"
+            ],
+            "done_when": "equipped with armor, sword, pickaxe, and have food + building blocks"
+        },
+        {
+            "id": "enter_nether",
+            "instruction": "Walk into the Nether portal. You will be teleported to the Nether dimension.",
+            "requires": [
+                "nether_portal"
+            ],
+            "done_when": "current dimension is the_nether"
+        },
+        {
+            "id": "find_nether_fortress",
+            "instruction": "Explore the Nether to find a Nether Fortress (large dark brick structure). Walk along the X-axis (east/west) as fortresses generate in strips along the Z-axis. Bridge over lava with cobblestone.",
+            "requires": [
+                "cobblestone"
+            ],
+            "done_when": "nether_bricks block found nearby (indicates fortress)"
+        },
+        {
+            "id": "collect_blaze_rods",
+            "instruction": "Find Blaze spawners inside the Nether Fortress. Kill Blazes to collect at least 7 blaze_rods. Blazes shoot fireballs — use a sword and try to block or dodge.",
+            "requires": [
+                "sword",
+                "shield"
+            ],
+            "done_when": "inventory has blaze_rod >= 7"
+        }
+    ]
+}

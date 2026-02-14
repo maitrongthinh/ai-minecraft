@@ -31,15 +31,17 @@ export class RetryHelper {
                 return await operation();
             } catch (err) {
                 lastError = err;
+                const errorMessage = err instanceof Error ? err.message : String(err);
                 if (attempt < maxRetries) {
                     const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-                    console.warn(`[RetryHelper] ${context} failed (Attempt ${attempt + 1}/${maxRetries}). Retrying in ${delay}ms... Error: ${err.message}`);
+                    console.warn(`[RetryHelper] ${context} failed (Attempt ${attempt + 1}/${maxRetries}). Retrying in ${delay}ms... Error: ${errorMessage}`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
         }
 
-        console.error(`[RetryHelper] ${context} failed after ${maxRetries} retries.`);
+        const finalErrorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+        console.error(`[RetryHelper] ${context} failed after ${maxRetries} retries. Last Error: ${finalErrorMessage}`);
         throw lastError;
     }
 }

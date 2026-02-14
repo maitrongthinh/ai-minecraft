@@ -8,8 +8,13 @@ import { createNoise2D } from 'simplex-noise';
  * Implements Fitts's Law to simulate deceleration when approaching a target.
  */
 export class MotorCortex {
-    constructor(bot) {
-        this.bot = bot;
+    constructor(botOrAgent) {
+        if (botOrAgent && botOrAgent.bot !== undefined) {
+            this.agent = botOrAgent;
+            this.bot = botOrAgent.bot;
+        } else {
+            this.bot = botOrAgent;
+        }
         this.noise2D = createNoise2D();
         this.noiseTime = 0;
         this.targetLook = null;
@@ -46,7 +51,15 @@ export class MotorCortex {
      * @param {Number} urgency Speed factor (higher = faster). PvP: 1.0-1.5, Building: 0.5-0.8.
      */
     async humanLook(targetPos, urgency = 1.0) {
-        if (!this.bot.entity) return;
+        // Dynamic bot resolution if initialized with agent
+        if (this.agent && (!this.bot || this.bot.disconnected)) {
+            this.bot = this.agent.bot;
+        }
+
+        if (!this.bot?.entity) {
+            console.warn("[MotorCortex] Bot not ready for humanLook");
+            return;
+        }
 
         return new Promise(resolve => {
             this.lookQueue.push({ targetPos, urgency, resolve });

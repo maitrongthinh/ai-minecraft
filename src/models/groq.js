@@ -10,13 +10,17 @@ export class GroqCloudAPI {
 
     constructor(model_name, url, params) {
 
-        this.model_name = model_name;
+        // Strip 'groq/' prefix if present
+        this.model_name = model_name?.replace(/^groq\//, '') || 'llama-3.3-70b-versatile';
         this.url = url;
         this.params = params || {};
 
         // Remove any mention of "tools" from params:
-        if (this.params.tools)
-            delete this.params.tools;
+        if (this.params.tools) delete this.params.tools;
+        if (this.params.api) delete this.params.api;
+        if (this.params.model) delete this.params.model;
+        if (this.params.url) delete this.params.url;
+        if (this.params.params) delete this.params.params;
         // This is just a bit of future-proofing in case we drag Mindcraft in that direction.
 
         // I'm going to do a sneaky ReplicateAPI theft for a lot of this, aren't I?
@@ -30,7 +34,10 @@ export class GroqCloudAPI {
 
     async sendRequest(turns, systemMessage, stop_seq = null) {
         // Construct messages array
-        let messages = [{"role": "system", "content": systemMessage}].concat(turns);
+        let messages = [...turns];
+        if (systemMessage && (!messages.length || messages[0].role !== 'system')) {
+            messages.unshift({ "role": "system", "content": systemMessage });
+        }
 
         let res = null;
 
@@ -48,19 +55,36 @@ export class GroqCloudAPI {
                 this.params.max_completion_tokens = 4000;
             }
 
+            const valid_params = [
+                'temperature',
+                'max_completion_tokens',
+                'top_p',
+                'frequency_penalty',
+                'presence_penalty',
+                'response_format',
+                'seed'
+            ];
+
+            let api_params = {};
+            for (const key of valid_params) {
+                if (this.params[key] !== undefined) {
+                    api_params[key] = this.params[key];
+                }
+            }
+
             let completion = await this.groq.chat.completions.create({
                 "messages": messages,
-                "model": this.model_name || "qwen/qwen3-32b",
+                "model": this.model_name || "llama-3.3-70b-versatile",
                 "stream": false,
                 "stop": stop_seq,
-                ...(this.params || {})
+                ...api_params
             });
 
             res = completion.choices[0].message.content;
 
             res = res.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
         }
-        catch(err) {
+        catch (err) {
             if (err.message.includes("content must be a string")) {
                 res = "Vision is only supported by certain models.";
             } else {
@@ -85,7 +109,7 @@ export class GroqCloudAPI {
                 }
             ]
         });
-        
+
         return this.sendRequest(imageMessages);
     }
 
