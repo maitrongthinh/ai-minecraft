@@ -456,4 +456,34 @@ export class System2Loop {
     isBusy() {
         return this.isRunning;
     }
+
+    /**
+     * Start System 2 with a primary goal
+     * @param {string} goal - Primary goal to achieve
+     */
+    async start(goal) {
+        if (this.isRunning) {
+            console.log('[System2Loop] Already running, queuing goal');
+            return { success: false, result: 'System2Loop already running' };
+        }
+
+        console.log(`[System2Loop] Starting with goal: "${goal}"`);
+        return await this.processGoal(goal);
+    }
+
+    /**
+     * Stop System 2 gracefully
+     */
+    stop() {
+        if (this.isRunning && this.abortController) {
+            console.log('[System2Loop] Stopping System 2 loop');
+            this.abortController.abort();
+        }
+        if (this.recoveryTimer) {
+            clearTimeout(this.recoveryTimer);
+            this.recoveryTimer = null;
+        }
+        this.isRunning = false;
+        this.survivalMode = false;
+    }
 }
