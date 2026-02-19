@@ -7,6 +7,8 @@
  * State Machine: IDLE → ENGAGE → RETREAT
  */
 
+import Vec3 from 'vec3'; // Fixed: Missing import
+
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
 import { PRIORITY } from '../core/TaskScheduler.js';
 import { MovementTactics } from './MovementTactics.js';
@@ -66,16 +68,19 @@ export class CombatReflex {
             const { source, type, amount } = event.payload || {};
             console.log(`[CombatReflex] 🚨 Threat Detected: ${type || source} (Damage: ${amount || 0})`);
 
-            // If threat is from an entity (e.g. mob attack), engage logic is handled 
-            // by 'entityAttack' or 'damage' event usually, but this signal ensures 
-            // we catch indirect threats or 'stuck' states if needed.
+            // Phase 2: Proactive Auto-Totem (HP check + Damage burst)
+            const policy = this._getRulePolicy();
+            const totemThreshold = policy?.totemThreshold ?? 10;
 
-            // For now, if high damage taken, ensure we are ready
+            if (!this.bot) this._syncBot();
+            if (!this.bot) return;
+
+            if ((this.autoTotemActive || policy?.forceTotem) && (this.bot.health < totemThreshold || amount > 6)) {
+                this._ensureTotemEquipped();
+            }
+
+            // If threat is from an entity (e.g. mob attack), engage logic is handled 
             if (amount > 4 && !this.inCombat) {
-                // We don't have a target from just "damage" signal usually, 
-                // unless ReflexSystem passes it. 
-                // ReflexSystem passes { source: 'damage', amount: ... }
-                // Use hitSelector/Observation to find nearest hostile?
                 if (this.agent.hitSelector) {
                     const target = this.agent.hitSelector.findThreat();
                     if (target) {
@@ -90,6 +95,11 @@ export class CombatReflex {
         this.trainingMode = active;
         this.trainingDifficulty = difficulty;
         console.log(`[CombatReflex] 🥊 Training Mode: ${active} (Difficulty: ${difficulty.toFixed(1)})`);
+    }
+
+    start() {
+        this._syncBot();
+        console.log('[CombatReflex] Gladiator started');
     }
 
     _syncBot() {
@@ -200,11 +210,9 @@ export class CombatReflex {
             if (!this.wTapActive || !this.inCombat) return;
 
             if (this.bot.controlState.sprint) {
-                // Packet-Level Reset: stop -> wait -> start
+                // ... (W-Tap logic) ...
                 this.bot.setControlState('sprint', false);
-
-                // Adaptive jitter: 70ms mean, 15ms stdDev
-                // Modulate by attackUrgency (1.0 = normal, 1.5 = faster/more aggressive)
+                // ...
                 const policy = this._getRulePolicy();
                 const urgency = policy.attackUrgency || 1.0;
                 const baseMean = 70 / urgency;
@@ -219,11 +227,14 @@ export class CombatReflex {
             }
         };
 
-        this.bot.on('entityAttack', (attacker, victim) => {
+        // Phase 2 Fix: Store bound wrapper to enable removal
+        this._boundAttackWrapper = (attacker, victim) => {
             if (attacker === this.bot.entity) {
                 if (this._attackListener) this._attackListener(victim);
             }
-        });
+        };
+
+        this.bot.on('entityAttack', this._boundAttackWrapper);
         this._wTapBound = true;
     }
 
@@ -241,8 +252,8 @@ export class CombatReflex {
         globalBus.emitSignal(SIGNAL.COMBAT_ENDED, { reason: 'manual_exit' });
 
         // Remove W-Tap listener
-        if (this._wTapBound && this.bot && this._attackListener) {
-            this.bot.removeListener('entityAttack', this._attackListener);
+        if (this._wTapBound && this.bot && this._boundAttackWrapper) {
+            this.bot.removeListener('entityAttack', this._boundAttackWrapper);
         }
         this._wTapBound = false;
         this._attackListener = null;
@@ -338,6 +349,8 @@ export class CombatReflex {
         bot.activateBlock(bot.blockAt(targetBlockPos));
 
         // 2. Transient Listener: Bắt gói tin sinh ra thực thể (spawn_entity)
+        let cleanup; // Declare first
+
         const onEntitySpawn = (packet, meta) => {
             // Type 51 (~ bản cũ) hoặc ObjectData cho End Crystal
             if (meta.name === 'spawn_entity' && (packet.type === 51 || packet.objectData === 51)) {
@@ -352,12 +365,12 @@ export class CombatReflex {
                         target: packet.entityId,
                         mouse: 1 // Left click / Attack
                     });
-                    cleanup();
+                    if (cleanup) cleanup();
                 }
             }
         };
 
-        const cleanup = () => {
+        cleanup = () => {
             bot._client.removeListener('packet', onEntitySpawn);
             clearTimeout(fallbackTimeout);
         };
@@ -412,7 +425,7 @@ export class CombatReflex {
                 if (totem) {
                     const offHand = bot.inventory.slots[bot.getEquipmentDestSlot('off-hand')];
                     if (!offHand || offHand.name !== 'totem_of_undying') {
-                        await bot.equip(totem, 'off-hand').catch(() => { });
+                        await this._ensureTotemEquipped();
                     }
                 }
             }
@@ -436,11 +449,24 @@ export class CombatReflex {
                     console.log('[CombatReflex] 🛡️ Trap detected! Shifting position protocol...');
                     await this.tactics.strafe(this.target, 5.0).catch(() => { });
                 } else {
+                    // Phase 2: Shield Flicker (Block projectile/explosion/high damage)
                     await this._executeEngagement();
                 }
             }
         } finally {
             this._isUpdating = false;
+        }
+    }
+
+    async _ensureTotemEquipped() {
+        if (!this.bot) return;
+        const totem = this.bot.inventory.findInventoryItem('totem_of_undying', null);
+        if (totem) {
+            const offHand = this.bot.inventory.slots[this.bot.getEquipmentDestSlot('off-hand')];
+            if (!offHand || offHand.name !== 'totem_of_undying') {
+                console.log('[CombatReflex] 🛡️ Emergency Totem Swap!');
+                await this.bot.equip(totem, 'off-hand').catch(() => { });
+            }
         }
     }
 

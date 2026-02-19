@@ -1,240 +1,265 @@
 import { globalBus, SIGNAL } from './SignalBus.js';
-import { MemorySystem } from '../memory/MemorySystem.js';
 import { TaskScheduler } from './TaskScheduler.js';
-import { ContextManager } from './ContextManager.js';
-import { ReflexSystem } from './ReflexSystem.js';
+import { MemorySystem } from '../memory/MemorySystem.js';
+import { EnvironmentMonitor } from './EnvironmentMonitor.js';
+import { PerceptionManager } from '../perception/PerceptionManager.js';
+import { VisionScheduler } from '../perception/VisionScheduler.js';
+import { EvolutionEngine } from './EvolutionEngine.js'; // Evolution Layer
+import { ReflexSystem } from '../../reflexes/core/ReflexSystem.js'; // System 1
+import { ToolRegistry } from '../../tools/core/ToolRegistry.js'; // Phase 5: v3.1 Tools
 import { SocialEngine } from '../interaction/SocialEngine.js';
-import { CodeEngine } from '../intelligence/CodeEngine.js';
-import { ScenarioManager } from '../tasks/ScenarioManager.js';
-import settings from '../../../settings.js';
-
-// Phase 2-4 Modules
-import { ToolRegistry } from './ToolRegistry.js';
-import { System2Loop } from '../orchestration/System2Loop.js';
-import EvolutionEngine from './EvolutionEngine.js';
-import { CombatAcademy } from './CombatAcademy.js';
+import { UtilityEngine } from '../intelligence/UtilityEngine.js';
+import { ContextManager } from './ContextManager.js';
 import { CoreExtractor } from './CoreExtractor.js';
-import { BehaviorRuleEngine } from './BehaviorRuleEngine.js';
-import { ChatInstructionLearner } from './ChatInstructionLearner.js';
-import { SwarmSync } from './SwarmSync.js';
+import { System2Loop } from '../orchestration/System2Loop.js';
+import { CombatAcademy } from './CombatAcademy.js';
+import { Task } from '../tasks/ScenarioManager.js';
+import { SwarmSync } from './SwarmSync.js'; // Phase 7 Unified Swarm System
+import { Profiler } from './Profiler.js'; // Phase 8: Reliability
+import { AutoHealer } from './AutoHealer.js'; // Phase 8: Reliability
 
 /**
- * CoreSystem.js - The Central Hub of MindOS
+ * CoreSystem - The MindOS Kernel
  * 
- * Responsibilities:
- * 1. Initialize Kernel Components(Bus, Memory, Scheduler)
- * 2. Manage System Lifecycle
- * 3. Implement Omega Safeguards(Zombie Killer, Watchdogs)
+ * Responsible for booting and maintaining the agent's lifecycle.
+ * - Initializes the Nervous System (SignalBus)
+ * - Initializes Memory (Blackboard & Vector)
+ * - Initializes Cortex (TaskScheduler)
+ * - Runs Watchdogs (Zombie Killer, Physical Unstuck)
  */
 export class CoreSystem {
     constructor(agent) {
         this.agent = agent;
-        this.bus = globalBus;
-        this.status = 'booting'; // New status property
-
-        // Initialize Components directly
-        this.scheduler = new TaskScheduler(agent);
-
-        const maxTokens = agent.config?.profile?.model_config?.max_context_window || 8000;
-        this.contextManager = new ContextManager(agent, maxTokens);
-
-        this.reflexSystem = new ReflexSystem(agent);
-        this.memory = new MemorySystem(agent);
-
-        // Subsystems (initialized in async method)
+        this.scheduler = null;
+        this.memory = null;
+        this.monitor = null;
+        this.reflexSystem = null; // System 1 (Amygdala)
         this.social = null;
         this.intelligence = null;
+        this.contextManager = null;
+        this.extractor = null;
+        this.system2 = null;
         this.scenarios = null;
+        this.combatAcademy = null;
+        this.swarm = null; // Phase 7
+        this.profiler = null; // Phase 8
+        this.autoHealer = null; // Phase 8
 
-        // Safeguard Timers (still null initially)
-        this.zombieInterval = null;
-        this.watchdogInterval = null;
-        this.activeTimers = new Set();
-        this.lastPos = null;
-
-        console.log('[CoreSystem] 🧠 Core System Instantiated');
+        // Watchdog Timers
+        this._zombieTimer = null;
+        this._physicalTimer = null;
+        this._lastPosition = null;
+        this._stuckCounter = 0;
     }
 
-    /**
-     * Phase 1: Initialize Kernel
-     */
     async initialize() {
-        console.log('[CoreSystem] 🚀 Initializing MindOS Kernel...');
+        console.log('[CoreSystem] 🚀 Booting MIND-SYNC v3.1 Kernel...');
 
-        // 1. Initialize Signal Bus (Already singleton, but verify)
+        // 1. Initialize Memory (Blackboard is attached to TaskScheduler, but we want implicit access)
+        // Note: TaskScheduler now creates Blackboard internally or we can do it here.
+        // Let's rely on TaskScheduler's Blackboard for now or decouple.
+        // Better: Agent has a reference to blackboard via Scheduler? 
+        // Or Core initializes it. 
+        // Implementation: TaskScheduler v3.1 created `this.blackboard`.
 
-        // 2. Initialize Subsystems
-        await this.memory.init();
+        // 2. Initialize Cortex (Task Management)
+        this.scheduler = new TaskScheduler(this.agent);
+        this.agent.scheduler = this.scheduler; // Expose to agent
 
-        // 2.1 Rule Engine & Learning (The "Conscience")
-        this.ruleEngine = new BehaviorRuleEngine(this.agent);
-        this.ruleEngine.init();
-        this.agent.ruleEngine = this.ruleEngine; // Expose to agent
+        // 3. Initialize Memory System (Hippocampus - Vector/Chat)
+        this.memory = new MemorySystem(this.agent);
+        await this.memory.initialize();
+        this.agent.memory = this.memory;
 
-        this.instructionLearner = new ChatInstructionLearner(this.agent, this.ruleEngine);
-        this.agent.instructionLearner = this.instructionLearner; // Expose to agent
+        // 4. Initialize Perception (Eyes & Ears)
+        this.monitor = new EnvironmentMonitor(this.agent);
+        this.agent.envMonitor = this.monitor; // Bridge early
 
-        // Unified Subsystem Initialization
-        this.social = new SocialEngine(this.agent);
-        this.intelligence = new CodeEngine(this.agent);
-        this.scenarios = new ScenarioManager(null, this.agent);
+        this.perceptionManager = new PerceptionManager(this.agent);
+        this.agent.perceptionManager = this.perceptionManager;
 
-        // Phase 2-4 Modules Initialization
+        this.visionScheduler = new VisionScheduler(this.agent);
+        this.perceptionManager.visionScheduler = this.visionScheduler;
+        this.agent.visionScheduler = this.visionScheduler;
+
+        // 5. Initialize Reflexes (System 1)
+        this.reflexSystem = new ReflexSystem(this.agent);
+        // await this.reflexSystem.loadReflexes(); // DELETED: Method does not exist in ReflexSystem.js
+        this.agent.reflexSystem = this.reflexSystem;
+
+        // 5b. Initialize Tools (System 2 Support)
         this.toolRegistry = new ToolRegistry(this.agent);
-        this.system2 = new System2Loop(this.agent);
+        await this.toolRegistry.discoverSkills();
+        this.agent.toolRegistry = this.toolRegistry;
+
+        // 6. Initialize Evolution Engine (DNA)
         this.evolution = new EvolutionEngine(this.agent);
+        // Listen for failures
+        globalBus.subscribe(SIGNAL.TASK_FAILED, (payload) => {
+            if (payload.fatal || payload.error.includes('died')) {
+                this.evolution.analyzeAndCreate({ cause: payload.error, context: payload.snapshot });
+            }
+        });
+
+        // 7. Initialize Social & Intelligence
+        this.social = new SocialEngine(this.agent);
+        this.agent.social = this.social;
+
+        this.intelligence = new UtilityEngine(this.agent);
+        this.agent.intelligence = this.intelligence;
+
+        // 8. Initialize Orchestration & Tasks
+        this.system2 = new System2Loop(this.agent);
+        this.agent.system2 = this.system2;
+
+        this.scenarios = new Task(this.agent, this.agent.config?.task);
+        this.agent.scenarios = this.scenarios;
+
         this.combatAcademy = new CombatAcademy(this.agent);
-        this.combatAcademy = new CombatAcademy(this.agent);
+        this.agent.combatAcademy = this.combatAcademy;
+
+        // 9. Initialize Context & Extraction
+        this.contextManager = new ContextManager(this.agent);
+        this.agent.contextManager = this.contextManager;
+
         this.extractor = new CoreExtractor(this.agent);
-        this.swarmSync = new SwarmSync(this.agent);
+        this.agent.extractor = this.extractor;
 
-        console.log('[CoreSystem] ✓ Subsystems (Social, Code, Scenarios, Evolution, Academy) Loaded');
+        // 9b. Wire Core Infrastructure Signals
+        this._setupCoreListeners();
 
-        // 3. Initialize Scheduler
-        // this.scheduler already initialized in constructor
+        // 10. Start Watchdogs
+        this._startWatchdogs();
 
-        // 4. Start Safeguards
-        this.startSafeguards();
+        // 11. Profiler (Phase 8)
+        this.profiler = new Profiler(this.agent);
+        this.agent.profiler = this.profiler;
+        this.profiler.init();
 
-        this.isRunning = true;
-        console.log('[CoreSystem] ✅ Kernel Initialized (Waiting for Bot Connection...)');
+        // 12. AutoHealer (Phase 8)
+        this.autoHealer = new AutoHealer(this.agent);
+        this.agent.autoHealer = this.autoHealer;
+        this.autoHealer.init();
 
-        return true;
+        console.log('[CoreSystem] ✅ Kernel Ready. Waiting for Neural Link...');
+        globalBus.emitSignal(SIGNAL.SYSTEM_READY);
     }
 
-    /**
-     * Phase 5: Safe Initialization
-     * Connects valid bot instance to subsystems
-     */
-    connectBot(bot) {
-        if (!bot) {
-            console.error('[CoreSystem] ❌ Cannot connect null bot!');
-            return;
-        }
-        console.log('[CoreSystem] 🔗 Connecting Bot Instance to Subsystems...');
+    _setupCoreListeners() {
+        // Inventory Sync (Phase 1)
+        globalBus.subscribe(SIGNAL.BOT_READY, () => {
+            if (this.agent.bot) {
+                // Initial sync
+                this.scheduler.blackboard.updateInventoryCache(this.agent.bot);
+                this.scheduler.blackboard.updateVitals(this.agent.bot);
 
-        // Connect Reflexes (Safe Init)
-        this.reflexSystem.connect(bot);
+                // Listen for inventory updates
+                this.agent.bot.inventory.on('update', () => {
+                    this.scheduler.blackboard.updateInventoryCache(this.agent.bot);
+                });
 
-        console.log('[CoreSystem] ✅ Bot Connected Successfully');
-    }
+                // Listen for health/food updates
+                this.agent.bot.on('health', () => {
+                    this.scheduler.blackboard.updateVitals(this.agent.bot);
 
-    /**
-     * Start Omega Safeguards
-     */
-    startSafeguards() {
-        // 1. Zombie Task Killer (Soft Reset Mode)
-        // Checks every 10s for tasks running > 60s without updates
-        const intervals = this.agent.config.profile?.system_intervals || {};
-        const zombieCheck = intervals.zombie_check || 10000;
-        const zombieThreshold = intervals.zombie_threshold || 60000;
-        const watchdogCheck = intervals.watchdog_check || 3000;
+                    // Trigger signals for TaskScheduler
+                    if (this.agent.bot.health <= 6) {
+                        globalBus.emitSignal(SIGNAL.HEALTH_CRITICAL, { health: this.agent.bot.health });
+                    } else if (this.agent.bot.health <= 12) {
+                        globalBus.emitSignal(SIGNAL.HEALTH_LOW, { health: this.agent.bot.health });
+                    }
+                });
 
-        const config = this.agent.config || settings;
-        if (config.watchdog && config.watchdog.enabled) {
-            this.zombieInterval = setInterval(() => {
-                if (this.scheduler) {
-                    // Pass 'true' to indicate soft reset instead of kill
-                    this.scheduler.checkZombieTasks(zombieThreshold);
+                this.agent.bot.on('food', () => {
+                    this.scheduler.blackboard.updateVitals(this.agent.bot);
+                    if (this.agent.bot.food < 6) {
+                        globalBus.emitSignal(SIGNAL.HUNGRY, { food: this.agent.bot.food });
+                    }
+                });
+
+                // Start Environment Monitor
+                if (this.monitor && !this.monitor.active) {
+                    this.monitor.start();
                 }
-            }, zombieCheck);
-            console.log(`[CoreSystem] 🛡️ Zombie Task Killer ENABLED (Check: ${zombieCheck}ms, Threshold: ${zombieThreshold}ms)`);
-
-            // 2. Physical Watchdog (Soft Reset Mode)
-            this.watchdogInterval = setInterval(() => {
-                this.checkPhysicalState();
-            }, watchdogCheck);
-            console.log(`[CoreSystem] 🛡️ Physical Watchdog ENABLED (Check: ${watchdogCheck}ms)`);
-        } else {
-            console.log('[CoreSystem] 🛡️ Watchdogs DISABLED (Configuration)');
-        }
+                if (this.perceptionManager && !this.perceptionManager.active) {
+                    this.perceptionManager.start();
+                }
+            }
+        });
     }
 
-    /**
-     * Physical Watchdog Logic
-     * If pathfinder is active but XYZ hasn't changed -> Trigger Jump + Random Walk
-     */
-    checkPhysicalState() {
+    _startWatchdogs() {
+        // Zombie Task Killer (Every 10s)
+        this._zombieTimer = setInterval(() => {
+            if (this.scheduler) {
+                this.scheduler.checkZombieTasks(60000); // 1 min TTL
+            }
+        }, 10000);
+
+        // Physical Watchdog (Every 3s)
+        this._physicalTimer = setInterval(() => {
+            this._checkPhysicalStuck();
+        }, 3000);
+
+        // System Tick (Every 1s) - Phase 8: Profiling
+        this._tickTimer = setInterval(() => {
+            globalBus.emitSignal(SIGNAL.SYSTEM_TICK);
+        }, 1000);
+    }
+
+    _checkPhysicalStuck() {
         const bot = this.agent.bot;
         if (!bot || !bot.entity) return;
 
-        // Only check if moving
-        const isMoving = bot.pathfinder && bot.pathfinder.isMoving();
-        if (!isMoving) {
-            this.lastPos = null;
-            return;
-        }
+        // Only check if we are moving (pathfinder active)
+        // Mineflayer-pathfinder sets bot.pathfinder.isMoving? No, check goal?
+        // Fallback: Check if we have an active MOVE task in Scheduler
+        const isMoving = this.scheduler.activeTasks.has('traverse') || this.scheduler.activeTasks.has('move');
 
-        const currentPos = bot.entity.position;
-        if (this.lastPos) {
-            const dist = currentPos.distanceTo(this.lastPos);
-            if (dist < 0.2) { // Stuck threshold
-                console.warn('[Watchdog] ⚠️ Bot appears stuck! Triggering reflex...');
-                this.triggerUnstuckReflex(bot);
+        if (isMoving) {
+            const currentPos = bot.entity.position;
+            if (this._lastPosition && currentPos.distanceTo(this._lastPosition) < 0.2) {
+                this._stuckCounter++;
+                if (this._stuckCounter > 3) { // Stuck for 9 seconds
+                    console.warn('[CoreSystem] ⚠️ Physical Watchdog: Agent is STUCK!');
+
+                    // Trigger Unstuck Reflex (Phase 2: Block Breaking Parity)
+                    this.scheduler.schedule('reflex_unstuck', 100, async () => {
+                        const stuckReflex = this.reflexSystem?.reflexes?.stuck;
+                        if (stuckReflex) {
+                            await stuckReflex.recover();
+                        } else {
+                            // Fallback if StuckReflex missing
+                            bot.setControlState('jump', true);
+                            const yaw = Math.random() * Math.PI * 2;
+                            await bot.look(yaw, 0);
+                            await new Promise(r => setTimeout(r, 500));
+                            bot.setControlState('jump', false);
+                        }
+                    });
+
+                    this._stuckCounter = 0;
+                }
+            } else {
+                this._stuckCounter = 0;
             }
+            this._lastPosition = currentPos.clone();
+        } else {
+            this._stuckCounter = 0;
+            this._lastPosition = bot.entity.position.clone();
         }
-        this.lastPos = currentPos.clone();
     }
 
-    triggerUnstuckReflex(bot) {
-        // Swing arm (Visual Status: Error/Stuck)
-        bot.swingArm();
-
-        // Safe Timeout Wrapper
-        const safeTimeout = (fn, ms) => {
-            const id = setTimeout(fn, ms);
-            this.activeTimers.add(id);
-            // Cleanup on finish
-            setTimeout(() => this.activeTimers.delete(id), ms + 10);
-        };
-
-        // Random Jump
-        bot.setControlState('jump', true);
-        safeTimeout(() => bot.setControlState('jump', false), 500);
-
-        // Random Walk
-        const randomYaw = Math.random() * Math.PI * 2;
-        bot.look(randomYaw, 0).catch(e => console.error('[Watchdog] Look failed:', e.message));
-        bot.setControlState('forward', true);
-        safeTimeout(() => bot.setControlState('forward', false), 1000);
-
-        this.bus.emitSignal(SIGNAL.THREAT_DETECTED, { type: 'stuck', source: 'PhysicalWatchdog' })
-            ?.catch(e => console.error('[Watchdog] Signal emit failed:', e.message));
-    }
-
-    /**
-     * Graceful Shutdown
-     */
     shutdown() {
-        console.log('[CoreSystem] 🛑 Shutting down Kernel...');
-        this.isRunning = false;
+        console.log('[CoreSystem] 🛑 Kernel Shutdown Initiated...');
+        if (this._zombieTimer) clearInterval(this._zombieTimer);
+        if (this._physicalTimer) clearInterval(this._physicalTimer);
+        if (this._tickTimer) clearInterval(this._tickTimer);
 
-        // Clear floating timers
-        for (const timerId of this.activeTimers) {
-            clearTimeout(timerId);
-        }
-        this.activeTimers.clear();
+        if (this.scheduler) this.scheduler.shutdown();
+        if (this.memory) this.memory.shutdown?.();
+        if (this.monitor) this.monitor.shutdown?.(); // If implemented
 
-        // Cleanup sub-components
-        if (this.reflexSystem) this.reflexSystem.cleanup();
-        if (this.memory && typeof this.memory.shutdown === 'function') this.memory.shutdown();
-
-        // Clear safeguards
-        if (this.zombieInterval) clearInterval(this.zombieInterval);
-        if (this.watchdogInterval) clearInterval(this.watchdogInterval);
-        this.zombieInterval = null;
-        this.watchdogInterval = null;
-
-        if (this.scheduler) {
-            this.scheduler.shutdown();
-            this.scheduler.interruptPhysicalTasks();
-            this.scheduler.queue = [];
-        }
-
-        if (this.system2) this.system2 = null; // System2 doesn't have stop() yet, but prepare for it
-        if (this.combatAcademy) this.combatAcademy.active = false;
-
-        this.bus.clearAllListeners(); // Prevent memory leaks
-        console.log('[CoreSystem] ⏏️ Kernel Halted');
+        globalBus.clearAllListeners();
     }
 }

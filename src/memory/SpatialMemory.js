@@ -35,6 +35,7 @@ export class SpatialMemory {
                 // If existing, keep some metadata?
                 count: (existing?.count || 0) + 1
             };
+            console.log(`[SpatialMemory] Entry created: ${entry.name}, LastSeen: ${entry.last_seen}, Now: ${Date.now()}`);
 
             this.memory.set(key, entry);
             newItems++;
@@ -43,7 +44,7 @@ export class SpatialMemory {
         if (newItems > 0) {
             console.log(`[SpatialMemory] Updated ${newItems} items in short-term memory.`);
             // Simplify console output
-            // console.log(Array.from(this.memory.values()).map(m => `${m.name} @ ${m.position}`));
+            console.log(Array.from(this.memory.values()).map(m => `${m.name} @ ${m.position}`));
         }
 
         // Auto-consolidate to Cognee if important
@@ -51,16 +52,27 @@ export class SpatialMemory {
     }
 
     /**
-     * Search for items in memory
+     * Search for items in memory (Enhanced)
      * @param {string} query - Item name or type (e.g., "chest", "iron_ore")
      * @param {Vec3} center - Optional center position to sort by distance
+     * @param {number} maxAge - Optional max age in ms (default: retentionTime)
      * @returns {Array} - List of matching memory entries
      */
-    search(query, center = null) {
+    search(query, center = null, maxAge = null) {
+        this._cleanup(); // Lazy cleanup on search
+
         const results = [];
         const lowerQuery = query.toLowerCase();
+        const cutoff = Date.now() - (maxAge || this.retentionTime);
+        console.log(`[SpatialMemory] Search Query: "${lowerQuery}", Cutoff: ${cutoff}, Entries: ${this.memory.size}`);
 
         for (const entry of this.memory.values()) {
+            if (entry.last_seen < cutoff) {
+                // console.log(`[SpatialMemory] Entry ${entry.name} too old. Seen: ${entry.last_seen}`);
+                continue;
+            }
+
+            // console.log(`[SpatialMemory] Checking ${entry.name} vs ${lowerQuery}`);
             if (entry.name.includes(lowerQuery) || entry.type.includes(lowerQuery)) {
                 results.push(entry);
             }
@@ -74,19 +86,13 @@ export class SpatialMemory {
     }
 
     /**
-     * Get string representation for context injection
-     * @param {number} maxItems 
+     * Get memory statistics
      */
-    getShortTermMemoryContext(maxItems = 10) {
-        const recent = Array.from(this.memory.values())
-            .sort((a, b) => b.last_seen - a.last_seen)
-            .slice(0, maxItems);
-
-        if (recent.length === 0) return "No recent visual memories.";
-
-        return "Recent Visual Memories:\n" + recent.map(m =>
-            `- ${m.name} at (${Math.floor(m.position.x)}, ${Math.floor(m.position.y)}, ${Math.floor(m.position.z)})`
-        ).join('\n');
+    getStats() {
+        return {
+            count: this.memory.size,
+            types: [...new Set([...this.memory.values()].map(e => e.type))]
+        };
     }
 
     _generateKey(obs) {
@@ -97,27 +103,26 @@ export class SpatialMemory {
         return `${obs.name}_${x}_${y}_${z}`;
     }
 
-    async _consolidateImportantMemories() {
-        // Send important items (rare ores, chests, structures) to Cognee
-        // This prevents spamming Cognee with "grass_block"
-        const IMPORTANT_KEYWORDS = ['chest', 'diamond', 'spawner', 'portal', 'village', 'structure', 'player'];
-
+    _cleanup() {
         const now = Date.now();
-        // Only trigger every 5 mins or so to batch? No, do it immediately for "Important" stuff if first time seen
+        // Only cleanup every 5 minutes or so to save cycles
+        if (now - this.lastConsolidation < 300000) return;
 
-        for (const entry of this.memory.values()) {
-            // Check if important AND not recently consolidated
-            if (IMPORTANT_KEYWORDS.some(kw => entry.name.includes(kw)) && !entry.consolidated) {
-                if (this.agent.cogneeMemory) {
-                    await this.agent.cogneeMemory.storeExperience(
-                        this.agent.world_id,
-                        `I saw a ${entry.name} at coordinates ${entry.position}`,
-                        'spatial_memory'
-                    );
-                    entry.consolidated = true; // Mark as sent
-                    console.log(`[SpatialMemory] Consolidated to Cognee: ${entry.name}`);
-                }
+        let removed = 0;
+        for (const [key, entry] of this.memory) {
+            if (now - entry.last_seen > this.retentionTime) {
+                this.memory.delete(key);
+                removed++;
             }
         }
+        if (removed > 0) {
+            console.log(`[SpatialMemory] Pruned ${removed} old memories.`);
+        }
+        this.lastConsolidation = now;
+    }
+
+    async _consolidateImportantMemories() {
+        // Consolidated to UnifiedMemory (VectorStore) via Dreamer if needed.
+        // Legacy Cognee support removed.
     }
 }

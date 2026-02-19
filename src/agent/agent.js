@@ -21,11 +21,11 @@ import { RetryHelper } from '../utils/RetryHelper.js';
 import { AsyncMutex } from '../utils/AsyncLock.js';
 import { BOT_STATE } from './core/BotState.js';
 import { ActionManager } from './action_manager.js';
-import { ActionAPI } from './core/ActionAPI.js';
-import { SkillLibrary } from '../skills/SkillLibrary.js';
+import { ActionAPI } from '../actions/core/ActionAPI.js';
+import { SkillLibrary } from './library/skill_library.js';
 import { SkillOptimizer } from '../skills/SkillOptimizer.js';
 import { VisionInterpreter } from './vision/vision_interpreter.js';
-import { CogneeMemoryBridge } from '../memory/CogneeMemoryBridge.js';
+// import { CogneeMemoryBridge } from '../memory/CogneeMemoryBridge.js'; // Removed Phase 6
 import { Arbiter } from './Arbiter.js';
 import { initBot } from '../utils/mcdata.js';
 import { StandardProfileSchema } from '../utils/StandardProfileSchema.js';
@@ -39,12 +39,8 @@ import { Watchdog } from './reflexes/Watchdog.js';
 import { ReplayBuffer } from './core/ReplayBuffer.js';
 import { HitSelector } from './reflexes/HitSelector.js';
 import { SwarmSync } from './core/SwarmSync.js';
-import { PathfindingWorkerController } from './core/PathfindingWorker.js';
-import MissionDirector from './core/MissionDirector.js';
-import AdvancementLadder from './core/AdvancementLadder.js';
-import SpawnBaseManager from './core/SpawnBaseManager.js';
-import DefenseController from './core/DefenseController.js';
-import BehaviorRuleEngine from './core/BehaviorRuleEngine.js';
+// import { PathfindingWorkerController } from './core/PathfindingWorker.js';
+
 import ChatInstructionLearner from './core/ChatInstructionLearner.js';
 import { AdventureLogger } from './core/AdventureLogger.js';
 import { EnvironmentMonitor } from './core/EnvironmentMonitor.js';
@@ -55,12 +51,14 @@ import { KnowledgeStore } from './core/KnowledgeStore.js';
 import { MinecraftWiki } from '../tools/MinecraftWiki.js';
 import fs from 'fs';
 import path from 'path';
+import { MotorCortex } from './core/MotorCortex.js';
 
 export class Agent {
     constructor() {
         this.name = 'Agent';
         this.running = false;
         this.state = BOT_STATE.BOOTING;
+        this.motorCortex = new MotorCortex(this);
         this.actions = new ActionManager(this); // Instantiate early
         this.actionAPI = new ActionAPI(this);
         this.history = { getHistory: () => [], add: () => { }, save: () => { } };
@@ -147,7 +145,6 @@ export class Agent {
         this.bus = globalBus;
 
         // Nervous System - DEFERRED until heavy subsystems load
-        // This prevents circular dependencies (brain needs CogneeMemory + SkillLibrary)
         this.brain = null;
 
         // Feature Modules
@@ -164,6 +161,7 @@ export class Agent {
         this.wiki = new MinecraftWiki(this);
         this.healthMonitor = new HealthMonitor(this);
         this.healthMonitor.start();
+        this.envMonitor = this.core.monitor;
 
         // -------------------------------------------------------------
         // UNIFIED CORE LINKING (Refactor Phase 5)
@@ -193,7 +191,8 @@ export class Agent {
         this.replayBuffer = new ReplayBuffer(this);
 
         this.swarm = new SwarmSync(this);
-        this.pathfindingWorker = new PathfindingWorkerController(this);
+        // Pathfinding Worker (Cleanup)
+        // this.pathfindingWorker = new PathfindingWorkerController(this);
 
         // Mission + Learning Runtime
 
@@ -401,22 +400,43 @@ while (itemCount() < targetCount && loops < 4) {
       });
     } catch {}
     try {
-      await actions.gather_nearby('log', Math.min(4, targetCount - itemCount()), {
-        maxDistance: 64,
-        retries: 1,
-        moveRetries: 1,
-        collectDrops: true,
-        continueOnError: true
+      await actions.gather_nearby({
+        matching: 'log',
+        count: Math.min(4, targetCount - itemCount()),
+        options: {
+          maxDistance: 64,
+          retries: 1,
+          moveRetries: 1,
+          collectDrops: true,
+          continueOnError: true
+        }
+      });
+    } catch {}
+    try {
+      await actions.gather_nearby({
+        matching: 'stone',
+        count: Math.min(8, targetCount - itemCount()),
+        options: {
+          maxDistance: 56,
+          retries: 1,
+          moveRetries: 1,
+          collectDrops: true,
+          continueOnError: true
+        }
       });
     } catch {}
   } else if (requested === 'cobblestone') {
     try {
-      await actions.gather_nearby('stone', Math.min(8, targetCount - itemCount()), {
-        maxDistance: 56,
-        retries: 1,
-        moveRetries: 1,
-        collectDrops: true,
-        continueOnError: true
+      await actions.gather_nearby({
+        matching: 'stone',
+        count: Math.min(8, targetCount - itemCount()),
+        options: {
+          maxDistance: 56,
+          retries: 1,
+          moveRetries: 1,
+          collectDrops: true,
+          continueOnError: true
+        }
       });
     } catch {}
   } else if (requested === 'coal') {
@@ -590,12 +610,19 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
                 // to prevent race conditions (e.g. death event before DeathRecovery is ready)
                 await this._initHeavySubsystems(this.count_id, !!save_data);
 
-                this.startEvents();
+                // Phase 1 Fix: Pass save_data/init_message to bind chat handlers
+                this.startEvents(save_data, init_message);
 
                 console.log('[INIT] Agent is online and listening. State: READY');
             } catch (error) {
-                console.error('Error in spawn event:', error);
                 this.handleSafeDisconnect('SpawnError', error, save_data, init_message, attempt);
+            }
+        });
+
+        // Phase 4: Hook Replay Buffer Capture
+        this.bot.on('physicsTick', () => {
+            if (this.replayBuffer && !this.paused) {
+                this.replayBuffer.capture();
             }
         });
     }
@@ -619,6 +646,9 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
 
         // [Arch Fix] Full cleanup before reconnect
         await this.clean();
+
+        // Phase 1 Fix: Reset running state so reconnect can proceed
+        this.running = true;
 
         this._handleReconnect(save_data, init_message, attempt);
     }
@@ -653,6 +683,8 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         }
 
         // Phase 2: Environment Monitor (Proactive Perception)
+        // REMOVED DUPLICATE INIT (Phase 3 Fix) - Already initialized in start()
+        /*
         try {
             this.envMonitor = new EnvironmentMonitor(this);
             this.envMonitor.start(); // Auto-starts background scanning
@@ -660,6 +692,7 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         } catch (err) {
             console.warn('[INIT] ⚠ EnvironmentMonitor failed:', err.message);
         }
+        */
 
         // Phase 6: Player Training Mode
         try {
@@ -680,61 +713,33 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             console.warn('[INIT] AdventureLogger failed:', err.message);
         }
 
+        // SkillLibrary
         try {
-            const cogneeServiceUrl = settings.cognee_service_url || 'http://localhost:8001';
-
-            // Phase 8: Retry Logic for Service Connection
-            await RetryHelper.retry(async () => {
-                this.cogneeMemory = new CogneeMemoryBridge(this, cogneeServiceUrl);
-                await this.cogneeMemory.init();
-                this.capabilities.memory_graph = true;
-            }, { context: 'CogneeInit', maxRetries: 3 });
-
-            console.log('[INIT] ✓ Cognee Memory Bridge initialized');
-
-            // SkillLibrary
-            this.skillLibrary = new SkillLibrary();
-            await this.skillLibrary.init();
-            this.capabilities.skill_library = true;
+            // Initialize Skill Library with Vector Store (for embeddings)
+            // Note: this.memory.vector is the VectorStore instance
+            this.skill_library = new SkillLibrary(this, this.memory?.vector);
+            await this.skill_library.initSkillLibrary();
             console.log('[INIT] ✓ SkillLibrary initialized');
 
-            // SkillOptimizer
-            this.skillOptimizer = new SkillOptimizer(this, this.skillLibrary);
-            this.skillLibrary.setOptimizer(this.skillOptimizer);
+            // Initialize Skill Optimizer (Self-Improvement)
+            this.skillOptimizer = new SkillOptimizer(this, this.skill_library);
+            // await this.skillOptimizer.loadSkills(); // Method does not exist
             console.log('[INIT] ✓ SkillOptimizer linked');
 
             // ToolRegistry: Discover all MCP-compatible skills
             await this.toolRegistry.discoverSkills();
             console.log('[INIT] ✓ ToolRegistry discovered skills');
-
-            // Phase 7: Tool Creator Engine
-            this.toolCreator = new ToolCreatorEngine(this);
-
-            // Phase 2 Fix: Wire up Instruction Learner
-            this.instructionLearner = new ChatInstructionLearner(this);
-            console.log('[INIT] ✓ ToolCreatorEngine initialized');
-
         } catch (err) {
-            console.warn('[INIT] ⚠ External AI Services Unavailable (Cognee/Skills).');
-            console.warn(`[INIT] Running in OFFLINE MODE. Error: ${err.message}`);
+            console.warn('[INIT] SkillSystem failed:', err);
         }
 
-        // CRITICAL: Initialize UnifiedBrain EXACTLY ONCE with full context
-        // This is the proper time - after CogneeMemory and SkillLibrary are ready
-        try {
-            if (!this.brain) {
-                this.brain = new UnifiedBrain(this, this.prompter, this.cogneeMemory, this.skillLibrary);
-                console.log('[INIT] ✓ UnifiedBrain initialized with Cognee + Skills');
-            }
-        } catch (err) {
-            console.error('[INIT] ❌ Failed to initialize UnifiedBrain:', err.message);
-            // Fallback with minimal features
-            this.brain = new UnifiedBrain(this, this.prompter);
-            console.log('[INIT] ⚠ UnifiedBrain initialized with fallback (no Cognee/Skills)');
-        }
+        // Phase 7: Tool Creator Engine
+        this.toolCreator = new ToolCreatorEngine(this);
+        this.instructionLearner = new ChatInstructionLearner(this);
+        console.log('[INIT] ✓ ToolCreatorEngine initialized');
 
-        // Dreamer (VectorDB) - With proper error handling
-        // Dreamer (VectorDB) - With proper error handling
+        // Dreamer (VectorDB) - MOVED UP (Phase 6)
+        // Must be initialized before UnifiedBrain to serve as memory backbone
         if (settings.allow_dreamer) {
             try {
                 // Lazy load Dreamer here if not already loaded
@@ -743,10 +748,26 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
                     this.dreamer = new Dreamer(this);
                 }
                 await RetryHelper.retry(() => this.dreamer.init(), { context: 'DreamerInit', maxRetries: 2 });
-                console.log('[INIT] ✓ Dreamer initialized');
+                console.log('[INIT] ✓ Dreamer initialized (Primary Memory)');
+                this.capabilities.memory_graph = true; // Re-using flag for robust memory
             } catch (err) {
                 console.warn('[INIT] ⚠ Dreamer init failed:', err.message);
             }
+        }
+
+        // CRITICAL: Initialize UnifiedBrain EXACTLY ONCE with full context
+        // This is the proper time - after Dreamer and SkillLibrary are ready
+        try {
+            if (!this.brain) {
+                // Pass this.dreamer as the memory provider instead of cogneeMemory
+                this.brain = new UnifiedBrain(this, this.prompter, this.dreamer, this.skillLibrary, this.memory?.vector);
+                console.log('[INIT] ✓ UnifiedBrain initialized with Dreamer + Skills');
+            }
+        } catch (err) {
+            console.error('[INIT] ❌ Failed to initialize UnifiedBrain:', err.message);
+            // Fallback with minimal features
+            this.brain = new UnifiedBrain(this, this.prompter);
+            console.log('[INIT] ⚠ UnifiedBrain initialized with fallback (no Memory/Skills)');
         }
 
         // Task initialization - With proper error handling
@@ -795,6 +816,9 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             console.error('[INIT] Failed to instantiate MissionDirector:', err);
         }
 
+        // Phase 5: Soul Restoration (Active Loop)
+        this.startSoulLoop();
+
         console.log('[INIT] ✅ All heavy subsystems initialized.');
 
         // CRITICAL: Mark as ready ONLY after all subsystems are initialized
@@ -828,20 +852,14 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
                 this.shut_up = false;
                 console.log(this.name, 'received message from', username, ':', message);
 
-                // Task 6: Auto-store player interactions to Cognee (Hardened with Retry)
-                if (this.capabilities.memory_graph && this.world_id) {
-                    const interaction = `Player ${username} said: "${message}"`;
-                    RetryHelper.retry(async () => {
-                        await this.cogneeMemory.storeExperience(this.world_id, [interaction], {
-                            type: 'player_interaction',
-                            timestamp: Date.now(),
-                            player: username
-                        });
-                    }, { context: 'StoreInteraction', maxRetries: 2 }).catch(err => {
-                        console.error('[Critical] Failed to store interaction after retries:', err.message);
-                        // Optional: Add to a persistent disk queue if DB is down
-                    });
-                }
+                await this.memory.absorb('experience', {
+                    facts: [`Player ${username} said: "${message}"`],
+                    metadata: {
+                        type: 'player_interaction',
+                        timestamp: Date.now(),
+                        player: username
+                    }
+                });
 
                 if (convoManager.isOtherAgent(username)) {
                     console.warn('received whisper from other bot??')
@@ -1475,7 +1493,9 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
         }
     }
 
-    startEvents() {
+    startEvents(save_data = null, init_message = null) {
+        // Phase 1 Fix: Bind Chat & Whisper handlers
+        this._setupEventHandlers(save_data, init_message);
         // ... (Events same as before) ...
         this.bot.on('time', () => {
             if (this.bot.time.timeOfDay == 0) {
@@ -1561,24 +1581,16 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
                 }
                 let dimention = this.bot.game.dimension;
 
-                // Task 6: Auto-store death events to Cognee (Hardened with Retry)
-                if (this.capabilities.memory_graph && this.world_id) {
-                    const deathFact = `Died at ${death_pos_text || "unknown"} in ${dimention} dimension. Cause: ${message}`;
-                    RetryHelper.retry(async () => {
-                        await this.cogneeMemory.storeExperience(this.world_id, [deathFact], {
-                            type: 'death_event',
-                            timestamp: Date.now(),
-                            position: death_pos,
-                            dimension: dimention,
-                            cause: message
-                        });
-                    }, { context: 'StoreDeathEvent', maxRetries: 3 }).catch(err => {
-                        console.error('[Critical] Failed to store death event after retries:', err.message);
-                    });
-                }
-
-                // Task 6: Auto-store death events to Cognee
-                // ... (Existing Cognee logic) ...
+                await this.memory.absorb('experience', {
+                    facts: [`Died at ${death_pos_text || "unknown"} in ${dimention} dimension. Cause: ${message}`],
+                    metadata: {
+                        type: 'death_event',
+                        timestamp: Date.now(),
+                        position: death_pos,
+                        dimension: dimention,
+                        cause: message
+                    }
+                });
 
                 // Task 16: Trigger Death Reflex Recording
                 if (this.deathRecovery) {
@@ -1740,8 +1752,9 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
 
         // 2. Subsystem Cleanup (Safe Wrapping)
         // 2. Subsystem Cleanup (Safe Wrapping)
-        safeCleanup('Watchdog', () => this.watchdog?.stop());
-        safeCleanup('HealthMonitor', () => this.healthMonitor?.stop());
+        safeCleanup('Watchdog', () => { if (this.watchdog) this.watchdog.stop(); });
+        safeCleanup('HealthMonitor', () => { if (this.healthMonitor) this.healthMonitor.stop(); });
+        safeCleanup('EnvironmentMonitor', () => { if (this.envMonitor) this.envMonitor.stop(); });
         safeCleanup('Vision', () => this.vision_interpreter?.cleanup());
         safeCleanup('AdventureLogger', () => { this.adventureLogger = null; });
         safeCleanup('Arbiter', () => this.arbiter?.cleanup());
@@ -1818,7 +1831,7 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
                 memory: {
                     unified: !!this.unifiedMemory,
                     ram: !!this.memory,
-                    graph: !!this.cogneeMemory,
+                    graph: false,
                     vector: !!this.dreamer
                 },
                 kernel: {
@@ -1867,6 +1880,114 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
             await this.handleMessage(username, message);
         } catch (error) {
             console.error('[Agent] Chat handle error:', error);
+        }
+    }
+
+    /**
+     * MINDCRAFT REBORN: The Soul Loop
+     * Makes the bot proactive when idle, restoring its "Agency".
+     */
+    startSoulLoop() {
+        if (this._soulInterval) clearInterval(this._soulInterval);
+        console.log('[Soul] ✨ Soul Loop ignited.');
+
+        // Initialize Signal Reactors for Hyper-Perception
+        this._setupSignalReactors();
+
+        let idleSeconds = 0;
+        this._soulInterval = setInterval(async () => {
+            if (!this.running || !this.scheduler) return;
+
+            // Check if scheduler is idle
+            let isIdle = false;
+            // Hot-fix: Check if isIdle exists, or fallback to manual check
+            if (typeof this.scheduler.isIdle === 'function') {
+                isIdle = this.scheduler.isIdle();
+            } else {
+                // Fallback check
+                isIdle = (this.scheduler.activeTasks && this.scheduler.activeTasks.size === 0 && this.scheduler.queue && this.scheduler.queue.length === 0);
+            }
+
+            if (isIdle) {
+                idleSeconds += 5;
+            } else {
+                idleSeconds = 0;
+                return;
+            }
+
+            // If idle for 15+ seconds, trigger internal thought
+            if (idleSeconds >= 15) {
+                idleSeconds = 0; // Reset counter
+                await this._triggerSoulThought();
+            }
+        }, 5000);
+    }
+
+    _setupSignalReactors() {
+        // Phase 1 Fix: Removed invalid bus.off() calls that caused crashes.
+        // TODO: Implement proper listener tracking if unbinding is required.
+
+        this.bus.on(SIGNAL.ENV_BLOCK_CHANGE, async (data) => {
+            // Only react to significant changes if idle or close
+            if (!this.scheduler.isIdle()) return;
+            if (data.old === 'air' && data.new !== 'air') {
+                // Slight chance to notice block placement
+                if (Math.random() < 0.2) {
+                    console.log(`[Reactor] Noticed block placement: ${data.new}`);
+                    // Optional: Trigger a low-priority thought
+                }
+            }
+        });
+
+        this.bus.on(SIGNAL.ENV_ENTITY_ACTION, async (data) => {
+            if (data.action === 'hurt') {
+                console.log(`[Reactor] Entity hurt nearby: ${data.entity}`);
+
+                // If it's another entity (not self), trigger a reactive thought
+                // This gives the bot "Empathy" or "Tactical Awareness"
+                if (data.entity !== this.name) {
+                    // Force an immediate thought to potentially assist or flee
+                    await this._triggerSoulThought({
+                        type: 'reaction',
+                        context: `I see ${data.entity} getting hurt nearby!`
+                    });
+                }
+            }
+        });
+
+        console.log('[Soul] 📡 Signal Reactors armed.');
+    }
+
+    async _triggerSoulThought(forcedContext = null) {
+        if (settings.soul_disabled) return;
+
+        // Don't interrupt if user is typing or if in combat
+        if (this.combatReflex?.inCombat) return;
+
+        console.log('[Soul] 💭 Thinking...');
+
+        // Nudge the MissionDirector
+        if (this.missionDirector) {
+            const action = await this.missionDirector._arbitrateGoal();
+            if (action) {
+                console.log(`[Soul] 💡 Epiphany: ${action.name}`);
+                this.missionDirector._scheduleMissionTask(action.name, action.priority, async () => {
+                    if (action.type === 'progression') {
+                        await this.missionDirector._executeAdvancementProgress();
+                    } else if (action.type === 'survival') {
+                        if (this.agent && this.agent.actions && this.agent.actions.eat_if_hungry) {
+                            await this.agent.actions.eat_if_hungry();
+                        }
+                    }
+                });
+            } else {
+                // Look around individually to look alive
+                if (this.bot && this.bot.entity) {
+                    const yaw = (Math.random() * Math.PI) - (0.5 * Math.PI);
+                    const pitch = (Math.random() * 0.5) - 0.25;
+                    try { await this.bot.look(yaw, pitch); } catch { }
+                }
+            }
         }
     }
 }

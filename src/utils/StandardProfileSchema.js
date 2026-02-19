@@ -70,7 +70,7 @@ export const StandardProfileSchema = {
 
     // Subsystem Services
     services: {
-        cognee_url: "http://localhost:8001"
+        memory_backend: "local"
     },
 
     // Timing & Behavior Tuning

@@ -201,7 +201,7 @@ export class ContextManager {
 
             const results = await Promise.all(queries);
             const relevant = results
-                .filter(r => r.success && r.data)
+                .filter(r => r && r.data && r.source !== 'NONE')
                 .flatMap(r => r.data)
                 .slice(0, 3); // Top 3 most relevant
 
@@ -223,13 +223,13 @@ export class ContextManager {
         }
 
         try {
-            // Query Cognee for conversation summaries
+            // Query UnifiedMemory for conversation summaries
             const result = await this.agent.memory.query(
                 'Summarize previous conversations and key learnings',
                 { limit: 2, source: 'graph' }
             );
 
-            const summaries = result.success && result.data ? result.data : [];
+            const summaries = (result && result.data && result.source !== 'NONE') ? result.data : [];
 
             return { summaries };
 
@@ -329,7 +329,7 @@ export class ContextManager {
 
                 this.conversationHistory = [summary, ...recent];
 
-                // Optionally: Send to Cognee for long-term storage
+                // Optionally: Send to UnifiedMemory for long-term storage
                 this._archiveOldMessages(older);
             }
         }

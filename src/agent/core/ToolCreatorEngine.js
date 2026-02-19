@@ -53,22 +53,25 @@ export class ToolCreatorEngine {
                 throw new Error(`Invalid tool name "${name}". Must be snake_case.`);
             }
 
-            // 3. Construct File Content
+            // 3. Safety Sandwich Validation (Phase 6)
+            if (this.agent.evolution?.safety) {
+                console.log(`[ToolCreator] 🛡️ Validating code for ${name}...`);
+                const validation = await this.agent.evolution.safety.validate(code);
+                if (!validation.valid) {
+                    throw new Error(`Safety Validation Failed: ${validation.reasoning}`);
+                }
+            }
+
+            // 4. Construct File Content
             const fileContent = this._buildFileContent(schema, code);
 
-            // 4. Save to Disk
+            // 5. Save to Disk
             const filePath = path.join(this.dynamicSkillsPath, `${name}.js`);
             fs.writeFileSync(filePath, fileContent);
             console.log(`[ToolCreator] 💾 Saved tool to ${filePath}`);
 
-            // 5. Register with ToolRegistry (Hot Reload)
-            // We need to import the file we just wrote.
-            // Since it's an ES module, we might need a cache buster or dynamic import.
+            // 6. Register with ToolRegistry (Hot Reload)
             try {
-                // Register dynamically
-                // Note: File-based registration is better for persistence.
-                // We mock the metadata for immediate registration if possible,
-                // or just load the file.
                 await this.agent.toolRegistry._loadSkill(filePath);
 
                 this.agent.bot.chat(`I've learned a new skill: ${name}!`);
@@ -85,14 +88,14 @@ export class ToolCreatorEngine {
 
             } catch (regErr) {
                 console.error('[ToolCreator] Registration failed:', regErr);
-                // Try to delete broken file
-                // fs.unlinkSync(filePath);
+                // Rollback (Delete broken file)
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
                 return false;
             }
 
         } catch (error) {
-            console.error('[ToolCreator] Tool generation failed:', error);
-            this.agent.bot.chat(`I tried to create a tool for that, but my brain hurt.`);
+            console.error('[ToolCreator] Tool generation failed:', error.message);
+            this.agent.bot.chat(`I tried to create a tool for that, but: ${error.message}`);
             return false;
         }
     }

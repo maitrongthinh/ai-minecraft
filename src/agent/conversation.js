@@ -365,7 +365,7 @@ function _handleFullInMessage(sender, received) {
 
 
 function _tagMessage(message) {
-    return "(FROM OTHER BOT)" + message;
+    return message;
 }
 
 async function _resumeSelfPrompter() {

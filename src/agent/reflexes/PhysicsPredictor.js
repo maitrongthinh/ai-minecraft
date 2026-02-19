@@ -5,8 +5,13 @@
  * trajectory prediction, and MLG (Waterdrop) timing.
  */
 export class PhysicsPredictor {
-    constructor(bot) {
-        this.bot = bot;
+    constructor(botOrAgent) {
+        this.agent = botOrAgent.agent ? botOrAgent.agent : botOrAgent;
+        this._bot = botOrAgent.bot ? botOrAgent.bot : (botOrAgent.entity ? botOrAgent : null);
+    }
+
+    get bot() {
+        return this.agent?.bot || this._bot;
     }
 
     /**

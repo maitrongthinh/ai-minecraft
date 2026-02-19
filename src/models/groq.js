@@ -27,14 +27,30 @@ export class GroqCloudAPI {
         if (this.url)
             console.warn("Groq Cloud has no implementation for custom URLs. Ignoring provided URL.");
 
-        this.groq = new Groq({ apiKey: getKey('GROQCLOUD_API_KEY') });
+        const resolvedKey =
+            this.params?.apiKey ||
+            (this.params?.apiKeyEnv ? getKey(this.params.apiKeyEnv) : undefined) ||
+            getKey('GROQCLOUD_API_KEY') ||
+            getKey('GROQ_API_KEY');
+
+        this.missingApiKey = !resolvedKey;
+        if (!resolvedKey) {
+            console.warn('[GroqCloudAPI] Missing Groq API key. Set GROQCLOUD_API_KEY or GROQ_API_KEY.');
+        }
+
+        this.groq = new Groq({ apiKey: resolvedKey || 'gsk-dummy-if-no-key' });
 
 
     }
 
     async sendRequest(turns, systemMessage, stop_seq = null) {
-        // Construct messages array
-        let messages = [...turns];
+        if (this.missingApiKey) {
+            return 'My brain disconnected, try again.';
+        }
+
+        // Create working copy and sanitize
+        let messages = [...turns].filter(m => ['system', 'user', 'assistant'].includes(m.role));
+
         if (systemMessage && (!messages.length || messages[0].role !== 'system')) {
             messages.unshift({ "role": "system", "content": systemMessage });
         }

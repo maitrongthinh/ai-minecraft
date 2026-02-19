@@ -27,13 +27,105 @@ export class CodeSandbox {
         this.memoryLimit = 64; // 64MB strictly enforced
     }
 
-    createMockBotState() {
+    createEnhancedMock() {
         return {
-            entity: { position: { x: 0, y: 64, z: 0 } },
+            entity: { position: { x: 0, y: 64, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0 },
             health: 20,
             food: 20,
-            inventory: { count: 0 }
+            username: 'Bot',
+            inventory: {
+                items: [],
+                count: 0,
+                findInventoryItem: () => null
+            },
+            pathfinder: {
+                setGoal: () => { },
+                setMovements: () => { },
+                isMoving: () => false
+            },
+            pvp: {
+                attack: () => { },
+                stop: () => { }
+            },
+            chat: () => { },
+            look: () => Promise.resolve(),
+            lookAt: () => Promise.resolve()
         };
+    }
+
+    /**
+     * Run a generated skill + test in the sandbox
+     */
+    async runTest(skillCode, testCode) {
+        const fullScript = `
+        (async () => {
+            // 1. Inject Skill
+            ${skillCode}
+            
+            // 2. Mock Test Framework
+            let testsPassed = 0;
+            let testsFailed = 0;
+            const failures = [];
+            
+            function assert(condition, message) {
+                if (!condition) {
+                    testsFailed++;
+                    failures.push(message);
+                    throw new Error(message);
+                } else {
+                    testsPassed++;
+                }
+            }
+            
+            // 3. Inject Test Code
+            try {
+                // Wrap test code to ensure it uses the 'bot' global
+                ${testCode}
+            } catch (e) {
+                throw new Error("Test execution failed: " + e.message);
+            }
+            
+            return { passed: testsPassed, failed: testsFailed, failures };
+        })();
+        `;
+
+        // Use execute but with deep mock
+        const isolate = new ivm.Isolate({ memoryLimit: this.memoryLimit });
+        try {
+            const context = await isolate.createContext();
+            const jail = context.global;
+
+            await jail.set('log', function (...args) { /* console.log('[SandboxTest]', ...args); */ });
+
+            // Deep Mock
+            const mockBot = this.createEnhancedMock();
+
+            // Inject globals manually since ExternalCopy has limits with methods
+            await context.evalClosure(`
+                globalThis.bot = {
+                    health: $0.health,
+                    food: $0.food,
+                    entity: $0.entity,
+                    username: $0.username,
+                    inventory: { items: () => [], findInventoryItem: () => null },
+                    pathfinder: { setGoal: () => {}, setMovements: () => {} },
+                    pvp: { attack: () => {} },
+                    chat: (msg) => log(msg)
+                };
+                globalThis.skills = {};
+                globalThis.Vec3 = class Vec3 { constructor(x,y,z){this.x=x;this.y=y;this.z=z;} };
+            `, [mockBot], { arguments: { copy: true } });
+
+            const script = await isolate.compileScript(fullScript);
+            const result = await script.run(context, { promise: true, timeout: this.timeout, result: { copy: true, promise: true } });
+
+            return { success: true, ...result };
+
+        } catch (e) {
+            return { success: false, error: e.message };
+        } finally {
+            isolate.dispose();
+        }
     }
 
     scanForDanger(code) {
@@ -59,45 +151,74 @@ export class CodeSandbox {
                 console.log('[Sandbox]', ...args);
             });
 
-            const globals = ['Math', 'Date', 'JSON', 'Array', 'Object', 'String', 'Number', 'Boolean'];
-            for (const g of globals) {
-                await jail.set(g, new ivm.ExternalCopy(global[g]).copyInto());
-            }
-
             await jail.set('contextData', new ivm.ExternalCopy(contextData).copyInto());
 
-            // Reconstruct Bot Object (Prioritize Real State -> Mock)
-            const botData = contextData.botState || this.createMockBotState();
+            // Reconstruct Bot Object (Using Enhanced Mock if not provided)
+            const botData = contextData.botState || this.createEnhancedMock();
 
             // We use evalClosure to create the bot object with methods matching the API
             await context.evalClosure(`
-                global.bot = {
+                globalThis.bot = {
                     health: $0.health,
                     food: $0.food,
-                    entity: { 
-                        position: $0.entity.position 
-                    },
+                    entity: $0.entity,
                     inventory: {
-                        items: () => $0.inventory.items, // Maps array to function
-                        count: $0.inventory.items.length
+                        items: () => [], 
+                        count: 0
                     },
                     username: $0.username || 'Bot',
                     chat: (msg) => log('[Sandbox:Chat]', msg),
                     navigate: (dest) => log('[Sandbox:Navigate]', dest),
-                    // Add other safe stubs here
                 };
+                globalThis.Vec3 = class Vec3 { constructor(x,y,z){this.x=x;this.y=y;this.z=z;} };
             `, [botData], { arguments: { copy: true } });
 
-            // Deprecated: Remove direct set of 'bot' to avoid overwrite
-            // await jail.set('bot', new ivm.ExternalCopy(mockBot).copyInto());
+            // Reconstruct skills object
+            await context.eval(`globalThis.skills = {};`);
 
-            const script = await isolate.compileScript(codeString);
-            const result = await script.run(context, { timeout: this.timeout });
+            const skillsSource = contextData.skillsSource || {};
+            for (const [name, source] of Object.entries(skillsSource)) {
+                try {
+                    let cleanSource = source.replace(/^export\s+/, '');
+                    if (cleanSource.startsWith('function') || cleanSource.startsWith('async function')) {
+                        await jail.set('_tmp_source_' + name, cleanSource);
+                        await context.eval(`
+                            (function() {
+                                try {
+                                    const fn = eval(_tmp_source_${name}); 
+                                    globalThis.skills['${name}'] = fn;
+                                    globalThis['${name}'] = fn; 
+                                    delete globalThis['_tmp_source_${name}']; 
+                                } catch(e) {
+                                    log('[Sandbox] Error evaling skill ${name}: ' + e.message);
+                                }
+                            })();
+                        `);
+                    }
+                } catch (e) {
+                    console.log('[CodeSandbox] Failed to inject skill:', name, e.message);
+                }
+            }
+
+            await context.eval(`globalThis.actions = globalThis.skills;`);
+
+            const wrappedCode = `
+            (async () => {
+                ${codeString}
+            })();
+            `;
+
+            const script = await isolate.compileScript(wrappedCode);
+            const result = await script.run(context, {
+                promise: true,
+                result: { copy: true, promise: true },
+                timeout: this.timeout
+            });
 
             return { success: true, result };
         } catch (e) {
             let errorMsg = e.message;
-            if (e.message.includes('Script execution timed out')) {
+            if (e.message && e.message.includes('Script execution timed out')) {
                 errorMsg = `Timeout: Code took longer than ${this.timeout}ms`;
             }
             return { success: false, error: `Execution error: ${errorMsg}` };

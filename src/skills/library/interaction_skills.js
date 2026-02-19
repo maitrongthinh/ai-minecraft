@@ -3,7 +3,7 @@ import * as world from "./world.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
-import { goToPosition, goToNearestBlock, goToGoal } from "./movement_skills.js";
+import { goToPosition, goToNearestBlock, goToGoal } from "./go_to.js";
 
 function log(bot, message) {
     bot.output += message + '\n';

@@ -1,5 +1,21 @@
 import { CombatUtils } from '../../utils/CombatUtils.js';
 
+export const metadata = {
+    name: 'eat_food',
+    description: 'Eats food to restore hunger/saturation. Prioritizes best food.',
+    parameters: {
+        type: 'object',
+        properties: {
+            priority_only: {
+                type: 'boolean',
+                default: true,
+                description: 'If true, ignores harmful or low-value food unless desperate.'
+            }
+        }
+    },
+    tags: ['survival', 'vitality']
+};
+
 export default async function eat_food(agent, options = {}) {
     const bot = agent.bot || agent;
     const { priority_only = true } = options;
@@ -11,7 +27,6 @@ export default async function eat_food(agent, options = {}) {
     }
 
     // Sort by Food Score (Saturation + Hunger)
-    // Avoids rotten flesh unless desperate
     const currentHealth = bot.health;
     food.sort((a, b) => {
         const scoreA = CombatUtils.getFoodScore(a, currentHealth);
@@ -28,9 +43,22 @@ export default async function eat_food(agent, options = {}) {
     }
 
     try {
-        await bot.equip(bestFood, 'hand');
-        await bot.consume();
-        return { success: true, message: `Ate ${bestFood.name}` };
+        if (agent.actionAPI) {
+            // Use primitive
+            const result = await agent.actionAPI.eat({
+                itemName: bestFood.name,
+                options: { retries: 1 }
+            });
+            return {
+                success: result.success,
+                message: result.success ? `Ate ${bestFood.name}` : result.error
+            };
+        } else {
+            // Fallback
+            await bot.equip(bestFood, 'hand');
+            await bot.consume();
+            return { success: true, message: `Ate ${bestFood.name}` };
+        }
     } catch (err) {
         return { success: false, message: `Failed to eat: ${err.message}` };
     }

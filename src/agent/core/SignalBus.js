@@ -31,10 +31,13 @@ export const SIGNAL = {
     MEMORY_STORED: 'memory.stored',
     MEMORY_RECALLED: 'memory.recalled',
     MEMORY_CLEARED: 'memory.cleared',
+    BLACKBOARD_UPDATE: 'blackboard.update', // New in v3.1
 
     // Learning & Evolution
     SKILL_LEARNED: 'skill.learned',
     SKILL_FORGOTTEN: 'skill.forgotten',
+    SKILL_SUCCESS: 'skill.success',
+    SKILL_FAILED: 'skill.failed',
 
     // Evolution
     GENOME_MUTATED: 'evolution.genome_mutated',
@@ -78,6 +81,7 @@ export const SIGNAL = {
     ENV_HOSTILE_APPROACHING: 'environment.hostile_approaching',
     ENV_LOOT_NEARBY: 'environment.loot_nearby',
     ENV_BLOCK_CHANGE: 'environment.block_change',
+    ENV_ENTITY_ACTION: 'environment.entity_action', // Added Phase 3 Fix
     ENV_EXPLOSION: 'environment.explosion',
     ENV_LOW_LIGHT: 'environment.low_light',
 
@@ -101,6 +105,7 @@ export const SIGNAL = {
     // System 2 Lifecycle (Dual-Loop Architecture)
     SYSTEM2_START: 'system2.planning_start',
     SYSTEM2_PLAN_READY: 'system2.plan_ready',
+    SYSTEM2_STATE_CHANGE: 'system2.state_change',
     SYSTEM2_DEGRADED: 'system2.degraded',       // Fallback to Survival Mode
     SYSTEM2_RECOVERED: 'system2.recovered',     // Recovered from Survival
 
@@ -129,7 +134,12 @@ export const SIGNAL = {
     // Behavior Rules
     RULE_LEARNED: 'rule.learned',
     RULE_APPLIED: 'rule.applied',
-    RULE_REVERTED: 'rule.reverted'
+    RULE_REVERTED: 'rule.reverted',
+
+    // Phase 8: Reliability & Benchmarks
+    SYSTEM_TICK: 'system.tick',
+    MEMORY_WARNING: 'system.memory_warning',
+    DIAGNOSTIC_REPORT: 'system.diagnostic_report'
 };
 
 /**

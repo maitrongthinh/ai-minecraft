@@ -1,5 +1,5 @@
 import { RetryHelper } from '../../utils/RetryHelper.js';
-import { goToPosition } from './movement_skills.js';
+import { goToPosition } from './go_to.js';
 
 export const metadata = {
     name: 'gather_wood',

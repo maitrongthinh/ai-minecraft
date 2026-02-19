@@ -22,7 +22,9 @@ class MindServerProxy {
         if (this.connected) return;
 
         this.name = name;
-        this.socket = io(`http://localhost:${port}`);
+        const token = process.env.MINDSERVER_TOKEN;
+        const options = token ? { auth: { token } } : undefined;
+        this.socket = io(`http://localhost:${port}`, options);
 
         await new Promise((resolve, reject) => {
             this.socket.on('connect', resolve);

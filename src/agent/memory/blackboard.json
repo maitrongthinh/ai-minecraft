@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "version": "3.1.0",
+    "last_update": 1771381315965
+  },
+  "system_flags": {
+    "network_status": "disconnected",
+    "is_combat_mode": false,
+    "is_sleeping": false,
+    "maintenance_mode": false
+  },
+  "strategic_data": {
+    "home_coordinates": null,
+    "current_mission": "idle",
+    "death_count": 0
+  },
+  "social_context": {
+    "owner_name": null,
+    "trusted_players": [],
+    "enemies": [],
+    "last_interaction": null
+  },
+  "inventory_cache": {
+    "totem_count": 0,
+    "arrows": 0,
+    "food_level": 20,
+    "main_hand": null,
+    "off_hand": null
+  },
+  "perception_snapshot": {
+    "nearest_threat": null,
+    "biome": "unknown"
+  },
+  "self_state": {
+    "health": 20,
+    "food": 20,
+    "is_alive": true
+  },
+  "system2_state": {
+    "active_goal": "Long Task",
+    "plan_phase": "idle",
+    "current_step": {
+      "id": 1,
+      "task": "test_step_1",
+      "status": "executing"
+    },
+    "last_failure": null
+  }
+}

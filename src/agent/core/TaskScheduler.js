@@ -1,17 +1,16 @@
 /**
- * TaskScheduler - Central Cortex (Nervous System)
+ * TaskScheduler - Central Cortex (Sovereign 3.1)
  * 
  * The "heart" of the agent's task management system.
  * Ensures bot can walk, think, and look simultaneously without conflicts.
  * 
- * Priority Levels:
- * - 100: Survival (combat reflex, fall damage)
- * - 80:  User commands (direct orders)
- * - 50:  Work tasks (building, mining)
- * - 10:  Background (vision, memory save)
+ * Architecture v3.1:
+ * - Reads state from GLOBAL BLACKBOARD (Single Source of Truth).
+ * - Priority Queue: SURVIVAL > USER > WORK > BACKGROUND.
  */
 
 import { globalBus, SIGNAL } from './SignalBus.js';
+import { Blackboard } from './Blackboard.js'; // Decoupled State
 
 export const PRIORITY = {
     SURVIVAL: 100,
@@ -23,6 +22,7 @@ export const PRIORITY = {
 export class TaskScheduler {
     constructor(agent) {
         this.agent = agent;
+        this.blackboard = new Blackboard(agent); // Attach State
         this.queue = [];
         this.activeTasks = new Map();
         this._processing = false;
@@ -32,14 +32,18 @@ export class TaskScheduler {
     }
 
     /**
-     * Calculate dynamic priority based on current agent state
+     * Calculate dynamic priority based on BLACKBOARD state
      */
     calculateUtility(taskName, basePriority) {
+        // v3.1: Read from Blackboard instead of raw bot object where possible
+        // Fallback to bot object if blackboard not fully hydrated
         const bot = this.agent.bot;
-        const profile = this.agent.config?.profile;
-        if (!bot || !profile) return basePriority;
+        // v3.1: Read from Blackboard (Single Source of Truth)
+        const hp = this.blackboard.get('self_state.health') ?? bot?.health ?? 20;
+        const food = this.blackboard.get('self_state.food') ?? bot?.food ?? 20;
 
-        const priorities = profile.behavior?.priorities || {
+        const profile = this.agent.config?.profile;
+        const priorities = profile?.behavior?.priorities || {
             survival_base: 40,
             survival_multiplier: 4,
             hunger_base: 20,
@@ -50,14 +54,18 @@ export class TaskScheduler {
             case 'survival_reflex':
             case 'combat_reflex':
                 // Dynamic Survival: Inverse scale
-                const healthMultiplier = Math.max(0, (20 - bot.health) * (priorities.survival_multiplier || 4));
+                const healthMultiplier = Math.max(0, (20 - hp) * (priorities.survival_multiplier || 4));
                 const utility = (priorities.survival_base || 40) + healthMultiplier;
-                if (utility > 80) console.log(`[CORTEX] ⚠️ High Survival Utility: ${utility.toFixed(1)} (HP: ${bot.health.toFixed(1)})`);
+
+                // Logging high utility decisions
+                if (utility > 80) {
+                    // console.log(`[CORTEX] ⚠️ High Survival Utility: ${utility.toFixed(1)} (HP: ${hp})`);
+                }
                 return utility;
 
             case 'eat_reflex':
                 // Hunger utility
-                const hungerMultiplier = Math.max(0, (20 - bot.food) * (priorities.hunger_multiplier || 4.6));
+                const hungerMultiplier = Math.max(0, (20 - food) * (priorities.hunger_multiplier || 4.6));
                 return (priorities.hunger_base || 20) + hungerMultiplier;
 
             default:
@@ -77,12 +85,16 @@ export class TaskScheduler {
                     await this.agent.combatReflex._executeRetreat();
                 } else {
                     // Try to eat for regeneration
+                    // TODO: Move this logic to a proper Reflex File (dr_eat.js)
                     const food = this.agent.bot.inventory.items().find(i => i.name.includes('cook') || i.name.includes('apple') || i.name.includes('steak'));
                     if (food) {
                         await this.agent.bot.equip(food, 'hand');
-                        this.agent.bot.activateItem();
-                        await new Promise(r => setTimeout(r, 1610));
-                        this.agent.bot.deactivateItem();
+                        try {
+                            // Guard against consumption errors
+                            await this.agent.bot.consume();
+                        } catch (e) {
+                            console.log("[CORTEX] Eat failed", e.message);
+                        }
                     }
                 }
             }, false);
@@ -91,14 +103,17 @@ export class TaskScheduler {
         this._unsubscribers.push(globalBus.subscribe(SIGNAL.HUNGRY, (payload) => {
             const utility = this.calculateUtility('eat_reflex', 90);
             this.schedule('eat_reflex', utility, async () => {
+                // Check if we already have an eat task
+                if (this.activeTasks.has('eat_reflex')) return;
+
                 console.log(`[CORTEX] 🍖 Hunger Instinct (Food: ${payload.food})`);
-                if (this.agent.bot.food < 20) {
-                    const food = this.agent.bot.inventory.items().find(i => i.name.includes('steak') || i.name.includes('bread') || i.name.includes('apple'));
+                if (this.agent.bot.food < 18) {
+                    const food = this.agent.bot.inventory.items().find(i => i.name.includes('steak') || i.name.includes('bread') || i.name.includes('apple') || i.name.includes('carrot'));
                     if (food) {
                         await this.agent.bot.equip(food, 'hand');
-                        this.agent.bot.activateItem();
-                        await new Promise(r => setTimeout(r, 1610));
-                        this.agent.bot.deactivateItem();
+                        try {
+                            await this.agent.bot.consume();
+                        } catch (e) { }
                     }
                 }
             }, false);
@@ -107,13 +122,14 @@ export class TaskScheduler {
         this._unsubscribers.push(globalBus.subscribe(SIGNAL.THREAT_DETECTED, (payload) => {
             const utility = this.calculateUtility('combat_reflex', 95);
             this.schedule('combat_reflex', utility, async () => {
+                // Only engage if not already in combat task
+                if (this.activeTasks.has('combat_reflex')) return;
+
                 if (this.agent.combatReflex && !this.agent.combatReflex.inCombat) {
                     const attacker = this.agent.combatReflex.findAttacker();
                     if (attacker) {
                         console.log(`[CORTEX] ⚔️ Attacker found: ${attacker.name || attacker.username}. Engaging!`);
                         this.agent.combatReflex.enterCombat(attacker);
-                    } else {
-                        console.warn('[CORTEX] Threat detected but no attacker found nearby.');
                     }
                 }
             }, false);
@@ -141,7 +157,6 @@ export class TaskScheduler {
         }
 
         // RULE 2: Insertion Sort by Priority (desc)
-        // Ensures queue is always sorted highest priority first
         const index = this.queue.findIndex(t => t.priority < dynamicPriority);
         if (index === -1) {
             this.queue.push(task);
@@ -154,11 +169,8 @@ export class TaskScheduler {
 
     /**
      * Cancel a scheduled or active task by name
-     * @param {string} name - Task name to cancel
-     * @returns {boolean} - True if task was found and cancelled
      */
     cancel(name) {
-        // Remove from queue
         const queueIndex = this.queue.findIndex(t => t.name === name);
         if (queueIndex !== -1) {
             this.queue.splice(queueIndex, 1);
@@ -166,68 +178,43 @@ export class TaskScheduler {
             return true;
         }
 
-        // If active, mark for cancellation (actual stop handled by task itself)
         if (this.activeTasks.has(name)) {
             console.log(`[CORTEX] 🛑 Marked active task for stop: ${name}`);
-            // We can't forcibly stop an async function, but we can signal it
             const task = this.activeTasks.get(name);
             task.cancelled = true;
+            if (task.controller) task.controller.abort();
             return true;
         }
-
         return false;
     }
 
-    /**
-     * Interrupt all physical (non-parallel) tasks
-     * Used for emergency situations like combat
-     */
     interruptPhysicalTasks() {
         for (const [name, task] of this.activeTasks) {
             if (!task.canRunParallel) {
-                // Stop physical bot actions
-                if (this.agent.actions) {
-                    this.agent.actions.stop();
-                }
-
-                // Signal the task to abort via controller
-                if (task.controller) {
-                    task.controller.abort();
-                }
-
-                task.cancelled = true; // Mark as cancelled
-
+                if (this.agent.actions) this.agent.actions.stop();
+                if (task.controller) task.controller.abort();
+                task.cancelled = true;
                 this.activeTasks.delete(name);
                 console.log(`[CORTEX] 🛑 Interrupted task: ${name}`);
             }
         }
     }
 
-    /**
-     * Process the task queue
-     */
     async processQueue() {
         if (this._processing || this.queue.length === 0) return;
 
         const nextTask = this.queue[0];
 
         // RULE 3: Concurrency Check
-        // If a blocking (non-parallel) task is running, new non-parallel tasks must wait
-        const hasBlockingTask = Array.from(this.activeTasks.values())
-            .some(t => !t.canRunParallel);
+        const hasBlockingTask = Array.from(this.activeTasks.values()).some(t => !t.canRunParallel);
 
         if (hasBlockingTask && !nextTask.canRunParallel) {
-            // Check if new task has higher priority than current blocking task
-            const blockingTask = Array.from(this.activeTasks.values())
-                .find(t => !t.canRunParallel);
-
+            const blockingTask = Array.from(this.activeTasks.values()).find(t => !t.canRunParallel);
             if (blockingTask && nextTask.priority > blockingTask.priority) {
-                // Higher priority task - interrupt the blocking task
                 console.log(`[CORTEX] ⬆️ Priority upgrade: ${nextTask.name} > ${blockingTask.name}`);
                 this.interruptPhysicalTasks();
             } else {
-                // Same or lower priority - wait
-                return;
+                return; // Wait
             }
         }
 
@@ -235,134 +222,57 @@ export class TaskScheduler {
         this.queue.shift();
         await this.execute(nextTask);
         this._processing = false;
-
-        // Process next in queue
         this.processQueue();
     }
 
-    /**
-     * Execute a task with error handling
-     * @param {Object} task - Task object to execute
-     */
     async execute(task) {
-        // Create an AbortController for this task
         const controller = new AbortController();
-        task.controller = controller; // Attach controller to task for external access if needed
-
+        task.controller = controller;
         this.activeTasks.set(task.name, task);
         const startTime = Date.now();
 
         try {
             console.log(`[CORTEX] ▶️ Starting: ${task.name} (priority: ${task.priority})`);
-
-            // Pass the signal to the task function
-            // Task functions should ideally accept { signal } or check it
             await task.taskFn({ signal: controller.signal });
-
             const duration = Date.now() - startTime;
             console.log(`[CORTEX] ✅ Completed: ${task.name} (${duration}ms)`);
         } catch (error) {
             if (error.name === 'AbortError' || task.cancelled) {
-                console.warn(`[CORTEX] 🛑 Task '${task.name}' was aborted/cancelled.`);
-                return; // Graceful exit
+                console.warn(`[CORTEX] 🛑 Task '${task.name}' aborted.`);
+                return;
             }
-
             console.error(`[CORTEX] ❌ Task '${task.name}' crashed:`, error.message);
 
-            // Phase 2: Capture failure context for Evolution Engine
-            const snapshot = this._captureFailureContext(task, error);
-
-            // Phase 4: Event-Driven Failure Handling
-            // Instead of calling evolution engine directly, we emit a signal
-            // This allows multiple listeners (Evolution, Logging, UI) to react
+            // v3.1: Emit Failure Signal for Evolution
             globalBus.emitSignal(SIGNAL.TASK_FAILED, {
                 task: task.name,
                 error: error.message,
-                snapshot: snapshot,
                 timestamp: Date.now()
             });
-
-            // Report failure to Cognee for learning from mistakes
-            if (this.agent.cogneeMemory) {
-                try {
-                    await this.agent.cogneeMemory.storeExperience(
-                        this.agent.world_id || 'default',
-                        [`Task failure: ${task.name}. Error: ${error.message}`],
-                        {
-                            type: 'task_failure',
-                            task: task.name,
-                            priority: task.priority
-                        }
-                    );
-                } catch (e) {
-                    // Silently fail - don't crash the scheduler for logging issues
-                }
-            }
-
-            // Record error in history for failure-aware planning
-            if (this.agent.history) {
-                this.agent.history.addError(task.name, error.message, {
-                    priority: task.priority,
-                    duration: Date.now() - startTime
-                });
-            }
         } finally {
             this.activeTasks.delete(task.name);
         }
     }
 
     /**
-     * Capture context for failure analysis
-     */
-    _captureFailureContext(task, error) {
-        return {
-            taskName: task.name,
-            errorMessage: error.message,
-            stack: error.stack,
-            agentState: {
-                health: this.agent.bot?.health,
-                position: this.agent.bot?.entity?.position,
-                inventory: this.agent.bot?.inventory?.items()?.map(i => i.name).slice(0, 5) // Top 5 items
-            },
-            timestamp: new Date().toISOString()
-        };
-    }
-
-    /**
-     * Check for Zombie Tasks (running > TTL)
-     * Phase 5 Omega Safeguard
+     * Zombie Task Killer (Omniscient Watchdog)
      */
     checkZombieTasks(ttl = 60000) {
         const now = Date.now();
         for (const [name, task] of this.activeTasks) {
             if (now - task.timestamp > ttl) {
                 console.warn(`[CORTEX] 🧟 ZOMBIE TASK DETECTED: ${name} (Age: ${(now - task.timestamp) / 1000}s)`);
-                // Kill it
                 this.cancel(name);
-
-                // Emit signal
-                globalBus.emitSignal(SIGNAL.TASK_FAILED, {
-                    task: name,
-                    error: 'Zombie Task Timeout (Forced Kill)',
-                    snapshot: this._captureFailureContext(task, new Error('Timeout'))
-                });
+                globalBus.emitSignal(SIGNAL.TASK_FAILED, { task: name, error: 'Zombie Timeout', fatal: true });
             }
         }
     }
 
-    /**
-     * Graceful Shutdown
-     */
     shutdown() {
         console.log('[CORTEX] 🛑 Shutting down TaskScheduler...');
         this.queue = [];
         this.activeTasks.clear();
-
-        // Unsubscribe all listeners (Fix for Zombie Listeners)
-        if (this._unsubscribers) {
-            for (const unsub of this._unsubscribers) {
-                unsub();
-            }
-        }
+        if (this._unsubscribers) this._unsubscribers.forEach(u => u());
+        if (this.blackboard) this.blackboard.cleanup();
     }
 }

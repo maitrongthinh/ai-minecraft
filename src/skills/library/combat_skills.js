@@ -1,6 +1,7 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
-import { moveAwayFromEntity, goToGoal, goToPosition } from "./movement_skills.js"; // avoidEnemies needs movement
+import { moveAwayFromEntity } from "./retreat.js";
+import { goToGoal, goToPosition } from "./go_to.js";
 import pf from 'mineflayer-pathfinder';
 import { log } from "./util.js";
 import { StrategicMovement } from "./StrategicMovement.js";

@@ -39,17 +39,25 @@ const ERROR_DEFINITIONS = {
     }
 };
 
+// Helper to mask sensitive keys
+const maskToken = (str) => {
+    if (typeof str !== 'string') return str;
+    // Generic regex for sk- keys (OpenAI, etc) and standard UUIDs if labeled as key
+    return str.replace(/(sk-[a-zA-Z0-9\-\_]{20,})/g, 'sk-***MASKED***');
+};
+
 // Helper to log messages to console (once) and MindServer.
 export const log = (agentName, msg) => {
+    const safeMsg = maskToken(msg);
     // Use console.error for visibility in terminal
-    console.error(msg);
-    try { sendOutputToServer(agentName || 'system', msg); } catch (_) {}
+    console.error(safeMsg);
+    try { sendOutputToServer(agentName || 'system', safeMsg); } catch (_) { }
 };
 
 // Analyzes the kick reason and returns a full, human-readable sentence.
 export function parseKickReason(reason) {
     if (!reason) return { type: 'unknown', msg: 'Unknown reason (Empty)', isFatal: true };
-    
+
     const raw = (typeof reason === 'string' ? reason : JSON.stringify(reason)).toLowerCase();
 
     // Search for keywords in definitions
@@ -58,37 +66,37 @@ export function parseKickReason(reason) {
             return { type, msg: def.msg, isFatal: def.isFatal };
         }
     }
-    
+
     // Fallback: Extract text from JSON
     let fallback = raw;
     try {
         const obj = typeof reason === 'string' ? JSON.parse(reason) : reason;
         fallback = obj.translate || obj.text || (obj.value?.translate) || raw;
-    } catch (_) {}
-    
+    } catch (_) { }
+
     return { type: 'other', msg: `Disconnected: ${fallback}`, isFatal: true };
 }
 
 // Centralized handler for disconnections.
 export function handleDisconnection(agentName, reason) {
     const { type, msg } = parseKickReason(reason);
-    
+
     // Format: [LoginGuard] Error Message
     const finalMsg = `[LoginGuard] ${msg}`;
-    
+
     // Only call log once (it handles console printing)
     log(agentName, finalMsg);
-    
+
     return { type, msg: finalMsg };
 }
 
 // Validates name format.
 export function validateNameFormat(name) {
     if (!name || !/^[a-zA-Z0-9_]{3,16}$/.test(name)) {
-        return { 
-            success: false, 
+        return {
+            success: false,
             // Added [LoginGuard] prefix here for consistency
-            msg: `[LoginGuard] Invalid name '${name}'. Must be 3-16 alphanumeric/underscore characters.` 
+            msg: `[LoginGuard] Invalid name '${name}'. Must be 3-16 alphanumeric/underscore characters.`
         };
     }
     return { success: true };

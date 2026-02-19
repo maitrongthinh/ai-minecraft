@@ -3,7 +3,8 @@ import { pipeline } from '@xenova/transformers';
 import fs from 'fs';
 import path from 'path';
 
-const MEMORY_FILE = './memories.json';
+// Removed static MEMORY_FILE
+// const MEMORY_FILE = './memories.json';
 
 export class VectorStore {
     constructor(agent) {
@@ -12,6 +13,13 @@ export class VectorStore {
         this.extractor = null;
         this.model_loaded = false;
         this.use_api = false;
+        this._saveTimer = null;
+        this._savePending = false;
+
+        // Phase 4: Scoped Storage
+        const botName = this.agent?.name || 'default';
+        this.memoryFile = `./bots/${botName}/data/vectors.json`;
+
         this.load();
     }
 
@@ -56,8 +64,8 @@ export class VectorStore {
 
     load() {
         try {
-            if (fs.existsSync(MEMORY_FILE)) {
-                this.memories = JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf8'));
+            if (fs.existsSync(this.memoryFile)) {
+                this.memories = JSON.parse(fs.readFileSync(this.memoryFile, 'utf8'));
                 console.log(`[VectorStore] Loaded ${this.memories.length} memories.`);
             }
         } catch (err) {
@@ -66,12 +74,26 @@ export class VectorStore {
         }
     }
 
-    save() {
-        try {
-            fs.writeFileSync(MEMORY_FILE, JSON.stringify(this.memories, null, 2));
-        } catch (err) {
-            console.error('[VectorStore] Failed to save memories:', err);
-        }
+    async save() {
+        if (this._savePending) return;
+        this._savePending = true;
+
+        if (this._saveTimer) clearTimeout(this._saveTimer);
+
+        this._saveTimer = setTimeout(async () => {
+            try {
+                // Ensure directory exists
+                const dir = path.dirname(this.memoryFile);
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+                await fs.promises.writeFile(this.memoryFile, JSON.stringify(this.memories, null, 2));
+                this._savePending = false;
+                // console.log('[VectorStore] 💾 Saved memories to disk');
+            } catch (err) {
+                console.error('[VectorStore] Failed to save memories:', err);
+                this._savePending = false;
+            }
+        }, 1000); // Debounce 1s
     }
 
     async add(text, metadata = {}) {
@@ -91,7 +113,7 @@ export class VectorStore {
             };
 
             this.memories.push(entry);
-            this.save();
+            this.save(); // Debounced
             console.log(`[VectorStore] Memorized: "${text.substring(0, 50)}..."`);
         } catch (err) {
             console.error('[VectorStore] Error adding memory:', err);

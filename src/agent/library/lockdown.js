@@ -6,7 +6,7 @@ import 'ses';
 // For configuration, see https://github.com/endojs/endo/blob/master/packages/ses/docs/lockdown.md
 
 let lockeddown = false;
-export function lockdown() {
+export function initLockdown() {
   if (lockeddown) return;
   lockeddown = true;
   lockdown({

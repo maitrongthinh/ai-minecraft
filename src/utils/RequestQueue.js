@@ -103,7 +103,7 @@ export class RequestQueue {
                 console.log(`[RequestQueue] Retrying in ${delay}ms...`);
 
                 // Re-queue with same priority but delayed
-                this.queue.unshift(item); // Put usage back at front? Or re-sort?
+                // this.queue.unshift(item); // REMOVED: setTimeout below handles push back.
                 // Re-sort isn't needed if we unshift, but let's push and sort to be safe if priority changes dynamic (unlikely)
                 // Actually, just wait and retry this specific item logic is cleaner in the loop:
 

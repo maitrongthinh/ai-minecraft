@@ -1,5 +1,7 @@
 import { SocialProfile } from './SocialProfile.js';
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
+import { SocialAuth } from './SocialAuth.js';
+import { DialogueSystem } from './DialogueSystem.js';
 
 /**
  * SocialEngine: Master Social Trust & Interaction Controller
@@ -13,6 +15,8 @@ export class SocialEngine {
         this.agent = agent;
         this.bot = agent.bot;
         this.profiles = new Map(); // PlayerName -> SocialProfile
+        this.auth = new SocialAuth(agent);
+        this.dialogue = new DialogueSystem(agent); // Phase 7: Dialogue
 
         // Whitelist Unified (Doomsday Hardening)
         const security = agent.config?.profile?.security || {};
@@ -23,6 +27,21 @@ export class SocialEngine {
         this.socialInterval = null;
 
         this.init();
+    }
+
+    async _speak(message) {
+        if (!message) return;
+        try {
+            if (typeof this.agent?.openChat === 'function') {
+                await this.agent.openChat(message);
+                return;
+            }
+            if (this.bot && typeof this.bot.chat === 'function') {
+                this.bot.chat(String(message));
+            }
+        } catch (error) {
+            console.warn('[SocialEngine] Failed to speak:', error.message);
+        }
     }
 
     init() {
@@ -53,6 +72,13 @@ export class SocialEngine {
         this._joinListener = null;
         this._chatListener = null;
         console.log('[SocialEngine] Cleaned up social system');
+    }
+
+    rebind(bot) {
+        this.cleanup();
+        this.bot = bot;
+        this.init();
+        console.log('[SocialEngine] 🔄 Rebound to new bot instance');
     }
 
     /**
@@ -133,22 +159,76 @@ export class SocialEngine {
         });
     }
 
-
-
     /**
      * Unified interaction handler
      */
     async handleChatInteraction(entityName, message) {
+        // Ignore self (Prevent Infinite Loops)
+        if (entityName === this.bot.username) return;
+
         const profile = this.getProfile(entityName);
         const msg_low = message.toLowerCase();
 
         console.log(`[SocialEngine] Interacting with ${entityName}: "${message}"`);
 
+        // --- PHASE 7: AUTHENTICATION CHECK ---
+        // 1. Check for Handshake
+        if (this.auth.verifyHandshake(entityName, message)) {
+            await this._speak(`Access granted, ${entityName}. Session active for 30 minutes.`);
+            profile.trustScore = 100; // Boost trust
+            profile.role = 'temp_admin';
+            return;
+        }
+
+        // --- PHASE 7: DIALOGUE SYSTEM ---
+        // 2. Structured Dialogue Processing
+        // Try to handle message locally before asking LLM
+        const handledByDialogue = await this.dialogue.processMessage(entityName, message);
+        if (handledByDialogue) return;
+
+        // 3. Check Permissions for Commands
+        const isCommand = message.trim().startsWith('!') ||
+            msg_low.includes('come here') ||
+            msg_low.includes('follow me') ||
+            msg_low.includes('go to');
+
+        if (isCommand) {
+            const isAuth = this.auth.isAuthenticated(entityName);
+            const isWhitelisted = this.ADMINS.includes(entityName) || this.FRIENDS.includes(entityName);
+
+            if (!isAuth && !isWhitelisted) {
+                console.log(`[SocialEngine] 🛡️ Blocked unauthorized command from ${entityName}`);
+                // Only reply occasionally to avoid spam loops
+                if (Math.random() < 0.3) {
+                    await this._speak(`I cannot obey you, ${entityName}. Authentication required.`);
+                }
+                return;
+            }
+        }
+        // -------------------------------------
+
+        // 0. Human Override (Voice of God)
+        // If an admin sends a direct command (starts with !), it takes priority over AI planning
+        if ((profile.role === 'admin' || this.auth.isAuthenticated(entityName)) && message.trim().startsWith('!')) {
+            const command = message.trim().substring(1).trim();
+            console.log(`[SocialEngine] ⚡ VOICE OF GOD detected from ${entityName}: "${command}"`);
+
+            globalBus.emitSignal(SIGNAL.HUMAN_OVERRIDE, {
+                source: entityName,
+                command: command,
+                payload: {
+                    goal: command // Route as a new goal for System 2 to override current plan
+                }
+            });
+            await this._speak(`Overriding current plan. Executing: ${command}`);
+            return;
+        }
+
         // 1. Instruction Learning (Rule-based)
         if (this.agent.instructionLearner) {
             const rule = this.agent.instructionLearner.handleChatMessage(entityName, message);
             if (rule) {
-                this.agent.speak(`Understood. I will ${rule.intent.replace(/_/g, ' ')}.`);
+                await this._speak(`Understood. I will ${rule.intent.replace(/_/g, ' ')}.`);
                 return;
             }
         }
@@ -157,7 +237,7 @@ export class SocialEngine {
         // Detect questions: "how to", "what is", "recipe for"
         if (msg_low.includes('how to') || msg_low.includes('what is') || msg_low.includes('recipe') || msg_low.includes('craft')) {
             if (this.agent.wiki) {
-                this.agent.speak(`Let me check the archives for "${message}"...`);
+                await this._speak(`Let me check the archives for "${message}"...`);
 
                 // Heuristic: Extract keyword
                 let term = message.replace(/how to|what is|recipe for|craft/gi, '').replace(/\?/g, '').trim();
@@ -167,7 +247,7 @@ export class SocialEngine {
                     const recipe = await this.agent.wiki.searchRecipe(term);
                     if (recipe && recipe.recipes && recipe.recipes.length > 0) {
                         const r = recipe.recipes[0];
-                        this.agent.speak(`To craft ${r.output}, you need: ${r.ingredients.join(', ')}.`);
+                        await this._speak(`To craft ${r.output}, you need: ${r.ingredients.join(', ')}.`);
                         return;
                     }
                 }
@@ -177,11 +257,11 @@ export class SocialEngine {
                 if (info && info.summary) {
                     // Summarize for chat (first sentence)
                     const shortSummary = info.summary.split('.')[0] + '.';
-                    this.agent.speak(`${info.title}: ${shortSummary}`);
+                    await this._speak(`${info.title}: ${shortSummary}`);
                     return;
                 }
 
-                this.agent.speak(`I couldn't find anything about ${term} in the archives.`);
+                await this._speak(`I couldn't find anything about ${term} in the archives.`);
                 return;
             }
         }
@@ -197,6 +277,16 @@ export class SocialEngine {
         if (sentiment !== 0) {
             profile.trustScore = Math.max(0, Math.min(100, profile.trustScore + sentiment));
             console.log(`[SocialEngine] Trust updated for ${entityName}: ${profile.trustScore} (Delta: ${sentiment})`);
+
+            // Update Blackboard
+            if (this.agent.scheduler?.blackboard) {
+                // This is expensive to do every chat, maybe optimize? 
+                // For now, it's fine.
+                const trusted = Array.from(this.profiles.values())
+                    .filter(p => p.trustScore > 20)
+                    .map(p => p.username);
+                this.agent.scheduler.blackboard.set('social_context.trusted_players', trusted, 'SOCIAL');
+            }
         }
 
         // Emit signal for Brain to react (LLM Fallback)
@@ -224,7 +314,7 @@ export class SocialEngine {
             // If Friend: Warm greeting if not seen recently
             if (this.FRIENDS.includes(p.username)) {
                 if (!profile.lastGreeting || Date.now() - profile.lastGreeting > 300000) {
-                    this.agent.speak(`Chào bồ, ${p.username}! Bạn cần giúp gì không?`);
+                    await this._speak(`Chào bồ, ${p.username}! Bạn cần giúp gì không?`);
                     profile.lastGreeting = Date.now();
                 }
             }

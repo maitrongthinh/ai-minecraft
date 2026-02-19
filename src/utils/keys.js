@@ -19,15 +19,14 @@ export const loadEnv = () => {
         }
 
         // 2. Load keys.json (Higher priority - overrides)
+        // 2. Load keys.json (DEPRECATED: Security Risk - Removed)
+        // keys.json should NOT be loaded into process.env automatically.
+        // Use .env for secrets or a secure vault.
+        /*
         if (existsSync('./keys.json')) {
-            const keysConfig = JSON.parse(readFileSync('./keys.json', 'utf8'));
-            for (const [key, val] of Object.entries(keysConfig)) {
-                if (val && typeof val === 'string') {
-                    process.env[key] = val;
-                }
-            }
-            console.log('[System] Loaded and prioritized keys.json');
+            console.warn('[System] ⚠️ Loading keys.json is deprecated for security reasons. Please use .env');
         }
+        */
     } catch (err) {
         console.warn('[System] Error loading configurations:', err.message);
     }

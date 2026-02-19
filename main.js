@@ -46,14 +46,23 @@ if (process.env.MINECRAFT_PORT) {
 if (process.env.MINDSERVER_PORT) {
     settings.mindserver_port = process.env.MINDSERVER_PORT;
 }
-if (process.env.PROFILES && JSON.parse(process.env.PROFILES).length > 0) {
-    settings.profiles = JSON.parse(process.env.PROFILES);
+if (process.env.PROFILES) {
+    try {
+        const parsed = JSON.parse(process.env.PROFILES);
+        if (parsed.length > 0) settings.profiles = parsed;
+    } catch (e) {
+        console.warn('Invalid PROFILES env var:', e.message);
+    }
 }
 if (process.env.INSECURE_CODING) {
     settings.allow_insecure_coding = true;
 }
 if (process.env.BLOCKED_ACTIONS) {
-    settings.blocked_actions = JSON.parse(process.env.BLOCKED_ACTIONS);
+    try {
+        settings.blocked_actions = JSON.parse(process.env.BLOCKED_ACTIONS);
+    } catch (e) {
+        console.warn('Invalid BLOCKED_ACTIONS env var:', e.message);
+    }
 }
 if (process.env.MAX_MESSAGES) {
     settings.max_messages = process.env.MAX_MESSAGES;
@@ -84,14 +93,6 @@ if (process.platform === 'win32') {
     } catch (e) {
         // netstat returns exit code 1 if no matches found
     }
-}
-
-// Phase 8: Cognee Auto-Service
-import { cogneeManager } from './src/memory/CogneeServiceManager.js';
-try {
-    await cogneeManager.start();
-} catch (err) {
-    console.warn('[Main] Cognee Manager failed to start (non-critical):', err.message);
 }
 
 Mindcraft.init(true, settings.mindserver_port, settings.auto_open_ui);

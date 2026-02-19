@@ -120,18 +120,21 @@ export class GPT {
                 model: model,
                 messages,
                 stop: stop_seq,
-                api_key: this.openai.apiKey,
                 uses: this.params?.uses ?? 1000,
                 ...modelOptions
             };
 
-            delete pack.apiKey;
+            // Phase 1 Security: Do not embed api_key in payload (Client handles it)
             if (model.includes('o1') || model.includes('o3') || model.includes('5')) {
                 delete pack.stop;
             }
 
             console.log('[GPT] Sending Request to:', this.url || 'OpenAI');
-            console.log('[GPT] Payload Excerpt:', JSON.stringify(pack.messages.slice(-2), null, 2));
+            const payloadMeta = pack.messages.slice(-2).map(m => ({
+                role: m.role,
+                chars: typeof m.content === 'string' ? m.content.length : 0
+            }));
+            console.log('[GPT] Payload Meta:', JSON.stringify(payloadMeta));
             const maxAttempts = this.params?.requestRetries ?? 3;
             const baseDelay = this.params?.retryDelayMs ?? 800;
             let completion = null;

@@ -2,7 +2,7 @@
   "survival_health_threshold": 6,
   "survival_panic_distance": 10,
   "survival_drowning_tolerance": 10,
-  "combat_strafe_distance": 4.5008142302151315,
-  "combat_attack_urgency": 1.228015842809138,
-  "combat_reach_distance": 3.131600664790013
+  "combat_strafe_distance": 3.6362181444185655,
+  "combat_attack_urgency": 1.2998817555750564,
+  "combat_reach_distance": 2.7407738388079323
 }

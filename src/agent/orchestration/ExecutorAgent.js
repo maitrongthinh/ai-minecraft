@@ -37,11 +37,20 @@ export class ExecutorAgent {
         for (const step of plan) {
             this.currentStep = step.id;
 
-            console.log(`[ExecutorAgent] Step ${step.id}/${plan.length}: ${step.task}`);
-
             if (signal && signal.aborted) {
                 console.log('[ExecutorAgent] Plan execution aborted by signal');
                 break;
+            }
+
+            // Report current step to Blackboard
+            if (this.agent.scheduler?.blackboard) {
+                this.agent.scheduler.blackboard.updateSystem2({
+                    current_step: {
+                        id: step.id,
+                        task: step.task,
+                        status: 'executing'
+                    }
+                });
             }
 
             const result = await this._executeStep(step, { signal });
@@ -65,6 +74,14 @@ export class ExecutorAgent {
                     error: result.message
                 });
 
+                // Emit Failure Signal for EvolutionEngine
+                globalBus.emitSignal(SIGNAL.TASK_FAILED, {
+                    step: step.id,
+                    task: step.task,
+                    error: result.message,
+                    context: step.params
+                });
+
                 // Check if we should abort
                 if (result.abort) {
                     console.log('[ExecutorAgent] Aborting plan execution');
@@ -72,7 +89,7 @@ export class ExecutorAgent {
                 }
             }
 
-            // Emit progress
+            // Emit Progress Signal
             globalBus.emitSignal(SIGNAL.TASK_COMPLETED, {
                 step: step.id,
                 total: plan.length,
@@ -105,14 +122,23 @@ export class ExecutorAgent {
                 // Phase 1: Locking Check (Combat vs System2)
                 // If we can't get the lock (held by Combat), we wait or abort
                 if (this.agent.locks && this.agent.locks.move) {
-                    const acquired = await this.agent.locks.move.acquire('system2', 2000); // 2s timeout
-                    if (!acquired) {
-                        console.warn(`[ExecutorAgent] Step ${step.task} paused/failed: Body locked by ${this.agent.locks.move.getOwner()}`);
+                    const owner = this.agent.locks.move.getOwner();
+                    if (owner && owner !== 'system2') {
+                        console.warn(`[ExecutorAgent] Body locked by ${owner}. Yielding...`);
                         if (attempt < this.maxRetries) {
                             await new Promise(r => setTimeout(r, 1000));
-                            continue; // Retry loop
+                            continue;
                         }
-                        return { success: false, message: 'Body locked by high-priority process (Combat?)', abort: false };
+                    }
+
+                    const acquired = await this.agent.locks.move.acquire('system2', 1000); // Reduced timeout for faster yielding
+                    if (!acquired) {
+                        console.warn('[ExecutorAgent] Failed to acquire move lock.');
+                        if (attempt < this.maxRetries) {
+                            await new Promise(r => setTimeout(r, 1000));
+                            continue;
+                        }
+                        return { success: false, message: 'Body locked by high-priority process', abort: false };
                     }
                 }
 
@@ -121,8 +147,7 @@ export class ExecutorAgent {
                     // 1. Pre-condition Check for fatal errors
                     if (!this.agent.bot || !this.agent.bot.entity) {
                         console.warn('[ExecutorAgent] 🛑 Bot disconnected or dead. Aborting task.');
-                        executionResult = { success: false, message: 'Bot disconnected or dead', abort: true };
-                        break; // Fatal error, do not retry
+                        return { success: false, message: 'Bot disconnected or dead', abort: true };
                     }
 
                     // 2. Execution via ToolRegistry or Fallback

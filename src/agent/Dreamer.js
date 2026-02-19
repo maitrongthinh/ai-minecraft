@@ -83,4 +83,9 @@ export class Dreamer {
     async searchMemories(query) {
         return await this.vectorStore.search(query);
     }
+
+    // Phase 2 Fix: API Compatibility with MemorySystem
+    async search(query, limit = 5) {
+        return await this.vectorStore.search(query, limit);
+    }
 }

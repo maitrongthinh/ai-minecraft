@@ -12,6 +12,7 @@ export class FallDamageReflex {
     start() {
         if (this.active) return;
         this.active = true;
+        this.bot = this.agent.bot; // Refresh bot reference in case of reconnection
 
         // Listen for cliff hazards detected by EnvironmentMonitor
         this.unsubscribe = globalBus.subscribe(SIGNAL.ENV_CLIFF_AHEAD, this.handleCliff.bind(this));
@@ -156,14 +157,27 @@ export class FallDamageReflex {
         if (this._fallMonitor) return;
 
         this._fallMonitor = setInterval(() => {
-            if (!this.active || !this.bot?.entity) return;
+            if (!this.active) return;
+            const bot = this.agent?.bot || this.bot;
+            if (!bot?.entity) return;
 
-            const vel = this.bot.entity.velocity;
-            if (vel && vel.y < -0.8) {
-                // Falling fast — try MLG
-                this.attemptMLGBucket();
+            // Phase 2: High-Precision MLG (V3.5)
+            // Use PhysicsPredictor for tick-perfect timing
+            const predictor = this.agent.reflexSystem?.physics || this.agent.physics;
+            if (predictor) {
+                const ticks = predictor.getTicksUntilImpact();
+                // 3 ticks = 150ms. Perfect window for equip + look + place
+                if (ticks !== null && ticks <= 3) {
+                    this.attemptMLGBucket();
+                }
+            } else {
+                // Fallback to velocity check if predictor missing
+                const vel = this.bot.entity.velocity;
+                if (vel && vel.y < -0.8) {
+                    this.attemptMLGBucket();
+                }
             }
-        }, 200); // Check every 200ms
+        }, 50); // High frequency check (1 game tick approx)
     }
 
     _stopFallMonitor() {

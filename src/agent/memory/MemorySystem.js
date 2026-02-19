@@ -5,8 +5,7 @@
  */
 
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
-import { writeFile } from 'fs/promises';
+import fs from 'fs';
 import settings from '../../../settings.js';
 
 const SOURCE = {
@@ -30,7 +29,7 @@ export class MemorySystem {
         this.name = agent.name;
 
         // RAM Persistence
-        this.memory_fp = `./bots/${this.name}/memory.json`;
+        this.memory_fp = `./bots/${this.name}/data/memory.json`;
         this.turns = []; // Chat history (RAM)
         this.memory = ''; // Long-term summary (RAM)
         this.errors = []; // Error tracking
@@ -44,7 +43,6 @@ export class MemorySystem {
         this.ram = {};
 
         // Backend references
-        this.cognee = null;
         this.dreamer = null;
         this.queryGenerator = null;
         this.worldId = null;
@@ -61,22 +59,21 @@ export class MemorySystem {
     }
 
     getHistory() {
-        return this.turns;
+        return [...this.turns]; // Return copy to prevent external mutation
     }
 
     updateName(name) {
         this.name = name;
-        this.memory_fp = `./bots/${this.name}/memory.json`;
+        this.memory_fp = `./bots/${this.name}/data/memory.json`;
     }
 
-    init() {
-        this.cognee = this.agent.cogneeMemory;
+    initialize() {
         this.dreamer = this.agent.dreamer;
         this.worldId = this.agent.world_id;
         this._unsubscribers = [];
 
         console.log('[MemorySystem] Backends connected:', {
-            Graph: !!this.cognee,
+            Graph: false,
             Vector: !!this.dreamer
         });
 
@@ -176,7 +173,7 @@ export class MemorySystem {
 
         if (this._saveTimer) clearTimeout(this._saveTimer);
 
-        this._saveTimer = setTimeout(() => {
+        this._saveTimer = setTimeout(async () => {
             try {
                 const data = {
                     memory: this.memory,
@@ -187,9 +184,9 @@ export class MemorySystem {
 
                 // Ensure directory exists
                 const dir = this.memory_fp.substring(0, this.memory_fp.lastIndexOf('/'));
-                if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-                writeFileSync(this.memory_fp, JSON.stringify(data, null, 2));
+                await fs.promises.writeFile(this.memory_fp, JSON.stringify(data, null, 2));
                 this._savePending = false;
                 // console.log('[MemorySystem] 💾 Saved memory to disk');
             } catch (err) {
@@ -227,23 +224,7 @@ export class MemorySystem {
             return { source: SOURCE.RAM, data: this.ram[queryStr] };
         }
 
-        // 2. Check Graph Memory (Cognee)
-        if (this.cognee) {
-            try {
-                const results = await this.cognee.recall(this.worldId, queryStr, limit);
-                const memories = Array.isArray(results)
-                    ? results
-                    : (results?.success ? (results.results || []) : []);
-                if (memories.length > 0) {
-                    this.stats.hits.GRAPH++;
-                    return { source: SOURCE.GRAPH, data: memories };
-                }
-            } catch (err) {
-                console.warn('[MemorySystem] Graph query failed:', err.message);
-            }
-        }
-
-        // 3. Check Vector Memory (VectorStore)
+        // 2. Check Vector Memory (VectorStore)
         if (this.dreamer) {
             try {
                 const results = await this.dreamer.search(queryStr, limit);
@@ -270,8 +251,8 @@ export class MemorySystem {
 
     load() {
         try {
-            if (!existsSync(this.memory_fp)) return null;
-            const rawData = readFileSync(this.memory_fp, 'utf8').trim();
+            if (!fs.existsSync(this.memory_fp)) return null;
+            const rawData = fs.readFileSync(this.memory_fp, 'utf8').trim();
             if (!rawData) {
                 console.warn('[MemorySystem] Memory file is empty.');
                 return null;

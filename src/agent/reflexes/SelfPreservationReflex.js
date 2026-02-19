@@ -1,5 +1,6 @@
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
-import * as skills from '../../skills/library/movement_skills.js';
+import { moveAway } from '../../skills/library/retreat.js';
+import { goToPosition } from '../../skills/library/go_to.js';
 import * as world from '../../skills/library/world.js';
 
 /**
@@ -144,7 +145,7 @@ export class SelfPreservationReflex {
         this.active = true;
         this.agent.requestInterrupt();
 
-        await skills.moveAway(this.bot, 2);
+        await moveAway(this.bot, 2);
         this.active = false;
     }
 
@@ -169,10 +170,10 @@ export class SelfPreservationReflex {
         let nearestWater = world.getNearestBlock(this.bot, 'water', 15);
         if (nearestWater) {
             const pos = nearestWater.position;
-            await skills.goToPosition(this.bot, pos.x, pos.y, pos.z, 0.5);
+            await goToPosition(this.bot, pos.x, pos.y, pos.z, 0.5);
         } else {
             // 3. Move away blindly
-            await skills.moveAway(this.bot, 5);
+            await moveAway(this.bot, 5);
         }
 
         this.active = false;
@@ -192,7 +193,7 @@ export class SelfPreservationReflex {
             this.active = true;
             this.agent.requestInterrupt();
 
-            await skills.moveAway(this.bot, panicDist);
+            await moveAway(this.bot, panicDist);
             this.active = false;
 
             // Report to EvolutionEngine

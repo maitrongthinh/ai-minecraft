@@ -81,13 +81,7 @@ export class DeathRecovery {
         console.log(`[DeathRecovery] Death recorded at ${pos}. Recoverable: ${!isUnrecoverable}`);
 
         // Gap 1 Fix: Store death event to Cognee for long-term learning
-        if (this.agent.cogneeMemory && this.agent.world_id) {
-            this.agent.cogneeMemory.storeExperience(
-                this.agent.world_id,
-                [`Died at position (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)}) from: ${deathMsg}. Dimension: ${dimension}`],
-                { type: 'death', position: { x: pos.x, y: pos.y, z: pos.z }, cause: deathMsg, recoverable: !isUnrecoverable }
-            ).catch(err => console.warn('[DeathRecovery] Failed to log death to Cognee:', err.message));
-        }
+        // MemorySystem handles death recording via signals now.
     }
 
     async onSpawn() {

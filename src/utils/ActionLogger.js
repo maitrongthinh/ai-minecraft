@@ -8,7 +8,7 @@
  * - API: AI model requests/responses
  * - ACTION: Bot actions (mine, craft, move)
  * - SKILL: Skill learning/optimization
- * - MEMORY: Cognee store/recall
+ * - MEMORY: MemorySystem store/recall
  * - REFLEX: Death recovery, watchdog
  * - ERROR: Errors and exceptions
  * - DEBUG: Debug commands and status

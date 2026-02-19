@@ -61,10 +61,33 @@ export function createMindServer(host_public = false, port = 8080, agentControl 
     app.use(express.static(path.join(__dirname, 'public')));
     app.use('/bots', express.static(path.join(process.cwd(), 'bots')));
 
+    // Authentication Middleware
+    io.use((socket, next) => {
+        const serverToken = process.env.MINDSERVER_TOKEN;
+        // If no token configured, allow all (Dev Mode) - Warn once?
+        if (!serverToken) {
+            // STRICT MODE: Only allow localhost if no token
+            const ip = socket.handshake.address;
+            if (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1') {
+                console.warn('[MindServer] ⚠️ NO TOKEN: Allowed Localhost connection.');
+                return next();
+            }
+            console.error('[MindServer] 🛑 BLOCKED External connection (No Token Configured). Set MINDSERVER_TOKEN!');
+            return next(new Error('Authentication Required'));
+        }
+
+        const clientToken = socket.handshake.auth?.token || socket.handshake.headers?.token;
+        if (clientToken === serverToken) {
+            return next();
+        }
+        console.warn(`[MindServer] 🛑 Blocked unauthenticated connection from ${socket.id}`);
+        next(new Error('Authentication failed'));
+    });
+
     // Socket.io connection handling
     io.on('connection', (socket) => {
         let curAgentName = null;
-        console.log('Client connected');
+        console.log(`Client connected: ${socket.id}`);
 
         agentsStatusUpdate(socket);
 
@@ -176,11 +199,16 @@ export function createMindServer(host_public = false, port = 8080, agentControl 
         });
 
         socket.on('destroy-agent', (agentName) => {
+            // Phase 1 Security Fix: Disable Remote Destruction
+            console.warn(`[MindServer] 🛡️ Blocked destroy-agent request for ${agentName} (Security Policy)`);
+            socket.emit('error', 'Remote destruction is disabled by security policy.');
+            /*
             if (agent_connections[agentName]) {
                 control.destroyAgent(agentName);
                 delete agent_connections[agentName];
             }
             agentsStatusUpdate();
+            */
         });
 
         socket.on('stop-all-agents', () => {
@@ -284,7 +312,7 @@ function addListener(listener_socket) {
             for (let listener of agent_listeners) {
                 listener.emit('state-update', states);
             }
-        }, 1000);
+        }, 2000);
     }
 }
 

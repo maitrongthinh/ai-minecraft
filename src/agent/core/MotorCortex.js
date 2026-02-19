@@ -113,6 +113,27 @@ export class MotorCortex {
             this.bot.look(currentYaw, currentPitch, true);
         }, 10); // High-fidelity interpolation (10ms)
     }
+
+    /**
+     * Executes a synchronized jump (useful for crits or parkour)
+     */
+    jumpSync() {
+        if (!this.bot?.entity) return;
+        this.bot.setControlState('jump', true);
+        setTimeout(() => {
+            if (this.bot?.entity) this.bot.setControlState('jump', false);
+        }, 50);
+    }
+
+    /**
+     * Immediate movement halt
+     */
+    panicStop() {
+        if (!this.bot) return;
+        this.bot.clearControlStates();
+        // Force server-side sync with a look update
+        this.bot.look(this.bot.entity.yaw, this.bot.entity.pitch, true);
+    }
 }
 
 export default MotorCortex;

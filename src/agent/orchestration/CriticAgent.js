@@ -32,7 +32,7 @@ export class CriticAgent {
      * Review a plan for safety and feasibility
      * @param {Array} plan - Plan steps from PlannerAgent
      * @param {object} context - Current context
-     * @returns {Promise<{approved: boolean, issues: Array, suggestions: Array}>}
+     * @returns {Promise<{approved: boolean, issues: Array, suggestions: Array, scores: object}>}
      */
     async review(plan, context = {}) {
         console.log(`[CriticAgent] Reviewing plan with ${plan.length} steps`);
@@ -40,26 +40,35 @@ export class CriticAgent {
         const issues = [];
         const suggestions = [];
 
+        // Initial scores
+        const scores = {
+            safety: 1.0,
+            resource: 1.0,
+            efficiency: 1.0
+        };
+
         // Get current bot state
         const botState = this._getBotState();
 
         // 1. Safety checks
         const safetyIssues = this._checkSafety(plan, botState);
         issues.push(...safetyIssues);
+        scores.safety = this._calculateSafetyScore(safetyIssues);
 
         // 2. Resource feasibility
         const resourceIssues = await this._checkResources(plan, botState);
         issues.push(...resourceIssues);
+        scores.resource = this._calculateResourceScore(resourceIssues);
 
-        // 3. Skill availability
+        // 3. Skill availability & Efficiency
         const skillIssues = this._checkSkillAvailability(plan);
         issues.push(...skillIssues);
 
-        // 4. Order logic
         const orderIssues = this._checkPlanOrder(plan);
         issues.push(...orderIssues);
+        scores.efficiency = this._calculateEfficiencyScore(skillIssues, orderIssues, plan.length);
 
-        // 5. Generate suggestions for issues
+        // 4. Generate suggestions for issues
         for (const issue of issues) {
             const suggestion = this._generateSuggestion(issue, plan);
             if (suggestion) {
@@ -67,24 +76,55 @@ export class CriticAgent {
             }
         }
 
-        // Determine approval
-        const criticalIssues = issues.filter(i => i.severity === 'critical');
-        const approved = criticalIssues.length === 0;
+        // Determine approval based on weighted scores
+        // Critical threshold: Safety MUST be > 0.8, Resource MUST be > 0.5
+        const approved = scores.safety > 0.8 && scores.resource > 0.5;
 
         if (!approved) {
-            console.log(`[CriticAgent] Plan REJECTED: ${criticalIssues.length} critical issues`);
+            console.log(`[CriticAgent] Plan REJECTED: Safety(${scores.safety.toFixed(2)}) Resource(${scores.resource.toFixed(2)})`);
         } else if (issues.length > 0) {
-            console.log(`[CriticAgent] Plan APPROVED with ${issues.length} warnings`);
+            console.log(`[CriticAgent] Plan APPROVED with ${issues.length} warnings. Efficiency: ${scores.efficiency.toFixed(2)}`);
         } else {
-            console.log('[CriticAgent] Plan APPROVED');
+            console.log('[CriticAgent] Plan APPROVED with perfect scores');
         }
 
         return {
             approved,
             issues,
             suggestions,
-            summary: this._generateReviewSummary(issues, approved)
+            scores,
+            summary: this._generateReviewSummary(issues, approved, scores)
         };
+    }
+
+    _calculateSafetyScore(issues) {
+        let score = 1.0;
+        for (const issue of issues) {
+            if (issue.severity === 'critical') score -= 0.3;
+            if (issue.severity === 'warning') score -= 0.1;
+        }
+        return Math.max(0, score);
+    }
+
+    _calculateResourceScore(issues) {
+        let score = 1.0;
+        for (const issue of issues) {
+            if (issue.severity === 'critical') score -= 0.4;
+            if (issue.severity === 'warning') score -= 0.15;
+        }
+        return Math.max(0, score);
+    }
+
+    _calculateEfficiencyScore(skillIssues, orderIssues, planLength) {
+        let score = 1.0;
+        // Penalize missing skills
+        score -= skillIssues.length * 0.1;
+        // Penalize bad order
+        score -= orderIssues.length * 0.2;
+        // Slight penalty for overly long plans if they have many warnings
+        if (planLength > 10) score -= 0.1;
+
+        return Math.max(0, score);
     }
 
     /**
@@ -348,19 +388,19 @@ export class CriticAgent {
      * Generate review summary
      * @private
      */
-    _generateReviewSummary(issues, approved) {
+    _generateReviewSummary(issues, approved, scores) {
         if (issues.length === 0) {
-            return 'Plan looks good! All checks passed.';
+            return `Plan APPROVED with perfect scores! (Safety: ${scores.safety.toFixed(2)}, Resource: ${scores.resource.toFixed(2)}, Efficiency: ${scores.efficiency.toFixed(2)})`;
         }
 
         const critical = issues.filter(i => i.severity === 'critical').length;
         const warnings = issues.filter(i => i.severity === 'warning').length;
 
         if (!approved) {
-            return `Plan BLOCKED: ${critical} critical issues must be resolved.`;
+            return `Plan BLOCKED: ${critical} critical issues must be resolved. Minimum safety threshold (0.80) or resource threshold (0.50) not met. Safety: ${scores.safety.toFixed(2)}, Resource: ${scores.resource.toFixed(2)}.`;
         }
 
-        return `Plan approved with ${warnings} warnings to consider.`;
+        return `Plan approved with ${warnings} warnings. Safety: ${scores.safety.toFixed(2)}, Resource: ${scores.resource.toFixed(2)}, Efficiency: ${scores.efficiency.toFixed(2)}.`;
     }
 
     /**

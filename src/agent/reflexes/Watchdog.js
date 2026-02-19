@@ -107,15 +107,7 @@ export class Watchdog {
         this.lastActionTime = Date.now(); // Reset to prevent spam loop
 
         // Gap 2 Fix: Log stuck event to Cognee for learning
-        if (this.agent.cogneeMemory && this.agent.world_id) {
-            const pos = this.agent.bot?.entity?.position;
-            const posStr = pos ? `(${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)})` : 'unknown';
-            this.agent.cogneeMemory.storeExperience(
-                this.agent.world_id,
-                [`Bot got stuck at position ${posStr} for ${this.STUCK_TIMEOUT / 1000} seconds. Emergency protocol triggered.`],
-                { type: 'stuck', position: pos ? { x: pos.x, y: pos.y, z: pos.z } : null }
-            ).catch(err => console.warn('[Watchdog] Failed to log stuck event to Cognee:', err.message));
-        }
+        // ContextManager or ActionLogger handles this now.
 
         // BRAIN REFACTOR Phase D: Log to history.addError for failure-aware planning
         if (this.agent.history) {

@@ -6,6 +6,15 @@ import { CriticAgent } from './CriticAgent.js';
 import { ExecutorAgent } from './ExecutorAgent.js';
 import { sendSystem2TraceToServer } from '../mindserver_proxy.js';
 
+const CognitiveState = {
+    IDLE: 'idle',
+    PLANNING: 'planning',
+    VALIDATING: 'validating',
+    EXECUTING: 'executing',
+    EVALUATING: 'evaluating',
+    DEGRADED: 'degraded'
+};
+
 /**
  * System2Loop - Async Orchestration Controller
  * 
@@ -14,6 +23,7 @@ import { sendSystem2TraceToServer } from '../mindserver_proxy.js';
  * Runs asynchronously in background while System 1 handles reflexes.
  * 
  * Features:
+ * - Cognitive State Machine: Formal transitions (IDLE, PLANNING, VALIDATING, EXECUTING, EVALUATING)
  * - Graceful Degradation: Falls back to Survival Mode on failure
  * - Human Override: Responds to SIGNAL.HUMAN_OVERRIDE
  * - Replanning: Auto-replans on execution failure
@@ -21,10 +31,11 @@ import { sendSystem2TraceToServer } from '../mindserver_proxy.js';
 export class System2Loop {
     constructor(agent) {
         this.agent = agent;
-        
+
         // CRITICAL: Brain may not be initialized yet - defer sub-agent creation
         this.brain = agent.brain;
         this.initialized = false;
+        this.state = CognitiveState.IDLE;
 
         // Initialize sub-agents
         this.planner = new PlannerAgent(agent);
@@ -32,7 +43,6 @@ export class System2Loop {
         this.executor = new ExecutorAgent(agent);
 
         // State
-        this.isRunning = false;
         this.currentGoal = null;
         this.currentPlan = null;
         this.failureCount = 0;
@@ -64,6 +74,28 @@ export class System2Loop {
         return trace;
     }
 
+    _setState(newState) {
+        if (this.state === newState) return;
+
+        const oldState = this.state;
+        this.state = newState;
+        console.log(`[System2Loop] State transition: ${oldState} -> ${newState}`);
+        this._trace('state_change', newState, `Transitioned from ${oldState} to ${newState}`);
+
+        // Sync with Blackboard
+        if (this.agent.scheduler?.blackboard) {
+            this.agent.scheduler.blackboard.updateSystem2({
+                plan_phase: newState
+            });
+        }
+
+        globalBus.emitSignal(SIGNAL.SYSTEM2_STATE_CHANGE, {
+            from: oldState,
+            to: newState,
+            goal: this.currentGoal
+        });
+    }
+
     /**
      * Setup signal handlers
      * @private
@@ -77,9 +109,20 @@ export class System2Loop {
 
         // React to critical threats
         globalBus.subscribe(SIGNAL.HEALTH_CRITICAL, () => {
-            if (this.isRunning) {
+            if (this.state !== CognitiveState.IDLE && this.state !== CognitiveState.DEGRADED) {
                 console.log('[System2Loop] Critical health - pausing plan');
                 this._enterSurvivalMode('Critical health');
+            }
+        });
+
+        // Auto-Resume on Recovery (Fix Task Amnesia)
+        globalBus.subscribe(SIGNAL.SYSTEM2_RECOVERED, async (event) => {
+            const { previousGoal } = event.payload;
+            if (previousGoal && this.state === CognitiveState.IDLE) {
+                console.log(`[System2Loop] 🔄 Resuming interrupted goal: "${previousGoal}"`);
+                // Small delay to ensure state stability
+                await new Promise(r => setTimeout(r, 1000));
+                await this.processGoal(previousGoal);
             }
         });
     }
@@ -94,11 +137,20 @@ export class System2Loop {
         console.log(`[System2Loop] Goal: "${goal}"`);
         this._trace('lifecycle', 'goal_received', `New goal: ${goal}`);
 
-        this.isRunning = true;
+        this._setState(CognitiveState.PLANNING);
         this.currentGoal = goal;
         this.failureCount = 0;
         this.abortController = new AbortController();
         const signal = this.abortController.signal;
+
+        // Initial Blackboard setup
+        if (this.agent.scheduler?.blackboard) {
+            this.agent.scheduler.blackboard.updateSystem2({
+                active_goal: goal,
+                current_step: null,
+                last_failure: null
+            });
+        }
 
         globalBus.emitSignal(SIGNAL.SYSTEM2_START, { goal });
         this._trace('lifecycle', 'start', 'System2 loop started', { goal });
@@ -109,7 +161,8 @@ export class System2Loop {
             this._trace('plan', 'start', 'Planner decomposition started');
             const planResult = await this.planner.decompose(goal);
 
-            if (!planResult.success) {
+            if (!planResult.success || signal.aborted) {
+                if (signal.aborted) throw new Error('AbortError');
                 this._trace('plan', 'failed', 'Planner decomposition failed', { reason: planResult.reasoning });
                 return this._handleFailure('Planning failed', planResult.reasoning);
             }
@@ -124,7 +177,8 @@ export class System2Loop {
                 }))
             });
 
-            // Phase 2: Critique
+            // Phase 2: Validating (Critique)
+            this._setState(CognitiveState.VALIDATING);
             console.log('[System2Loop] Phase 2: Safety Review...');
             this._trace('critic', 'start', 'Critic safety review started');
             const context = await this._getCurrentContext();
@@ -164,16 +218,8 @@ export class System2Loop {
                 });
             }
 
-            // Log any warnings
-            if (reviewResult.issues.length > 0) {
-                console.log(`[System2Loop] Warnings: ${reviewResult.issues.length}`);
-                reviewResult.issues.forEach(i => console.log(`  - ${i.message}`));
-                this._trace('critic', 'warning', 'Critic warnings detected', {
-                    issues: reviewResult.issues.map(i => i.message)
-                });
-            }
-
-            // Phase 3: Execution
+            // Phase 3: Executing
+            this._setState(CognitiveState.EXECUTING);
             console.log('[System2Loop] Phase 3: Executing plan...');
             this._trace('execute', 'start', 'Execution started', { steps: this.currentPlan.length });
             if (signal.aborted) throw new Error('AbortError');
@@ -195,13 +241,26 @@ export class System2Loop {
                 return this._handleFailure('Execution failed', `${execResult.failed.length} steps failed (Non-retryable or max retries exceeded)`);
             }
 
+            // Phase 4: Evaluating (Post-execution reflection)
+            this._setState(CognitiveState.EVALUATING);
+            console.log('[System2Loop] Phase 4: Evaluating results...');
+            const evaluation = await this._evaluateResult(goal, execResult);
+            this._trace('evaluation', 'complete', 'Post-goal evaluation complete', { evaluation });
+
             // Success!
             console.log('[System2Loop] ========== GOAL COMPLETE ==========');
+            this._setState(CognitiveState.IDLE);
+            if (this.agent.scheduler?.blackboard) {
+                this.agent.scheduler.blackboard.updateSystem2({
+                    active_goal: null,
+                    current_step: null
+                });
+            }
             this._trace('lifecycle', 'complete', 'Goal completed successfully', {
                 goal,
-                completed: execResult.completed
+                completed: execResult.completed,
+                evaluation
             });
-            this.isRunning = false;
             this.currentGoal = null;
             this.currentPlan = null;
 
@@ -210,6 +269,7 @@ export class System2Loop {
                 result: {
                     goal,
                     stepsCompleted: execResult.completed,
+                    evaluation,
                     message: `Goal achieved: ${goal}`
                 }
             };
@@ -218,6 +278,7 @@ export class System2Loop {
             if (error.message === 'AbortError') {
                 console.log('[System2Loop] Goal execution aborted by user.');
                 this._trace('lifecycle', 'aborted', 'Goal execution aborted by user');
+                this._setState(CognitiveState.IDLE);
                 return { success: false, result: 'Aborted' };
             }
             console.error('[System2Loop] Unexpected error:', error);
@@ -227,16 +288,39 @@ export class System2Loop {
     }
 
     /**
+     * Placeholder for post-execution evaluation logic
+     * @private
+     */
+    async _evaluateResult(goal, result) {
+        // In the future, this would call an LLM to reflect on the success and update long-term knowledge
+        return {
+            status: 'success',
+            reflection: `Successfully completed ${result.completed} steps for goal "${goal}".`
+        };
+    }
+
+
+    /**
      * Get current context for planning/review
      * @private
      */
     async _getCurrentContext() {
-        if (this.agent.contextManager) {
-            return await this.agent.contextManager.buildContext('planning');
+        const blackboard = this.agent.scheduler?.blackboard;
+        if (!blackboard) {
+            console.warn('[System2Loop] ⚠️ Blackboard not available for context fetching.');
+            return {
+                inventory: {},
+                vitals: {},
+                perception: {}
+            };
         }
-        return {};
-    }
 
+        return {
+            inventory: blackboard.get('inventory_cache') || {},
+            vitals: blackboard.get('self_state') || {},
+            perception: blackboard.get('perception_snapshot') || {}
+        };
+    }
     /**
      * Apply critic suggestions to plan
      * @private
@@ -330,7 +414,12 @@ export class System2Loop {
         console.log(`[System2Loop] FAILURE: ${type} - ${reason}`);
         this._trace('lifecycle', 'failed', `${type}: ${reason}`);
 
-        this.isRunning = false;
+        this._setState(CognitiveState.DEGRADED);
+        if (this.agent.scheduler?.blackboard) {
+            this.agent.scheduler.blackboard.updateSystem2({
+                last_failure: reason
+            });
+        }
         this._enterSurvivalMode(reason);
 
         globalBus.emitSignal(SIGNAL.SYSTEM2_DEGRADED, {
@@ -402,13 +491,12 @@ export class System2Loop {
         this._trace('override', 'received', 'Human override received', { payload });
 
         // Abort current execution
-        if (this.isRunning && this.abortController) {
+        if (this.state !== CognitiveState.IDLE && this.abortController) {
             this.abortController.abort();
-            this.isRunning = false;
         }
 
-        // Exit survival mode
-        this.survivalMode = false;
+        // Reset state
+        this._setState(CognitiveState.IDLE);
         this.failureCount = 0;
         if (this.recoveryTimer) {
             clearTimeout(this.recoveryTimer);
@@ -441,8 +529,7 @@ export class System2Loop {
      */
     getStatus() {
         return {
-            isRunning: this.isRunning,
-            survivalMode: this.survivalMode,
+            state: this.state,
             currentGoal: this.currentGoal,
             currentStep: this.executor.currentStep,
             totalSteps: this.currentPlan?.length || 0,
@@ -454,6 +541,32 @@ export class System2Loop {
      * Check if System 2 is busy
      */
     isBusy() {
-        return this.isRunning;
+        return this.state !== CognitiveState.IDLE;
+    }
+
+    /**
+     * Internal trace for telemetry
+     * @private
+     */
+    _trace(type, event, message, data = {}) {
+        const trace = {
+            timestamp: Date.now(),
+            type,
+            event,
+            message,
+            state: this.state,
+            goal: this.currentGoal,
+            data
+        };
+
+        // Emit for observability
+        globalBus.emitSignal(`system2.trace.${type}`, trace);
+
+        // Send to mindserver if available
+        sendSystem2TraceToServer(this.agent.name, trace);
+
+        if (settings.debug_mode) {
+            console.log(`[System2Trace] [${type.toUpperCase()}] ${event}: ${message}`);
+        }
     }
 }

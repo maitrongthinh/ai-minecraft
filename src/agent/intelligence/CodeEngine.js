@@ -1,10 +1,11 @@
-import { SkillLibrary } from '../../skills/SkillLibrary.js';
-import { lockdown } from '../library/lockdown.js';
+import { SkillLibrary } from '../library/skill_library.js';
+import { initLockdown } from '../library/lockdown.js';
 import { JsonSanitizer } from '../../utils/JsonSanitizer.js';
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
 import { ActionLogger } from '../../utils/ActionLogger.js';
 import { getBotOutputSummary } from '../../utils/mcdata.js';
 import { CodeSandbox } from '../core/CodeSandbox.js';
+// Legacy skills import removed
 
 /**
  * CodeEngine: Unified JS Execution & Learning System
@@ -100,12 +101,18 @@ export class CodeEngine {
         if (this.agent.bot?.modes && typeof this.agent.bot.modes.pause === 'function') {
             this.agent.bot.modes.pause('unstuck');
         }
-        lockdown();
+        initLockdown();
 
         let messages = agent_history.getHistory();
 
         // Inject Context
         let systemPrompt = 'Code generation started. You MUST wrap your code in a javascript codeblock: ```javascript ... ```';
+
+        // Inject Available Skills List to prevent hallucination
+        const availableSkills = Object.keys(skills).join(', ');
+        systemPrompt += `\n\nAVAILABLE SKILLS: ${availableSkills}`;
+        systemPrompt += `\nUse "skills.skillName()" to call them. Do NOT make up new skills.`;
+
         if (this.referenceCode) {
             systemPrompt += `\n\n📚 REFERENCE CODE (Adapt if useful):\n\`\`\`javascript\n${this.referenceCode.slice(0, 1000)}\n\`\`\``;
         }
@@ -115,7 +122,18 @@ export class CodeEngine {
         for (let i = 0; i < MAX_ATTEMPTS; i++) {
             if (this.agent.bot.interrupt_code || signal?.aborted) return null; // Check signal
 
+            // DEBUG: Log prompt for user
+            console.log('--- [CodeEngine] Generated Prompt ---');
+            console.log(JSON.stringify(messages, null, 2));
+            console.log('-------------------------------------');
+
             const res = await this.agent.prompter.promptCoding(JSON.parse(JSON.stringify(messages)));
+
+            // DEBUG: Log response for user
+            console.log('--- [CodeEngine] Raw Response ---');
+            console.log(res);
+            console.log('---------------------------------');
+
             const codeMatch = res.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
 
             if (!codeMatch) {
@@ -236,12 +254,39 @@ export class CodeEngine {
                 },
                 // Add commonly accessed properties
                 username: bot.username,
-                game: bot.game
+                // game: bot.game // Too complex/circular for ExternalCopy. 
+                // Only pass essential game data if strictly needed (e.g. dimension)
+                game: {
+                    gameMode: bot.game?.gameMode,
+                    difficulty: bot.game?.difficulty,
+                    dimension: bot.game?.dimension
+                }
             };
 
+            const skillsSource = {};
+
+            // Add skills from ToolRegistry
+            if (this.agent.toolRegistry && this.agent.toolRegistry.skills) {
+                for (const [name, metadata] of this.agent.toolRegistry.skills) {
+                    if (typeof metadata.execute === 'function') {
+                        skillsSource[name] = metadata.execute.toString();
+                    }
+                }
+            }
+
+            // Add custom skills
+            if (this.agent.customSkills) {
+                for (const key of Object.keys(this.agent.customSkills)) {
+                    if (typeof this.agent.customSkills[key] === 'function') {
+                        skillsSource[key] = this.agent.customSkills[key].toString();
+                    }
+                }
+            }
+
             const contextData = {
-                botState, // Pass the structured state
-                // Keep backward compatibility if needed, though we should transition to using botState
+                botState,
+                // Serialize skill functions as strings for the sandbox to eval
+                skillsSource: Object.assign({}, skillsSource),
                 bot_health: bot.health,
                 bot_food: bot.food,
                 bot_position: bot.entity.position

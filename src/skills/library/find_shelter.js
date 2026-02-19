@@ -1,5 +1,5 @@
 import { RetryHelper } from '../../utils/RetryHelper.js';
-import { goToNearestBlock } from './movement_skills.js';
+import { goToNearestBlock } from './go_to.js';
 
 export const metadata = {
     name: 'find_shelter',

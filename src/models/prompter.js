@@ -163,7 +163,7 @@ export class Prompter {
         // Task 25: Use RequestQueue
         let res = await this.requestQueue.add(
             () => model.sendRequest(messages, this.profile.conversing),
-            { priority: this.requestQueue.PRIORITY.NORMAL }
+            { priority: this.requestQueue.PRIORITY.CRITICAL } // Mindcraft Reborn: Critical Priority for Chat
         );
 
         // Reasoning Model Support: Strip <think> tags if present
@@ -195,6 +195,11 @@ export class Prompter {
                     .map(e => e.name || e.username || e.type)
                     .join(', ');
                 stats += `Nearby Entities: ${entities || 'None'}\n`;
+            }
+            // RESTORED VISION (Mindcraft Reborn)
+            if (this.agent.bot?.blockAt) {
+                const blocks = this._scanNearbyBlocks(this.agent.bot);
+                stats += `Nearby Blocks: ${blocks}\n`;
             }
             prompt = prompt.replaceAll('$STATS', stats);
         }
@@ -310,10 +315,10 @@ export class Prompter {
             let generation;
 
             try {
-                // Task 25: Use RequestQueue with NORMAL priority
+                // Task 25: Use RequestQueue with CRITICAL priority (Mindcraft Reborn)
                 generation = await this.requestQueue.add(
                     () => this.chat_model.sendRequest(messages, prompt),
-                    { priority: this.requestQueue.PRIORITY.NORMAL }
+                    { priority: this.requestQueue.PRIORITY.CRITICAL }
                 );
 
                 if (typeof generation !== 'string') {
@@ -475,5 +480,45 @@ export class Prompter {
 
         logFile = path.join(logDir, logFile);
         await fs.appendFile(logFile, String(logEntry), 'utf-8');
+    }
+
+    /**
+     * Mindcraft Reborn: Optimized Block Scanner
+     * Groups blocks by type to save tokens and prevent crash.
+     */
+    _scanNearbyBlocks(bot) {
+        if (!bot || !bot.blockAt) return "Unknown";
+
+        // Scan radius 10 (Don't go too far to save perf)
+        // We scan for "Any block that is not air"
+        // But doing a full volume scan is expensive in JS.
+        // Better to use findBlocks
+
+        try {
+            const positions = bot.findBlocks({
+                matching: (blk) => blk.name !== 'air' && blk.name !== 'void_air' && blk.name !== 'cave_air',
+                maxDistance: 10,
+                count: 100 // Reasonable limit
+            });
+
+            if (positions.length === 0) return "Empty/Air";
+
+            const groups = {};
+            for (const pos of positions) {
+                const block = bot.blockAt(pos);
+                if (block) {
+                    if (!groups[block.name]) groups[block.name] = 0;
+                    groups[block.name]++;
+                }
+            }
+
+            // Filter out extremely common blocks if list is too long?
+            // For now, just summarize
+            const parts = Object.entries(groups).map(([name, count]) => `${name} (x${count})`);
+            return parts.join(', ');
+
+        } catch (err) {
+            return `Scan Error: ${err.message}`;
+        }
     }
 }

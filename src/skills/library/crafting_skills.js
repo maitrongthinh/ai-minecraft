@@ -1,7 +1,7 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import { placeBlock, collectBlock } from "./interaction_skills.js"; // Circular dependency risk? Need to be careful.
-import { goToNearestBlock } from "./movement_skills.js"; // Assuming movement extracted or need to be.
+import { goToNearestBlock } from "./go_to.js";
 
 export function log(bot, message) {
     bot.output += message + '\n';

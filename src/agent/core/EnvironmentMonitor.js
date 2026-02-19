@@ -10,18 +10,84 @@ export class EnvironmentMonitor {
         this.intervalId = null;
         this.scanInterval = 250; // Fast scan for reflexes
         this.lastSignals = {}; // Debounce
+        this.blackboard = agent.scheduler?.blackboard;
     }
 
     start() {
         if (this.active) return;
         this.active = true;
         this.intervalId = setInterval(() => this.tick(), this.scanInterval);
-        console.log('[EnvironmentMonitor] Started.');
+
+        // Event Listeners for Hyper-Perception
+        this._onBlockUpdate = (oldBlock, newBlock) => this._handleBlockUpdate(oldBlock, newBlock);
+        this._onEntitySwing = (entity) => this._handleEntityAction('swing', entity);
+        this._onEntityHurt = (entity) => this._handleEntityAction('hurt', entity);
+
+        // Bind to bot
+        if (this.bot) {
+            this.bot.on('blockUpdate', this._onBlockUpdate);
+            this.bot.on('entitySwing', this._onEntitySwing);
+            this.bot.on('entityHurt', this._onEntityHurt);
+
+            // Sound Effect (if supported via raw packet or plugin, generic hook)
+            this.bot._client.on('sound_effect', (packet) => this._handleSound(packet));
+        }
+
+        console.log('[EnvironmentMonitor] Started with Hyper-Perception.');
     }
 
     stop() {
         this.active = false;
         if (this.intervalId) clearInterval(this.intervalId);
+
+        if (this.bot) {
+            this.bot.removeListener('blockUpdate', this._onBlockUpdate);
+            this.bot.removeListener('entitySwing', this._onEntitySwing);
+            this.bot.removeListener('entityHurt', this._onEntityHurt);
+        }
+    }
+
+    _handleBlockUpdate(oldBlock, newBlock) {
+        if (!this.bot || !this.bot.entity) return;
+        // Filter: Only close blocks (< 5m)
+        const dist = this.bot.entity.position.distanceTo(newBlock.position);
+        if (dist > 6) return;
+
+        // Ignore air-to-air (shouldn't happen but sanity check)
+        if (oldBlock.name === 'air' && newBlock.name === 'air') return;
+
+        this._emitSignal(SIGNAL.ENV_BLOCK_CHANGE, {
+            old: oldBlock.name,
+            new: newBlock.name,
+            position: newBlock.position,
+            distance: dist
+        });
+    }
+
+    _handleEntityAction(action, entity) {
+        if (!this.bot || !this.bot.entity || entity === this.bot.entity) return;
+        const dist = this.bot.entity.position.distanceTo(entity.position);
+        if (dist > 10) return;
+
+        this._emitSignal(SIGNAL.ENV_ENTITY_ACTION, {
+            action: action,
+            entity: entity.name || entity.username || 'unknown',
+            position: entity.position,
+            distance: dist
+        });
+    }
+
+    _handleSound(packet) {
+        // Rudimentary sound handler
+        // Packet structure depends on version, usually has soundId or soundName
+        // We just emit a generic noise signal for the Brain to interpret if needed
+        const soundId = packet.soundId || packet.soundName || 'unknown';
+        // Filter out common ambient noises to reduce spam?
+
+        this._emitSignal('env_sound', {
+            id: soundId,
+            category: packet.category
+        });
     }
 
     async tick() {
@@ -32,6 +98,16 @@ export class EnvironmentMonitor {
             this._scanEntities();
             this._trackTime();
             this._trackWeather();
+
+            // Sync with Blackboard (Sovereign 3.1)
+            if (this.blackboard) {
+                this.blackboard.updatePerception({
+                    biome: this.bot.biome || "unknown",
+                    is_raining: this.bot.isRaining,
+                    is_thundering: this.bot.isThundering,
+                    time_of_day: this.bot.time.timeOfDay
+                });
+            }
         } catch (err) {
             console.error('[EnvironmentMonitor] Error in tick:', err);
         }
@@ -123,6 +199,11 @@ export class EnvironmentMonitor {
                 position: nearbyHostile.position,
                 distance: nearbyHostile.position.distanceTo(this.bot.entity.position)
             });
+            if (this.blackboard) {
+                this.blackboard.set('perception_snapshot.nearest_threat', nearbyHostile.name, 'ENV_MONITOR');
+            }
+        } else if (this.blackboard) {
+            this.blackboard.set('perception_snapshot.nearest_threat', null, 'ENV_MONITOR');
         }
 
         // Check for players
@@ -164,6 +245,6 @@ export class EnvironmentMonitor {
         this.lastSignals[key] = now;
 
         // Clean up old keys implies simplified cache or periodic clear (omitted for brevity)
-        globalBus.emit(signal, data);
+        globalBus.emitSignal(signal, data);
     }
 }
