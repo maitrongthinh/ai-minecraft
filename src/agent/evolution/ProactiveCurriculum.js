@@ -12,6 +12,8 @@ export class ProactiveCurriculum {
         this.agent = agent;
         this.activeGoal = null;
         this.idleTimeout = null;
+        this.knownBiomes = new Set();
+        this.knownItems = new Set();
 
         // Basic Minecraft Tech Tree Objectives
         this.techTree = [
@@ -42,8 +44,38 @@ export class ProactiveCurriculum {
         if (this.idleTimeout) clearTimeout(this.idleTimeout);
         // Wait 5 seconds of idle before starting a new objective
         this.idleTimeout = setTimeout(() => {
+            this._checkMilestones();
             this.evaluateAndStartGoal();
         }, 5000);
+    }
+
+    _checkMilestones() {
+        const bot = this.agent.bot;
+        if (!bot) return;
+
+        // 1. Biome Discovery
+        const currentBiome = bot.biome?.name;
+        if (currentBiome && !this.knownBiomes.has(currentBiome)) {
+            this.knownBiomes.add(currentBiome);
+            if (this.agent.dreamer) {
+                this.agent.dreamer.memorize(`[MILESTONE] Discovered a new biome: ${currentBiome}`);
+                console.log(`[ProactiveCurriculum] 🏆 Milestone unlocked: Biome ${currentBiome}`);
+            }
+        }
+
+        // 2. Item Discovery
+        if (bot.inventory) {
+            const items = bot.inventory.items();
+            for (const item of items) {
+                if (!this.knownItems.has(item.name)) {
+                    this.knownItems.add(item.name);
+                    if (this.agent.dreamer) {
+                        this.agent.dreamer.memorize(`[MILESTONE] Obtained new item: ${item.name}`);
+                        console.log(`[ProactiveCurriculum] 🏆 Milestone unlocked: Item ${item.name}`);
+                    }
+                }
+            }
+        }
     }
 
     cancelCurriculumEvaluation() {
@@ -54,25 +86,67 @@ export class ProactiveCurriculum {
     }
 
     /**
-     * Analyze inventory and select the next logical step in the Tech Tree
+     * Analyze inventory and select the next logical step using LLM (Voyager Architecture)
      */
-    analyzeInventoryForNextGoal() {
+    async analyzeInventoryForNextGoal() {
         const bot = this.agent.bot;
         if (!bot || !bot.inventory) return this.techTree[0]; // Fallback to first
 
-        const items = bot.inventory.items().map(i => i.name);
+        const itemsList = bot.inventory.items();
+        const itemsNames = itemsList.map(i => i.name);
+        const itemsContext = itemsList.map(i => `${i.name} (x${i.count})`).join(', ');
 
-        // Find the most advanced tech tree node we CAN do but HAVEN'T done yet
-        // A simple heuristic: find the first node where we don't have the result item
-        // Note: this is a basic heuristic. A full Voyager integration uses LLM for this.
+        let existingSkillsText = 'None';
+        if (this.agent.skillManager) {
+            existingSkillsText = Object.keys(this.agent.skillManager.getAllSkills()).join(', ');
+        }
+
+        // Phase 12 EAI: LLM Driven Curriculum
+        const prompt = `
+You are the Proactive Curriculum Engine for a Minecraft AI agent.
+Your goal is to suggest ONE single, highly specific next objective for the agent to accomplish based on its current inventory and learned skills.
+The objective must be a logical progression in the Minecraft survival tech tree.
+
+Current Inventory:
+${itemsContext || 'Empty'}
+
+Current Learned Skills:
+${existingSkillsText}
+
+Respond with ONLY the objective statement. Do not add any explanation, JSON, or markdown formatting.
+Examples of good responses:
+- Mine 3 oak_log
+- Craft 1 wooden_pickaxe
+- Mine 3 stone to upgrade tools
+- Smelt raw_iron in furnace
+- Hunt for food
+`;
+
+        try {
+            console.log('[ProactiveCurriculum] 🧠 Asking LLM for next logical goal...');
+            if (this.agent.prompter) {
+                const response = await this.agent.prompter.chat([{ role: 'user', content: prompt }]);
+                let cleanGoal = response;
+                if (typeof cleanGoal === 'string' && cleanGoal.includes('<think>')) {
+                    cleanGoal = cleanGoal.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                }
+                cleanGoal = cleanGoal.replace(/```.*?```/s, '').trim(); // sanitize markdown if leaked
+
+                if (cleanGoal && cleanGoal.length > 3) {
+                    return { id: 'dynamic_llm_goal', goal: cleanGoal, requiredItems: [] };
+                }
+            }
+        } catch (err) {
+            console.warn('[ProactiveCurriculum] ⚠ LLM Curriculum failed, falling back to static heuristic:', err.message);
+        }
+
+        // Static Fallback
         for (const node of this.techTree) {
-            // Check if we already fulfilled this by having the target item conceptually
-            // E.g 'wooden_pickaxe'. If we have iron_pickaxe, we skip wood/stone pickaxes.
             if (node.id.includes('pickaxe')) {
-                const hasBetter = items.some(i => i.includes('iron_pickaxe') || i.includes('diamond_pickaxe'));
+                const hasBetter = itemsNames.some(i => i.includes('iron_pickaxe') || i.includes('diamond_pickaxe'));
                 if (hasBetter) continue;
             }
-            if (items.some(i => i.includes(node.id))) {
+            if (itemsNames.some(i => i.includes(node.id))) {
                 continue; // We already have this item
             }
 
@@ -91,7 +165,7 @@ export class ProactiveCurriculum {
             if (this.agent.brain && this.agent.brain.isBusy()) return;
             if (this.agent.bot.entity.velocity.y < -0.1) return; // Falling
 
-            const nextGoal = this.analyzeInventoryForNextGoal();
+            const nextGoal = await this.analyzeInventoryForNextGoal();
             this.activeGoal = nextGoal;
 
             console.log(`[ProactiveCurriculum] 🎓 IDLE detected. Automatically setting goal: ${nextGoal.goal}`);
