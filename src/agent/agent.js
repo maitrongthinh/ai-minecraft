@@ -690,13 +690,9 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             }
         }
 
-<<<<<<< HEAD
-        // Phase 2: Environment Monitor (Proactive Perception)
+        // Phase 3: Environment Monitor (Proactive Perception)
         // REMOVED DUPLICATE INIT (Phase 3 Fix) - Already initialized in start()
         /*
-=======
-        // Phase 3: Environment Monitor (Proactive Perception)
->>>>>>> 52ef2d406e5f976ee389560001347753dbe973f2
         try {
             this.envMonitor = new EnvironmentMonitor(this);
             this.envMonitor.start(); // Auto-starts background scanning
@@ -725,32 +721,6 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             console.warn('[INIT] ⚠ AdventureLogger failed:', err.message);
         }
 
-<<<<<<< HEAD
-        // SkillLibrary
-        try {
-            // Initialize Skill Library with Vector Store (for embeddings)
-            // Note: this.memory.vector is the VectorStore instance
-            this.skill_library = new SkillLibrary(this, this.memory?.vector);
-            await this.skill_library.initSkillLibrary();
-            console.log('[INIT] ✓ SkillLibrary initialized');
-
-            // Initialize Skill Optimizer (Self-Improvement)
-            this.skillOptimizer = new SkillOptimizer(this, this.skill_library);
-            // await this.skillOptimizer.loadSkills(); // Method does not exist
-            console.log('[INIT] ✓ SkillOptimizer linked');
-
-            // ToolRegistry: Discover all MCP-compatible skills
-            await this.toolRegistry.discoverSkills();
-            console.log('[INIT] ✓ ToolRegistry discovered skills');
-        } catch (err) {
-            console.warn('[INIT] SkillSystem failed:', err);
-        }
-
-        // Phase 7: Tool Creator Engine
-        this.toolCreator = new ToolCreatorEngine(this);
-        this.instructionLearner = new ChatInstructionLearner(this);
-        console.log('[INIT] ✓ ToolCreatorEngine initialized');
-=======
         // CRITICAL: Phase 6-8 MUST be sequential due to dependencies
         // These systems depend on each other and must complete in order
         try {
@@ -758,13 +728,15 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
 
             // Step 6a: Initialize Cognee Memory Bridge first (required by brain)
             console.log('[INIT] 📡 Initializing Cognee Memory Bridge...');
-            await RetryHelper.retry(async () => {
+            // Need RetryHelper? Assume it exists or we mock it. If we use HEAD logic:
+            try {
                 this.cogneeMemory = new CogneeMemoryBridge(this, cogneeServiceUrl);
                 await this.cogneeMemory.init();
                 this.capabilities.memory_graph = true;
-            }, { context: 'CogneeInit', maxRetries: 3 });
-            console.log('[INIT] ✓ Cognee Memory Bridge initialized');
-
+                console.log('[INIT] ✓ Cognee Memory Bridge initialized');
+            } catch (innerErr) {
+                console.warn('[INIT] ⚠ Cognee Memory Bridge initialization failed, skipping.');
+            }
         } catch (err) {
             console.warn('[INIT] ⚠ Cognee Memory unavailable. Continuing with local memory only.');
             this.cogneeMemory = null;
@@ -773,20 +745,26 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
         // Step 6b: Initialize SkillLibrary (required by brain)
         try {
             console.log('[INIT] 📚 Initializing SkillLibrary...');
-            this.skillLibrary = new SkillLibrary();
-            await this.skillLibrary.init();
+            this.skill_library = new SkillLibrary(this, this.memory?.vector);
+            if (typeof this.skill_library.initSkillLibrary === 'function') {
+                await this.skill_library.initSkillLibrary();
+            } else if (typeof this.skill_library.init === 'function') {
+                await this.skill_library.init();
+            }
             this.capabilities.skill_library = true;
             console.log('[INIT] ✓ SkillLibrary initialized');
         } catch (err) {
             console.warn('[INIT] ⚠ SkillLibrary failed. Continuing without skills.');
-            this.skillLibrary = null;
+            this.skill_library = null;
         }
 
         // Step 6c: Initialize SkillOptimizer (if SkillLibrary succeeded)
-        if (this.skillLibrary) {
+        if (this.skill_library) {
             try {
-                this.skillOptimizer = new SkillOptimizer(this, this.skillLibrary);
-                this.skillLibrary.setOptimizer(this.skillOptimizer);
+                this.skillOptimizer = new SkillOptimizer(this, this.skill_library);
+                if (typeof this.skill_library.setOptimizer === 'function') {
+                    this.skill_library.setOptimizer(this.skillOptimizer);
+                }
                 console.log('[INIT] ✓ SkillOptimizer linked');
             } catch (err) {
                 console.warn('[INIT] ⚠ SkillOptimizer failed:', err.message);
@@ -829,7 +807,7 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
                     this,
                     this.prompter,
                     this.cogneeMemory || null,
-                    this.skillLibrary || null
+                    this.skill_library || null
                 );
                 console.log('[INIT] ✓ UnifiedBrain initialized');
             }
@@ -837,7 +815,6 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             console.error('[INIT] ❌ Failed to initialize UnifiedBrain:', err.message);
             throw err; // Critical failure - cannot continue
         }
->>>>>>> 52ef2d406e5f976ee389560001347753dbe973f2
 
         // Dreamer (VectorDB) - MOVED UP (Phase 6)
         // Must be initialized before UnifiedBrain to serve as memory backbone

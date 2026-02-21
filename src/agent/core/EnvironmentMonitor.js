@@ -10,20 +10,15 @@ export class EnvironmentMonitor {
         this.intervalId = null;
         this.scanInterval = 100; // IMPROVED: Faster scan (100ms instead of 250ms)
         this.lastSignals = {}; // Debounce
-<<<<<<< HEAD
         this.blackboard = agent.scheduler?.blackboard;
-=======
         this.threatLevel = 'low'; // Current threat level
         this.profile = agent.config?.profile;
->>>>>>> 52ef2d406e5f976ee389560001347753dbe973f2
     }
 
     start() {
         if (this.active) return;
         this.active = true;
         this.intervalId = setInterval(() => this.tick(), this.scanInterval);
-<<<<<<< HEAD
-
         // Event Listeners for Hyper-Perception
         this._onBlockUpdate = (oldBlock, newBlock) => this._handleBlockUpdate(oldBlock, newBlock);
         this._onEntitySwing = (entity) => this._handleEntityAction('swing', entity);
@@ -39,10 +34,7 @@ export class EnvironmentMonitor {
             this.bot._client.on('sound_effect', (packet) => this._handleSound(packet));
         }
 
-        console.log('[EnvironmentMonitor] Started with Hyper-Perception.');
-=======
-        console.log('[EnvironmentMonitor] Started with interval:', this.scanInterval, 'ms');
->>>>>>> 52ef2d406e5f976ee389560001347753dbe973f2
+        console.log('[EnvironmentMonitor] Started with Hyper-Perception. Interval:', this.scanInterval, 'ms');
     }
 
     stop() {
