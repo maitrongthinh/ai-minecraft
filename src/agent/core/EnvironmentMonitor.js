@@ -8,15 +8,21 @@ export class EnvironmentMonitor {
         this.bot = agent.bot;
         this.active = false;
         this.intervalId = null;
-        this.scanInterval = 250; // Fast scan for reflexes
+        this.scanInterval = 100; // IMPROVED: Faster scan (100ms instead of 250ms)
         this.lastSignals = {}; // Debounce
+<<<<<<< HEAD
         this.blackboard = agent.scheduler?.blackboard;
+=======
+        this.threatLevel = 'low'; // Current threat level
+        this.profile = agent.config?.profile;
+>>>>>>> 52ef2d406e5f976ee389560001347753dbe973f2
     }
 
     start() {
         if (this.active) return;
         this.active = true;
         this.intervalId = setInterval(() => this.tick(), this.scanInterval);
+<<<<<<< HEAD
 
         // Event Listeners for Hyper-Perception
         this._onBlockUpdate = (oldBlock, newBlock) => this._handleBlockUpdate(oldBlock, newBlock);
@@ -34,6 +40,9 @@ export class EnvironmentMonitor {
         }
 
         console.log('[EnvironmentMonitor] Started with Hyper-Perception.');
+=======
+        console.log('[EnvironmentMonitor] Started with interval:', this.scanInterval, 'ms');
+>>>>>>> 52ef2d406e5f976ee389560001347753dbe973f2
     }
 
     stop() {
@@ -137,11 +146,14 @@ export class EnvironmentMonitor {
 
                 // console.log(`Scanning ${offset} -> Block: ${blockBelow.name}`);
 
-                // 1. Cliff / Hole Detection
+                // 1. Cliff / Hole Detection - ADAPTIVE THRESHOLD
                 if (blockBelow.name === 'air' || blockBelow.name === 'void_air') {
                     const depth = this._measureDepth(checkPos);
-                    console.log(`[EnvMonitor] Found Air at ${checkPos}, Depth: ${depth}`);
-                    if (depth > 3) {
+                    // IMPROVED: Adaptive threshold based on threat level and health
+                    const cliffThreshold = this._getCliffThreshold();
+                    console.log(`[EnvMonitor] Found Air at ${checkPos}, Depth: ${depth}, Threshold: ${cliffThreshold}`);
+                    if (depth > cliffThreshold) {
+                        this.threatLevel = 'high';
                         this._emitSignal(SIGNAL.ENV_CLIFF_AHEAD, {
                             distance: i,
                             depth: depth,
@@ -246,5 +258,29 @@ export class EnvironmentMonitor {
 
         // Clean up old keys implies simplified cache or periodic clear (omitted for brevity)
         globalBus.emitSignal(signal, data);
+    }
+
+    /**
+     * IMPROVED: Adaptive cliff detection threshold
+     * Becomes more cautious when health is low
+     */
+    _getCliffThreshold() {
+        // Profile-based config or defaults
+        const baseThreshold = this.profile?.perception?.cliff_threshold || 3;
+        const bot = this.bot;
+
+        if (!bot) return baseThreshold;
+
+        // Health-based adjustment: more cautious when low HP
+        const healthRatio = bot.health / 20;
+        let threshold = baseThreshold;
+
+        if (healthRatio < 0.25) {
+            threshold = Math.max(1, baseThreshold - 2); // Detect even 1-block holes
+        } else if (healthRatio < 0.5) {
+            threshold = Math.max(2, baseThreshold - 1); // Detect 2+ block holes
+        }
+
+        return threshold;
     }
 }
