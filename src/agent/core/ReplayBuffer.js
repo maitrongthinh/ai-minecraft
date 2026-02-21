@@ -12,12 +12,21 @@ export class ReplayBuffer {
      */
     constructor(agent, options = {}) {
         this.agent = agent;
-        this.maxSeconds = options.maxSeconds || 30;
-        this.tickRateMs = options.tickRateMs || 50; // Capture every tick (50ms)
-        this.maxSize = Math.ceil((this.maxSeconds * 1000) / this.tickRateMs);
 
-        this.buffer = [];
-        this.lastCapture = 0;
+        // Phase 11 EAI: Hybrid Replay Buffer
+        this.shortMaxSeconds = 10;
+        this.shortTickRateMs = 50;
+        this.shortMaxSize = Math.ceil((this.shortMaxSeconds * 1000) / this.shortTickRateMs);
+
+        this.longMaxSeconds = 60;
+        this.longTickRateMs = 1000;
+        this.longMaxSize = Math.ceil((this.longMaxSeconds * 1000) / this.longTickRateMs);
+
+        this.shortBuffer = [];
+        this.longBuffer = [];
+
+        this.lastShortCapture = 0;
+        this.lastLongCapture = 0;
         this.isFrozen = false;
     }
 
@@ -27,7 +36,11 @@ export class ReplayBuffer {
     capture() {
         if (this.isFrozen) return;
         const now = Date.now();
-        if (now - this.lastCapture < this.tickRateMs) return;
+
+        const shouldShort = now - this.lastShortCapture >= this.shortTickRateMs;
+        const shouldLong = now - this.lastLongCapture >= this.longTickRateMs;
+
+        if (!shouldShort && !shouldLong) return;
 
         const bot = this.agent.bot;
         if (!bot || !bot.entity) return;
@@ -46,12 +59,17 @@ export class ReplayBuffer {
             controlStates: { ...bot.controlState }
         };
 
-        this.buffer.push(snapshot);
-        if (this.buffer.length > this.maxSize) {
-            this.buffer.shift();
+        if (shouldShort) {
+            this.shortBuffer.push(snapshot);
+            if (this.shortBuffer.length > this.shortMaxSize) this.shortBuffer.shift();
+            this.lastShortCapture = now;
         }
 
-        this.lastCapture = now;
+        if (shouldLong) {
+            this.longBuffer.push(snapshot);
+            if (this.longBuffer.length > this.longMaxSize) this.longBuffer.shift();
+            this.lastLongCapture = now;
+        }
     }
 
     /**
@@ -70,10 +88,25 @@ export class ReplayBuffer {
      * Get the recent history for analysis
      * @param {number} seconds - Number of recent seconds to retrieve
      */
-    getHistory(seconds = 30) {
+    getHistory() {
         const now = Date.now();
-        const cutoff = now - (seconds * 1000);
-        return this.buffer.filter(s => s.timestamp >= cutoff);
+        // Return 60s of long buffer, and up to 10s of short buffer if it overlaps
+        // Actually, we just merge and deduplicate
+        const merged = [...this.longBuffer, ...this.shortBuffer];
+
+        // Sort by timestamp
+        merged.sort((a, b) => a.timestamp - b.timestamp);
+
+        // Deduplicate
+        const deduped = [];
+        let lastTime = 0;
+        for (const s of merged) {
+            if (s.timestamp !== lastTime) {
+                deduped.push(s);
+                lastTime = s.timestamp;
+            }
+        }
+        return deduped;
     }
 
     _getNearbyEntities() {
@@ -135,7 +168,7 @@ export class ReplayBuffer {
         const data = JSON.stringify({
             agent: this.agent.name,
             timestamp: new Date().toISOString(),
-            ticks: this.buffer
+            ticks: this.getHistory()
         }, null, 2);
 
         const filePath = path.join(dir, filename);
@@ -145,7 +178,8 @@ export class ReplayBuffer {
     }
 
     clear() {
-        this.buffer = [];
+        this.shortBuffer = [];
+        this.longBuffer = [];
     }
 }
 

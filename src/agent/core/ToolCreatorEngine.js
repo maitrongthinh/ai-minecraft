@@ -15,10 +15,8 @@ const __dirname = path.dirname(__filename);
 export class ToolCreatorEngine {
     constructor(agent) {
         this.agent = agent;
-        // Use KnowledgeStore path if available, fallback to default
-        this.dynamicSkillsPath = this.agent.knowledge
-            ? this.agent.knowledge.getPath('created_tools')
-            : path.join(__dirname, '../../../src/skills/library/dynamic');
+        // Phase 11 EAI: Save dynamic skills to the profile-specific library persistent path
+        this.dynamicSkillsPath = agent.prompts ? path.join(agent.prompts.getProfilePath(), 'skill_library/dynamic') : path.join(__dirname, '../../../src/skills/library/dynamic');
 
         // Ensure directory exists
         if (!fs.existsSync(this.dynamicSkillsPath)) {
@@ -75,6 +73,11 @@ export class ToolCreatorEngine {
                 await this.agent.toolRegistry._loadSkill(filePath);
 
                 this.agent.bot.chat(`I've learned a new skill: ${name}!`);
+
+                // Phase 11 EAI: Persistent Skill Tracker
+                if (this.agent.skillManager) {
+                    this.agent.skillManager.addSkill(name, schema.description, filePath, ['dynamic']);
+                }
 
                 // Register with KnowledgeStore
                 if (this.agent.knowledge) {

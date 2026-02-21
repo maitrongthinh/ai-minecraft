@@ -56,8 +56,9 @@ export class ContextAssembler {
         // Smaller context for chat
         const manifest = knowledge.getManifest();
         const activeStrategy = manifest?.strategies?.active || 'none';
+        const skillCount = this.agent.skillManager ? Object.keys(this.agent.skillManager.getAllSkills()).length : 0;
 
-        return `\n[Context: You are currently executing strategy "${activeStrategy}". You have ${manifest?.tools?.dynamic?.length || 0} custom tools learned.]`;
+        return `\n[Context: You are currently executing strategy "${activeStrategy}". You have ${skillCount} custom tools learned in your Skill Library.]`;
     }
 
     // --- Private Assembly Methods ---
@@ -69,10 +70,10 @@ export class ContextAssembler {
         try {
             const apiDocsPath = knowledge.apiDocsPath;
             if (apiDocsPath) {
-                // We truncate this to save tokens if needed, but for now include headers
-                // For efficiency, we might just list signatures.
-                // Converting full markdown to compact list:
-                const dynamicTools = knowledge.getManifest().tools.dynamic;
+                // Phase 11 EAI: Load dynamic tools from persistent Skill Library
+                const dynamicTools = this.agent.skillManager
+                    ? Object.entries(this.agent.skillManager.getAllSkills())
+                    : [];
 
                 section += '1. PRIMITIVE ACTIONS (Native):\n';
                 section += '   (See ActionAPI Reference for details)\n';
@@ -86,9 +87,9 @@ export class ContextAssembler {
                 section += '   - actions.gather_nearby(target, count)\n';
 
                 if (dynamicTools.length > 0) {
-                    section += '\n2. LEARNED TOOLS (Dynamic):\n';
-                    dynamicTools.forEach(t => {
-                        section += `   - active_skills.${t.name}(params) : ${t.description}\n`;
+                    section += '\n2. LEARNED TOOLS (Dynamic Skill Library):\n';
+                    dynamicTools.forEach(([name, data]) => {
+                        section += `   - active_skills.${name}(params) : ${data.description} (Success Rate: ${(data.successRate * 100).toFixed(0)}%)\n`;
                     });
                 } else {
                     section += '\n2. LEARNED TOOLS: None yet.\n';

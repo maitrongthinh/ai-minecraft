@@ -43,7 +43,8 @@ export class CombatReflex {
         // Cooldowns
         this.lastAttackTime = 0;
         this.lastHealTime = 0;
-        this.attackCooldown = 600; // ms (sword cooldown ~0.6s)
+        // Base delay before attack swing, can be adjusted by shield delay gene
+        this.attackCooldown = 600;
 
         // Stats
         this.stats = {
@@ -110,26 +111,26 @@ export class CombatReflex {
     }
 
     _getRulePolicy() {
-        // 1. Genetic Instincts (Evolution)
-        if (this.agent?.evolution) {
-            const strafe = this.agent.evolution.getTrait('combat_strafe_distance');
-            const urgency = this.agent.evolution.getTrait('combat_attack_urgency');
-            const reach = this.agent.evolution.getTrait('combat_reach_distance');
+        // Phase 11 EAI: Consult Genetic Memory first
+        if (this.agent?.gene) {
+            const attackRange = this.agent.gene.getTrait('combat', 'attackRange') || 3.0;
+            const retreatHealth = this.agent.gene.getTrait('combat', 'retreatHealth') || 6;
+            const hitAndRunDistance = this.agent.gene.getTrait('combat', 'hitAndRunDistance') || 3;
+            const shieldCooldownMs = this.agent.gene.getTrait('combat', 'shieldCooldownMs') || 1000;
 
-            if (strafe !== null) {
-                return {
-                    strafeDistance: strafe,
-                    attackUrgency: urgency || 1.0,
-                    reachDistance: reach || 3.0,
-                    // Keep original fallback for flags
-                    forceShield: false,
-                    forceTotem: false,
-                    totemThreshold: 10,
-                    retreatHealthThreshold: 6
-                };
-            }
+            return {
+                strafeDistance: hitAndRunDistance,
+                attackUrgency: 1.0,
+                reachDistance: attackRange,
+                forceShield: false,
+                forceTotem: false,
+                totemThreshold: 10,
+                retreatHealthThreshold: retreatHealth,
+                shieldCooldownMs: shieldCooldownMs
+            };
         }
 
+        // Fallback Base Rule Engine Policy
         if (!this.agent?.behaviorRuleEngine || typeof this.agent.behaviorRuleEngine.getCombatPolicy !== 'function') {
             return {
                 forceShield: false,
@@ -137,7 +138,8 @@ export class CombatReflex {
                 totemThreshold: 10,
                 retreatHealthThreshold: 6,
                 strafeDistance: 2.5,
-                attackUrgency: 1.0
+                attackUrgency: 1.0,
+                reachDistance: 3.0
             };
         }
 
@@ -152,7 +154,10 @@ export class CombatReflex {
                 forceShield: false,
                 forceTotem: false,
                 totemThreshold: 10,
-                retreatHealthThreshold: 6
+                retreatHealthThreshold: 6,
+                strafeDistance: 2.5,
+                attackUrgency: 1.0,
+                reachDistance: 3.0
             };
         }
     }

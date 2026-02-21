@@ -161,7 +161,17 @@ class SignalBus extends EventEmitter {
         this.stats = {
             signalsEmitted: 0,
             signalsHandled: 0,
+            signalsThrottled: 0,
             errors: 0
+        };
+
+        // Phase 11 EAI: Throttle bottleneck signals
+        this.throttleMap = new Map();
+        this.throttleConfig = {
+            [SIGNAL.ENV_BLOCK_CHANGE]: 500, // Max 2 per second
+            [SIGNAL.ENV_ENTITY_ACTION]: 250, // Max 4 per second 
+            [SIGNAL.ENTITY_SPOTTED]: 1000,
+            [SIGNAL.BLOCK_FOUND]: 1000
         };
 
         console.log('[SignalBus] ⚡ Synapse Bus initialized');
@@ -200,6 +210,17 @@ class SignalBus extends EventEmitter {
      * @param {object} payload - Data to send
      */
     emitSignal(signal, payload = {}) {
+        // Phase 11 EAI: Throttle logic
+        if (this.throttleConfig[signal]) {
+            const lastEmit = this.throttleMap.get(signal) || 0;
+            const now = Date.now();
+            if (now - lastEmit < this.throttleConfig[signal]) {
+                this.stats.signalsThrottled++;
+                return; // Drop signal to prevent bottleneck
+            }
+            this.throttleMap.set(signal, now);
+        }
+
         const event = {
             signal,
             payload,

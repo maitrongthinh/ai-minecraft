@@ -43,20 +43,20 @@ export class SelfPreservationReflex {
     }
 
     _getRulePolicy() {
-        // 1. High Priority: Genetic Instincts (Evolution)
-        if (this.agent?.evolution) {
-            const health = this.agent.evolution.getTrait('survival_health_threshold');
-            const panic = this.agent.evolution.getTrait('survival_panic_distance');
-            if (health !== null && panic !== null) {
-                return {
-                    low_health_threshold: health,
-                    panic_distance: panic,
-                    drowning_tolerance: this.agent.evolution.getTrait('survival_drowning_tolerance') || 10
-                };
-            }
+        // Phase 11 EAI: Consult Genetic Memory first
+        if (this.agent?.gene) {
+            const eatHealthThreshold = this.agent.gene.getTrait('survival', 'eatHealthThreshold') || 14;
+            const eatFoodThreshold = this.agent.gene.getTrait('survival', 'eatFoodThreshold') || 14;
+            // Map new logic to old returning fields
+            return {
+                low_health_threshold: eatHealthThreshold,
+                panic_distance: 10, // Default panic
+                critical_health_threshold: 4,
+                drowning_tolerance: 10
+            };
         }
 
-        // 2. Medium Priority: Behavior Rules
+        // Medium Priority: Behavior Rules
         if (!this.agent?.behaviorRuleEngine || typeof this.agent.behaviorRuleEngine.getSelfPreservationPolicy !== 'function') {
             return this.agent.config.profile?.behavior?.self_preservation || {};
         }

@@ -52,6 +52,9 @@ import { MinecraftWiki } from '../tools/MinecraftWiki.js';
 import fs from 'fs';
 import path from 'path';
 import { MotorCortex } from './core/MotorCortex.js';
+import { GeneEngine } from './evolution/GeneEngine.js';
+import { ProactiveCurriculum } from './evolution/ProactiveCurriculum.js';
+import { SkillManager } from './intelligence/SkillManager.js';
 
 export class Agent {
     constructor() {
@@ -153,6 +156,11 @@ export class Agent {
         // Finalize Name and Memory Path
         this.name = (this.prompter.getName() || '').trim();
         this.memory.updateName(this.name);
+
+        // Phase 11: Evolutionary Artificial Intelligence
+        this.gene = new GeneEngine(this);
+        this.curriculum = new ProactiveCurriculum(this);
+        this.skillManager = new SkillManager(this);
 
         console.log(`[MindOS] Agent ${this.name} waking up...`);
 
