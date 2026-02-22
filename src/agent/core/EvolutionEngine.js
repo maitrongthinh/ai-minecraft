@@ -42,6 +42,12 @@ export class EvolutionEngine {
 
         // Phase 2: Action Optimization Registry
         this.actionStats = new Map();
+        this.stats = {
+            combatWins: 0,
+            combatLosses: 0,
+            capturedErrors: 0,
+            evolvedSkills: 0
+        };
 
         // Genome Path
         this.genomePath = path.join(process.cwd(), 'data', 'genome.json');
@@ -279,6 +285,21 @@ export class EvolutionEngine {
         console.log(`[EvolutionEngine] 📉 Combat recorded: ${result}. Stats: ${this.stats.combatWins}W / ${this.stats.combatLosses}L`);
 
         this.mutateSurvivalGenome(result);
+        return true;
+    }
+
+    /**
+     * Phase 2: Record Survival Events (Drowning, Burning, etc.)
+     */
+    async recordSurvivalEvent(type, success) {
+        console.log(`[EvolutionEngine] 🏥 Survival event recorded: ${type} (Success: ${success})`);
+
+        // Potential logic for future evolution:
+        // if (!success) {
+        //    this.mutateSurvivalGenome(`failed_${type}`);
+        // }
+
+        this.stats.capturedErrors++; // Increment a general error/event counter if needed
         return true;
     }
 

@@ -69,11 +69,14 @@ export class ActionAPI {
         }
 
         // Fallback to searching skills if not a primitive
-        if (this.agent.skillLibrary) {
-            const skill = this.agent.skillLibrary.getSkill(type);
+        const skillLib = this.agent.skillLibrary || this.agent.skill_library;
+        if (skillLib) {
+            const skill = typeof skillLib.getSkill === 'function' ? skillLib.getSkill(type) : null;
             if (skill) {
                 // Execute skill in sandbox or directly
-                const result = await this.agent.intelligence.execute(type, params);
+                console.log(`[ActionAPI] 🧠 Calling skill: ${type}`);
+                const codeToRun = `await ${type}(bot, ...${JSON.stringify(params)})`;
+                const result = await this.agent.intelligence.execute(codeToRun);
                 return { action_id, ...result };
             }
         }

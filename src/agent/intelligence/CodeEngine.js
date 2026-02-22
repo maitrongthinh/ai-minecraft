@@ -260,6 +260,11 @@ export class CodeEngine {
                     gameMode: bot.game?.gameMode,
                     difficulty: bot.game?.difficulty,
                     dimension: bot.game?.dimension
+                },
+                time: {
+                    timeOfDay: bot.time?.timeOfDay,
+                    day: bot.time?.day,
+                    isDay: bot.time?.timeOfDay < 13000 || bot.time?.timeOfDay > 23000
                 }
             };
 

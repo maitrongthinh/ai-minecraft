@@ -222,7 +222,9 @@ export class CodeSandbox {
                             return _jail_skill_dispatch(name, ...args);
                         }
                         throw new Error('Skill bridge not available');
-                    }
+                    },
+                    time: $0.time || { timeOfDay: 0, day: 0, isDay: true },
+                    game: $0.game || { gameMode: 'survival', difficulty: 'easy', dimension: 'overworld' }
                 };
                 globalThis.Vec3 = class Vec3 { constructor(x,y,z){this.x=x;this.y=y;this.z=z;} };
             `, [botData], { arguments: { copy: true } });
@@ -233,7 +235,7 @@ export class CodeSandbox {
             for (const [name, source] of Object.entries(skillsSource)) {
                 try {
                     let cleanSource = source.replace(/^export\s+/, '').trim();
-                    if (cleanSource.startsWith('function') || cleanSource.startsWith('async function')) {
+                    if (cleanSource.length > 0) {
                         await jail.set('_tmp_source_' + name, cleanSource);
                         await context.eval(`
                             (function() {

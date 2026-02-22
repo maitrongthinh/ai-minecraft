@@ -46,7 +46,8 @@ export class SkillManager {
             try {
                 const data = fs.readFileSync(this.manifestPath, 'utf8');
                 this.manifest = JSON.parse(data);
-                console.log(`[SkillManager] 📚 Loaded Local Skill Library. Found ${Object.keys(this.manifest.skills).length} skills.`);
+                const skillCount = Object.keys(this.manifest.skills).length;
+                console.log(`[SkillManager] 📚 Loaded Local Skill Library. Found ${skillCount} skills.`);
             } catch (err) {
                 console.error('[SkillManager] ⚠️ Error loading local skill manifest:', err.message);
             }

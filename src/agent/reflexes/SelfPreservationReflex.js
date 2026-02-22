@@ -72,6 +72,8 @@ export class SelfPreservationReflex {
     }
 
     async tick() {
+        if (this.active) return;
+
         this.bot = this.agent?.bot || null;
         if (!this.bot || !this.bot.entity) return;
 
@@ -129,13 +131,21 @@ export class SelfPreservationReflex {
         this.active = true;
         this.agent.requestInterrupt();
 
-        // Simple swim up
-        this.bot.setControlState('jump', true);
-        await new Promise(r => setTimeout(r, 1000));
+        // Persistent swim up
+        const startTime = Date.now();
+        while (Date.now() - startTime < 3000) {
+            this.bot.setControlState('jump', true);
+            await new Promise(r => setTimeout(r, 200));
+            // Stop if we reach surface or die
+            const headBlock = this.bot.blockAt(this.bot.entity.position.offset(0, 1.6, 0));
+            if (!headBlock || !headBlock.name.includes('water') || this.bot.health <= 0) break;
+        }
+
+        this.bot.setControlState('jump', false);
         this.active = false;
 
         // Report to EvolutionEngine
-        if (this.agent?.evolution) {
+        if (this.agent?.evolution && typeof this.agent.evolution.recordSurvivalEvent === 'function') {
             this.agent.evolution.recordSurvivalEvent('drowning', this.bot.health > 0);
         }
     }
