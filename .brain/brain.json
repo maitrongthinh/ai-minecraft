@@ -6,7 +6,7 @@
     "project": {
         "name": "Mindcraft Autonomous Evolution Agent",
         "type": "AI Agent",
-        "status": "V2.2.1 Audited & Hardened"
+        "status": "V2.5.1 (Phase 13 Shared Brain Integration)"
     },
     "tech_stack": {
         "frontend": {
@@ -16,13 +16,13 @@
         "backend": {
             "framework": "Node.js (ES Modules)",
             "lib": "Mineflayer",
-            "ai_sdk": "OpenAI / Anthropic / Google / DeepSeek"
+            "ai_sdk": "OpenAI / Anthropic / Google / DeepSeek / Groq"
         },
         "database": {
             "type": "Vector Store (ChromaDB/Local) + JSON"
         },
         "security": {
-            "sandbox": "Node.js VM (timeout: 5000ms)",
+            "sandbox": "isolated-vm (timeout: 5000ms)",
             "linting": "CodeSanitizer (AST-based)"
         }
     },
@@ -32,22 +32,27 @@
         "Evolutionary Coding (SmartCoder with Sandbox)",
         "Unified Memory (Short/Long term + Spatial + Self-Healing)",
         "Modular Skill Library",
-        "Context Pruning (Optimization)",
-        "Task Amnesia Prevention (Memory Hooks)"
+        "Context Pruning (Optimization via RAG)",
+        "Task Amnesia Prevention (Memory Hooks)",
+        "Shared Brain (Hive-Mind) for Collective Intelligence"
     ],
     "knowledge_items": {
         "patterns": [
-            "SignalBus Pattern for decouling",
+            "SignalBus Pattern for decoupling",
             "Reflex Priority (System 1 overrides System 2)",
-            "Sandbox Execution for AI Code",
+            "Sandbox Execution for AI Code (Hardened)",
             "AbortController for Task Interruption",
-            "Centralized Timer Management"
+            "Centralized Timer Management",
+            "ivm.Reference bridge for asynchronous host calls",
+            "Vector Search for Skill Selection (RAG Pruning)"
         ],
         "gotchas": [
             "Always use globalBus for cross-module talk",
             "Avoid direct console.log in production loop",
             "Test files belong in tests/",
-            "Check dependencies (like brain) before use"
+            "Check dependencies (like brain) before use",
+            "Avoid passing raw JS Modules to sandbox (cloning error)",
+            "Use JSON-RPC serialization for bridge data flow"
         ]
     }
 }

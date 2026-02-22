@@ -143,7 +143,49 @@ export class EvolutionEngine {
         console.log('[EvolutionEngine] ⚡ Initialized - Ready to evolve');
     }
 
-    // ... (Getters and Helper methods remain unchanged) ...
+    loadGenome() {
+        try {
+            if (fs.existsSync(this.genomePath)) {
+                const data = JSON.parse(fs.readFileSync(this.genomePath, 'utf8'));
+                this.genome = { ...this.genome, ...data };
+            }
+        } catch (e) {
+            console.warn('[EvolutionEngine] Failed to load genome:', e.message);
+        }
+    }
+
+    saveGenome() {
+        try {
+            fs.mkdirSync(path.dirname(this.genomePath), { recursive: true });
+            fs.writeFileSync(this.genomePath, JSON.stringify(this.genome, null, 2));
+        } catch (e) {
+            console.warn('[EvolutionEngine] Failed to save genome:', e.message);
+        }
+    }
+
+    mutateSurvivalGenome(reason) {
+        // Dummy mutation
+        this.saveGenome();
+    }
+
+    captureSnapshot(task, error) {
+        return {
+            taskName: task.title || task.name || 'Unknown Task',
+            errorMessage: error.message || String(error),
+            context: 'Snapshot context placeholder'
+        };
+    }
+
+    async requestFix(snapshot) {
+        console.log(`[EvolutionEngine] 🛠️ Requesting fix for: ${snapshot.errorMessage}`);
+        // Stub for now. Actual implementation would call LLM.
+    }
+
+    _extractCodeBlock(text) {
+        if (!text) return null;
+        const match = text.match(/```(?:javascript|js)\s([\s\S]*?)```/);
+        return match ? match[1].trim() : null;
+    }
 
     async validateCode(code) {
         return this.safety.validate(code);
@@ -228,6 +270,16 @@ export class EvolutionEngine {
                 await this.toolCreator.createTool(payload.task, payload.context);
             }
         }
+    }
+
+    async recordCombatResult(result) {
+        if (result === 'win') this.stats.combatWins++;
+        else if (result === 'loss') this.stats.combatLosses++;
+
+        console.log(`[EvolutionEngine] 📉 Combat recorded: ${result}. Stats: ${this.stats.combatWins}W / ${this.stats.combatLosses}L`);
+
+        this.mutateSurvivalGenome(result);
+        return true;
     }
 
     /**

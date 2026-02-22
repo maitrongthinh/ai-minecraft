@@ -38,6 +38,7 @@ export const SIGNAL = {
     SKILL_FORGOTTEN: 'skill.forgotten',
     SKILL_SUCCESS: 'skill.success',
     SKILL_FAILED: 'skill.failed',
+    SKILL_READY: 'skill.ready', // Phase 13: Hot-reload signal
 
     // Evolution
     GENOME_MUTATED: 'evolution.genome_mutated',

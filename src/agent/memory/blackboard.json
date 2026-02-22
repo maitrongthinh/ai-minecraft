@@ -45,5 +45,10 @@
       "status": "executing"
     },
     "last_failure": null
+  },
+  "swarm_state": {
+    "role": "lone_wolf",
+    "leader": null,
+    "peers_count": 0
   }
 }

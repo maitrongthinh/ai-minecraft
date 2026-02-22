@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { logoutAgent } from '../mindcraft/mindserver.js';
+import fs from 'fs';
 
 export class AgentProcess {
     constructor(name, port, profile_path) {
@@ -24,9 +25,16 @@ export class AgentProcess {
             args.push('--profile', this.profile_path);
 
         const agentProcess = spawn('node', args, {
-            stdio: 'inherit',
-            stderr: 'inherit',
+            stdio: 'pipe'
         });
+
+        const logStream = fs.createWriteStream(`logs/agent_${this.name}.log`, { flags: 'a' });
+        agentProcess.stdout.pipe(logStream);
+        agentProcess.stderr.pipe(logStream);
+
+        // Also output to main console
+        agentProcess.stdout.pipe(process.stdout);
+        agentProcess.stderr.pipe(process.stderr);
 
         let last_restart = Date.now();
         agentProcess.on('exit', (code, signal) => {

@@ -1,73 +1,81 @@
 {
-    "updated_at": "2026-02-09T15:55:00+07:00",
+    "updated_at": "2026-02-22T10:45:00+07:00",
     "working_on": {
-        "feature": "Unified Architecture Refactor",
-        "task": "Phase 9: Final Audit Remediation",
-        "status": "Completed (System Hardened)",
+        "feature": "Shared Brain & Survival Loop Fix",
+        "task": "Phase 13: Tiered Skill System & RAG Pruning",
+        "status": "Completed",
         "files": [
+            "src/agent/core/CodeSandbox.js",
             "src/agent/intelligence/CodeEngine.js",
-            "src/agent/memory/MemorySystem.js",
-            "src/agent/core/CoreSystem.js",
-            "docs/reports/audit_20260209.md"
+            "src/brain/UnifiedBrain.js",
+            "src/actions/core/ActionAPI.js"
         ],
         "blockers": [],
-        "notes": "All critical and major audit issues resolved. Ready for production trials or Phase 10 (Cognitive Optimization)."
+        "notes": "Resolved autonomous execution loop and implemented skill pruning. Bot is stable and performing survival tasks."
     },
     "pending_tasks": [
         {
-            "task": "Phase 10: Cognitive Optimization",
-            "priority": "medium",
-            "notes": "Implement Intention Classifier & Reasoning Self-Correction"
+            "task": "Phase 14: Strategic Planner Refinement",
+            "priority": "high",
+            "notes": "Improve long-term goal setting and obstacle avoidance logic."
         },
         {
-            "task": "Manual Test (Run node main.js)",
-            "priority": "high",
-            "notes": "Verify bot behavior in-game with new hardening"
+            "task": "Social Intelligence Integration",
+            "priority": "medium",
+            "notes": "Enhance HumanManager with dynamic trust scores from chat analysis."
         }
     ],
     "recent_changes": [
         {
-            "timestamp": "2026-02-09",
+            "timestamp": "2026-02-22",
             "type": "fix",
-            "description": "Resolved Circular Dependency in CodeEngine",
+            "description": "Resolved 'Thinking...' loop by fixing CodeEngine mapping and task normalization",
             "files": [
-                "src/agent/intelligence/CodeEngine.js"
+                "src/agent/intelligence/CodeEngine.js",
+                "src/brain/UnifiedBrain.js"
             ]
         },
         {
-            "timestamp": "2026-02-09",
-            "type": "lifecycle",
-            "description": "Fixed Zombie Listeners & Task Amnesia in MemorySystem",
+            "timestamp": "2026-02-22",
+            "type": "security",
+            "description": "Hardened Sandbox Bridge with ivm.Reference and evalClosure",
             "files": [
-                "src/agent/memory/MemorySystem.js"
+                "src/agent/core/CodeSandbox.js"
             ]
         },
         {
-            "timestamp": "2026-02-09",
-            "type": "reliability",
-            "description": "Fixed Floating Promises in CoreSystem",
+            "timestamp": "2026-02-22",
+            "type": "feature",
+            "description": "Implemented RAG-based Skill Pruning (Top 10 search)",
             "files": [
-                "src/agent/core/CoreSystem.js"
+                "src/brain/UnifiedBrain.js",
+                "src/agent/intelligence/SkillManager.js"
             ]
         },
         {
-            "timestamp": "2026-02-09",
-            "type": "audit",
-            "description": "Updated Audit Report with Final Remediation status",
+            "timestamp": "2026-02-22",
+            "type": "refactor",
+            "description": "Added parameter objectification to ActionAPI.dispatch",
             "files": [
-                "docs/reports/audit_20260209.md"
+                "src/actions/core/ActionAPI.js"
             ]
         }
     ],
-    "errors_encountered": [],
+    "errors_encountered": [
+        {
+            "error": "could not be cloned (Promise/Module)",
+            "solution": "Used ivm.Reference and JSON-RPC bridge",
+            "resolved": true
+        }
+    ],
     "decisions_made": [
         {
-            "decision": "Use centralized timer tracking",
-            "reason": "Prevent floating promises from crashing the bot on shutdown"
+            "decision": "Use Vector Selection (Top 10) for skills",
+            "reason": "Prevent context bloat and improve LLM instruction following IQ"
         },
         {
-            "decision": "Subscribe Memory to Task Signals",
-            "reason": "Allow bot to learn from success/failure (fix amnesia)"
+            "decision": "Implement positional argument objectifier in ActionAPI",
+            "reason": "Enable direct skill calls from sandbox scripts without verbose object payloads"
         }
     ]
 }

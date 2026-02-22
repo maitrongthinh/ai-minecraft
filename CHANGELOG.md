@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.5.1] - 2026-02-22
+### Added
+- **Shared Brain (Phase 13)**: Initial Hive-Mind integration with global skill synchronization.
+- **RAG Skill Pruning**: Skill selection via Vector Search (Top 10) to reduce context bloat and improve IQ.
+- **Hardened Sandbox Bridge**: Robust `ivm.Reference` integration for `ActionAPI` and `SkillLibrary` access within `isolated-vm`.
+- **Intelligent Dispatch**: Parameter objectification in `ActionAPI` for direct script compatibility.
+
+### Fixed
+- **Autonomous Survival Loop**: Resolved "Thinking..." state caused by engine mapping and task normalization errors.
+- **Sandbox Cloning Errors**: Fixed `could not be cloned` errors for Promises and Modules in execution environment.
+
+
 ## [2.5.0] - 2026-02-11
 ### Added
 - **Sovereign Swarm**: P2P coordination protocol (Sigma) for multi-agent target synchronization.

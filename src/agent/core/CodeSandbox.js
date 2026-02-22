@@ -136,7 +136,7 @@ export class CodeSandbox {
         return { safe: dangers.length === 0, dangers };
     }
 
-    async execute(codeString, contextData = {}) {
+    async execute(codeString, contextData = {}, actionAPI = null, skillLibrary = null) {
         const dangerScan = this.scanForDanger(codeString);
         if (!dangerScan.safe) {
             return { success: false, error: `Dangerous code: ${dangerScan.dangers.join(', ')}` };
@@ -150,6 +150,48 @@ export class CodeSandbox {
             await jail.set('log', function (...args) {
                 console.log('[Sandbox]', ...args);
             });
+
+            // Bridge for real actions
+            if (actionAPI) {
+                const dispatchRef = new ivm.Reference(async (type, params) => {
+                    try {
+                        const res = await actionAPI.dispatch({ type, params: JSON.parse(params) });
+                        const safeRes = JSON.parse(JSON.stringify(res || { success: true }));
+                        return new ivm.ExternalCopy(safeRes).copyInto();
+                    } catch (e) {
+                        return new ivm.ExternalCopy({ success: false, error: e.message }).copyInto();
+                    }
+                });
+                await jail.set('_jail_dispatch_ref', dispatchRef);
+                await context.evalClosure(`
+                    globalThis._jail_dispatch = function(type, params) {
+                        return _jail_dispatch_ref.apply(undefined, [type, params], { promise: true, arguments: { copy: true } });
+                    };
+                `);
+            }
+
+            // Bridge for library skills
+            if (skillLibrary) {
+                const skillDispatchRef = new ivm.Reference(async (name, ...args) => {
+                    try {
+                        const skillFn = skillLibrary[name];
+                        if (typeof skillFn !== 'function') throw new Error(`Skill ${name} not found in library`);
+
+                        const res = await skillFn(actionAPI.agent, ...args);
+                        const safeRes = JSON.parse(JSON.stringify(res || { success: true }));
+                        return new ivm.ExternalCopy(safeRes).copyInto();
+                    } catch (e) {
+                        return new ivm.ExternalCopy({ success: false, error: e.message }).copyInto();
+                    }
+                });
+                await jail.set('_jail_skill_dispatch_ref', skillDispatchRef);
+                await context.evalClosure(`
+                    globalThis._jail_skill_dispatch = function(name, ...args) {
+                        return _jail_skill_dispatch_ref.apply(undefined, [name, ...args], { promise: true, arguments: { copy: true } });
+                    };
+                `);
+            }
+
 
             await jail.set('contextData', new ivm.ExternalCopy(contextData).copyInto());
 
@@ -169,23 +211,35 @@ export class CodeSandbox {
                     username: $0.username || 'Bot',
                     chat: (msg) => log('[Sandbox:Chat]', msg),
                     navigate: (dest) => log('[Sandbox:Navigate]', dest),
+                    __call_action__: (type, params) => {
+                        if (typeof _jail_dispatch !== 'undefined') {
+                            return _jail_dispatch(type, JSON.stringify(params));
+                        }
+                        throw new Error('Action bridge not available');
+                    },
+                    __call_skill__: (name, ...args) => {
+                        if (typeof _jail_skill_dispatch !== 'undefined') {
+                            return _jail_skill_dispatch(name, ...args);
+                        }
+                        throw new Error('Skill bridge not available');
+                    }
                 };
                 globalThis.Vec3 = class Vec3 { constructor(x,y,z){this.x=x;this.y=y;this.z=z;} };
             `, [botData], { arguments: { copy: true } });
 
             // Reconstruct skills object
             await context.eval(`globalThis.skills = {};`);
-
             const skillsSource = contextData.skillsSource || {};
             for (const [name, source] of Object.entries(skillsSource)) {
                 try {
-                    let cleanSource = source.replace(/^export\s+/, '');
+                    let cleanSource = source.replace(/^export\s+/, '').trim();
                     if (cleanSource.startsWith('function') || cleanSource.startsWith('async function')) {
                         await jail.set('_tmp_source_' + name, cleanSource);
                         await context.eval(`
                             (function() {
                                 try {
-                                    const fn = eval(_tmp_source_${name}); 
+                                    // Wrap in parens to ensure it evaluates as an expression
+                                    const fn = eval('(' + _tmp_source_${name} + ')'); 
                                     globalThis.skills['${name}'] = fn;
                                     globalThis['${name}'] = fn; 
                                     delete globalThis['_tmp_source_${name}']; 
@@ -200,7 +254,27 @@ export class CodeSandbox {
                 }
             }
 
-            await context.eval(`globalThis.actions = globalThis.skills;`);
+            // Reconstruct actions object (nested)
+            await context.eval(`globalThis.actions = {};`);
+            const actionsSource = contextData.actionsSource || {};
+            for (const [name, source] of Object.entries(actionsSource)) {
+                try {
+                    await jail.set('_tmp_source_action_' + name, source);
+                    await context.eval(`
+                        (function() {
+                            try {
+                                const fn = eval('(' + _tmp_source_action_${name} + ')'); 
+                                globalThis.actions['${name}'] = fn;
+                                delete globalThis['_tmp_source_action_${name}']; 
+                            } catch(e) {
+                                log('[Sandbox] Error evaling action ${name}: ' + e.message);
+                            }
+                        })();
+                    `);
+                } catch (e) {
+                    console.log('[CodeSandbox] Failed to inject action:', name, e.message);
+                }
+            }
 
             const wrappedCode = `
             (async () => {

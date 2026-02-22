@@ -2,6 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { globalBus, SIGNAL } from './SignalBus.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,21 +24,56 @@ export class ToolCreatorEngine {
             fs.mkdirSync(this.dynamicSkillsPath, { recursive: true });
         }
 
-        console.log('[ToolCreator] Initialized');
+        // Phase 13: Dreaming Queue
+        this.queue = [];
+        this.isDreaming = false;
+
+        console.log('[ToolCreator] Initialized (Dreaming Mode Ready)');
     }
 
     /**
-     * Create a new tool for a specific need with Self-Verification Loop
+     * Queue a new tool creation request (Phase 13 Asynchronous Dreaming)
      * @param {string} need - Description of what the tool should do
-     * @param {string} context - Context about why it's needed (e.g. "Failed to craft X")
-     * @returns {Promise<boolean>} Success
+     * @param {string} context - Context about why it's needed
+     * @returns {void}
      */
     async createTool(need, context = '', maxRetries = 3) {
+        console.log(`[ToolCreator] 🛌 Adding request to Dreaming Queue: "${need}"`);
+        this.queue.push({ need, context, maxRetries });
+        this._startDreaming();
+    }
+
+    /**
+     * Process the queue in the background
+     */
+    async _startDreaming() {
+        if (this.isDreaming) return;
+        this.isDreaming = true;
+
+        while (this.queue.length > 0) {
+            const task = this.queue.shift();
+            try {
+                // Yield thread to ensure bot keeps ticking
+                await new Promise(resolve => setTimeout(resolve, 100));
+                await this._generateToolInternal(task.need, task.context, task.maxRetries);
+            } catch (err) {
+                console.error(`[ToolCreator] ❌ Dreaming task failed for '${task.need}':`, err.message);
+            }
+        }
+
+        this.isDreaming = false;
+        console.log(`[ToolCreator] 🌅 Woke up from dreaming. Queue is empty.`);
+    }
+
+    /**
+     * Internal implementation of the Self-Verification Loop
+     */
+    async _generateToolInternal(need, context = '', maxRetries = 3) {
         let currentContext = context;
         let lastError = null;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            console.log(`[ToolCreator] 🛠️ Generating tool for: "${need}" (Attempt ${attempt}/${maxRetries})`);
+            console.log(`[ToolCreator] 🧠 Dreaming about tool for: "${need}" (Attempt ${attempt}/${maxRetries})`);
 
             try {
                 // Phase 12 EAI: Self-Verification Error Injection
@@ -76,13 +112,21 @@ export class ToolCreatorEngine {
                 // 5. Save to Disk
                 const filePath = path.join(this.dynamicSkillsPath, `${name}.js`);
                 fs.writeFileSync(filePath, fileContent);
-                console.log(`[ToolCreator] 💾 Saved tool to ${filePath}`);
+                console.log(`[ToolCreator] 💾 Saved learned skill to ${filePath}`);
 
                 // 6. Register with ToolRegistry (Hot Reload & Syntax Check)
                 try {
                     await this.agent.toolRegistry._loadSkill(filePath);
 
-                    this.agent.bot.chat(`I've learned a new skill: ${name}!`);
+                    // Phase 13 Hot-reload signaling
+                    this.agent.bot.chat(`Eureka! I just figured out how to: ${name}!`);
+
+                    // Dispatch HOT_RELOAD to event bus.
+                    try {
+                        globalBus.emitSignal(SIGNAL.SKILL_READY, { skillName: name, path: filePath });
+                    } catch (e) {
+                        console.warn('[ToolCreator] Could not emit SKILL_READY signal', e.message);
+                    }
 
                     // Phase 11 EAI: Persistent Skill Tracker
                     if (this.agent.skillManager) {
@@ -112,9 +156,12 @@ export class ToolCreatorEngine {
 
                 if (attempt === maxRetries) {
                     console.error('[ToolCreator] ❌ Max retries reached. Tool generation failed.');
-                    this.agent.bot.chat(`I tried to create a tool for that, but failed after ${maxRetries} attempts: ${error.message}`);
+                    this.agent.bot.chat(`I tried dreaming up a tool for that, but couldn't quite get it right after ${maxRetries} attempts.`);
                     return false;
                 }
+
+                // Yield event loop between expensive generation tasks
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
 

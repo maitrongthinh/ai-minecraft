@@ -18,9 +18,10 @@ export class ContextAssembler {
     /**
      * Assemble the full context for a planning request (High-IQ)
      * @param {Object} bot - Bot instance
+     * @param {string} query - The current task or thought query for RAG
      * @returns {string} The context string to be injected into the prompt
      */
-    async assembleForPlan(bot) {
+    async assembleForPlan(bot, query = '') {
         const knowledge = this.agent.knowledge;
         if (!knowledge) return '';
 
@@ -30,7 +31,7 @@ export class ContextAssembler {
         let context = '\n\n--- AGENT KNOWLEDGE CONTEXT ---\n';
 
         // 1. Available Tools (Primitive + Dynamic)
-        context += this._assembleToolsSection(knowledge);
+        context += await this._assembleToolsSection(knowledge, query);
 
         // 2. Current Strategy State
         context += this._assembleStrategySection(knowledge);
@@ -63,17 +64,20 @@ export class ContextAssembler {
 
     // --- Private Assembly Methods ---
 
-    _assembleToolsSection(knowledge) {
+    async _assembleToolsSection(knowledge, query) {
         let section = '\n[AVAILABLE ACTIONS & TOOLS]\n';
 
         // A. Read ActionAPI docs (Primitives)
         try {
             const apiDocsPath = knowledge.apiDocsPath;
             if (apiDocsPath) {
-                // Phase 11 EAI: Load dynamic tools from persistent Skill Library
-                const dynamicTools = this.agent.skillManager
-                    ? Object.entries(this.agent.skillManager.getAllSkills())
-                    : [];
+                // Phase 13 EAI: RAG Pruning. Only load Top K dynamic skills based on query
+                let dynamicToolsObj = {};
+                if (this.agent.skillManager) {
+                    // Pull top 10 relevant skills
+                    dynamicToolsObj = await this.agent.skillManager.searchSkills(query, 10);
+                }
+                const dynamicTools = Object.entries(dynamicToolsObj);
 
                 section += '1. PRIMITIVE ACTIONS (Native):\n';
                 section += '   (See ActionAPI Reference for details)\n';
@@ -87,10 +91,15 @@ export class ContextAssembler {
                 section += '   - actions.gather_nearby(target, count)\n';
 
                 if (dynamicTools.length > 0) {
-                    section += '\n2. LEARNED TOOLS (Dynamic Skill Library):\n';
+                    section += '\n2. RELEVANT LEARNED TOOLS (Dynamic Skill Library):\n';
                     dynamicTools.forEach(([name, data]) => {
                         section += `   - active_skills.${name}(params) : ${data.description} (Success Rate: ${(data.successRate * 100).toFixed(0)}%)\n`;
                     });
+
+                    const totalSkillCount = Object.keys(this.agent.skillManager.getAllSkills()).length;
+                    if (totalSkillCount > dynamicTools.length) {
+                        section += `   ... and ${totalSkillCount - dynamicTools.length} other skills not shown to save context.\n`;
+                    }
                 } else {
                     section += '\n2. LEARNED TOOLS: None yet.\n';
                 }

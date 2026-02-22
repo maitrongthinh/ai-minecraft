@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { VectorStore } from '../../memory/VectorStore.js';
 
 /**
  * SkillManager.js
@@ -10,35 +11,63 @@ import path from 'path';
 export class SkillManager {
     constructor(agent) {
         this.agent = agent;
-        const profilePath = agent.prompts.getProfilePath();
+        const botName = agent.name || 'default';
+        const profilePath = path.join(process.cwd(), 'bots', botName);
 
         // Save skills relative to profile data
         this.libraryPath = path.join(profilePath, 'skill_library');
         this.manifestPath = path.join(this.libraryPath, 'skills_manifest.json');
 
+        // Phase 13: Hive-Mind Shared Library
+        this.sharedLibraryPath = './bots/_shared_brain/VerifiedSkills';
+        this.sharedManifestPath = './bots/_shared_brain/skills_manifest.json';
+
         this.manifest = {
             version: "1.0",
             skills: {}
         };
+        this.sharedManifest = {
+            version: "1.0",
+            skills: {}
+        };
+
+        // Phase 13: Skill Vector Store for RAG Pruning
+        this.vectorStore = new VectorStore(agent, './bots/_shared_brain/skill_vectors.json');
 
         this.initLibrary();
     }
 
     initLibrary() {
+        // Init Local Library
         if (!fs.existsSync(this.libraryPath)) {
             fs.mkdirSync(this.libraryPath, { recursive: true });
         }
-
         if (fs.existsSync(this.manifestPath)) {
             try {
                 const data = fs.readFileSync(this.manifestPath, 'utf8');
                 this.manifest = JSON.parse(data);
-                console.log(`[SkillManager] 📚 Loaded Skill Library. Found ${Object.keys(this.manifest.skills).length} skills.`);
+                console.log(`[SkillManager] 📚 Loaded Local Skill Library. Found ${Object.keys(this.manifest.skills).length} skills.`);
             } catch (err) {
-                console.error('[SkillManager] ⚠️ Error loading skill manifest:', err.message);
+                console.error('[SkillManager] ⚠️ Error loading local skill manifest:', err.message);
             }
         } else {
             this.saveManifest();
+        }
+
+        // Init Shared Library (Hive-Mind)
+        if (!fs.existsSync(this.sharedLibraryPath)) {
+            fs.mkdirSync(this.sharedLibraryPath, { recursive: true });
+        }
+        if (fs.existsSync(this.sharedManifestPath)) {
+            try {
+                const data = fs.readFileSync(this.sharedManifestPath, 'utf8');
+                this.sharedManifest = JSON.parse(data);
+                console.log(`[SkillManager] 🌐 Loaded Shared Skill Library (Hive-Mind). Found ${Object.keys(this.sharedManifest.skills).length} skills.`);
+            } catch (err) {
+                console.error('[SkillManager] ⚠️ Error loading shared skill manifest:', err.message);
+            }
+        } else {
+            this.saveSharedManifest();
         }
     }
 
@@ -46,7 +75,15 @@ export class SkillManager {
         try {
             fs.writeFileSync(this.manifestPath, JSON.stringify(this.manifest, null, 4));
         } catch (err) {
-            console.error('[SkillManager] ⚠️ Error saving skill manifest:', err.message);
+            console.error('[SkillManager] ⚠️ Error saving local skill manifest:', err.message);
+        }
+    }
+
+    saveSharedManifest() {
+        try {
+            fs.writeFileSync(this.sharedManifestPath, JSON.stringify(this.sharedManifest, null, 4));
+        } catch (err) {
+            console.error('[SkillManager] ⚠️ Error saving shared skill manifest:', err.message);
         }
     }
 
@@ -58,7 +95,7 @@ export class SkillManager {
      * @param {Array} tags 
      */
     addSkill(name, description, codePath, tags = []) {
-        this.manifest.skills[name] = {
+        const skillData = {
             description,
             path: codePath,
             tags,
@@ -66,36 +103,118 @@ export class SkillManager {
             usageCount: 0,
             successRate: 1.0
         };
+
+        // Save to local
+        this.manifest.skills[name] = skillData;
         this.saveManifest();
+
+        // Save to shared brain (Hive-Mind Sync)
+        try {
+            const fileName = path.basename(codePath);
+            const sharedCodePath = path.join(this.sharedLibraryPath, fileName);
+            fs.copyFileSync(codePath, sharedCodePath);
+
+            // Update path to relative for shared use, or keep absolute if it's the pattern
+            // Actually it's better to store an absolute path mapping or standard relative
+            this.sharedManifest.skills[name] = {
+                ...skillData,
+                path: sharedCodePath
+            };
+            this.saveSharedManifest();
+            console.log(`[SkillManager] 🌐 Skill '${name}' synced to Global Hive-Mind.`);
+        } catch (err) {
+            console.error(`[SkillManager] ⚠️ Failed to sync skill '${name}' to shared brain:`, err.message);
+        }
+
+        // Phase 13 RAG: Generate embedding for search
+        this._embedSkillAsync(name, description, tags);
+
         console.log(`[SkillManager] 📖 Skill '${name}' added to Persistent Library.`);
     }
 
     /**
-     * Get a specific skill by name
+     * Background task to generate embeddings for a new skill
      */
-    getSkill(name) {
-        return this.manifest.skills[name] || null;
+    async _embedSkillAsync(name, description, tags) {
+        try {
+            const textToEmbed = `Skill: ${name}\nDescription: ${description}\nTags: ${tags.join(',')}`;
+            await this.vectorStore.add(textToEmbed, { skillName: name });
+            console.log(`[SkillManager] 🧠 Nested embedding for skill '${name}' generated.`);
+        } catch (err) {
+            console.error(`[SkillManager] ⚠️ Failed to generate embedding for skill '${name}':`, err.message);
+        }
     }
 
     /**
-     * Get all registered dynamic skills
+     * Get a specific skill by name (prioritizes local, then shared)
+     */
+    getSkill(name) {
+        return this.manifest.skills[name] || this.sharedManifest.skills[name] || null;
+    }
+
+    /**
+     * Get all registered dynamic skills (merged local and shared)
      */
     getAllSkills() {
-        return this.manifest.skills;
+        return {
+            ...this.sharedManifest.skills,
+            ...this.manifest.skills // Local overrides shared if conflict
+        };
     }
 
     /**
      * Update skill metrics (for RAG priority)
      */
     updateSkillMetrics(name, success = true) {
-        const skill = this.manifest.skills[name];
-        if (skill) {
-            skill.usageCount = (skill.usageCount || 0) + 1;
-            // Simple moving average for success rate
-            const currentRate = skill.successRate || 1.0;
-            const targetRate = success ? 1.0 : 0.0;
-            skill.successRate = (currentRate * 0.8) + (targetRate * 0.2);
-            this.saveManifest();
+        const updateMetrics = (manifestObj, saveFunc) => {
+            const skill = manifestObj.skills[name];
+            if (skill) {
+                skill.usageCount = (skill.usageCount || 0) + 1;
+                const currentRate = skill.successRate || 1.0;
+                const targetRate = success ? 1.0 : 0.0;
+                skill.successRate = (currentRate * 0.8) + (targetRate * 0.2);
+                saveFunc.call(this);
+            }
+        };
+
+        updateMetrics(this.manifest, this.saveManifest);
+        updateMetrics(this.sharedManifest, this.saveSharedManifest);
+    }
+
+    /**
+     * Search for most relevant skills using RAG
+     * @param {string} query 
+     * @param {number} k 
+     * @returns {Promise<Object>} An object containing the top K skills
+     */
+    async searchSkills(query, k = 10) {
+        if (!query || query.trim().length === 0) {
+            // Return top usage skills instead
+            const all = this.getAllSkills();
+            const sorted = Object.entries(all)
+                .sort((a, b) => (b[1].usageCount || 0) - (a[1].usageCount || 0));
+            return Object.fromEntries(sorted.slice(0, k));
         }
+
+        const results = await this.vectorStore.search(query, k);
+        const allSkills = this.getAllSkills();
+        const relevantSkills = {};
+
+        for (const res of results) {
+            const name = res.metadata?.skillName;
+            if (name && allSkills[name]) {
+                relevantSkills[name] = allSkills[name];
+            }
+        }
+
+        // Fallback if vector search yields nothing (e.g. embeddings not ready)
+        if (Object.keys(relevantSkills).length === 0) {
+            const all = this.getAllSkills();
+            const sorted = Object.entries(all)
+                .sort((a, b) => (b[1].usageCount || 0) - (a[1].usageCount || 0));
+            return Object.fromEntries(sorted.slice(0, k));
+        }
+
+        return relevantSkills;
     }
 }

@@ -16,6 +16,7 @@ import { CombatAcademy } from './CombatAcademy.js';
 import { Task } from '../tasks/ScenarioManager.js';
 import { SwarmSync } from './SwarmSync.js'; // Phase 7 Unified Swarm System
 import { Profiler } from './Profiler.js'; // Phase 8: Reliability
+import { CodeEngine } from '../intelligence/CodeEngine.js';
 import { AutoHealer } from './AutoHealer.js'; // Phase 8: Reliability
 
 /**
@@ -105,8 +106,11 @@ export class CoreSystem {
         this.social = new SocialEngine(this.agent);
         this.agent.social = this.social;
 
-        this.intelligence = new UtilityEngine(this.agent);
+        this.intelligence = new CodeEngine(this.agent);
         this.agent.intelligence = this.intelligence;
+
+        this.utility = new UtilityEngine(this.agent);
+        this.agent.utility = this.utility;
 
         // 8. Initialize Orchestration & Tasks
         this.system2 = new System2Loop(this.agent);
@@ -143,6 +147,25 @@ export class CoreSystem {
 
         console.log('[CoreSystem] ✅ Kernel Ready. Waiting for Neural Link...');
         globalBus.emitSignal(SIGNAL.SYSTEM_READY);
+    }
+
+    /**
+     * Phase 5: Safe Initialization
+     * Connects valid bot instance to subsystems
+     */
+    connectBot(bot) {
+        if (!bot) {
+            console.error('[CoreSystem] ❌ Cannot connect null bot!');
+            return;
+        }
+        console.log('[CoreSystem] 🔗 Connecting Bot Instance to Subsystems...');
+
+        // Connect Reflexes (Safe Init)
+        if (this.reflexSystem && typeof this.reflexSystem.connect === 'function') {
+            this.reflexSystem.connect(bot);
+        }
+
+        console.log('[CoreSystem] ✅ Bot Connected Successfully');
     }
 
     _setupCoreListeners() {

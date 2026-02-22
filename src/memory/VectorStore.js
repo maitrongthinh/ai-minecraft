@@ -7,7 +7,7 @@ import path from 'path';
 // const MEMORY_FILE = './memories.json';
 
 export class VectorStore {
-    constructor(agent) {
+    constructor(agent, customPath = null) {
         this.agent = agent;
         this.memories = [];
         this.extractor = null;
@@ -16,9 +16,9 @@ export class VectorStore {
         this._saveTimer = null;
         this._savePending = false;
 
-        // Phase 4: Scoped Storage
+        // Phase 4: Scoped Storage, configurable for Shared Brain
         const botName = this.agent?.name || 'default';
-        this.memoryFile = `./bots/${botName}/data/vectors.json`;
+        this.memoryFile = customPath || `./bots/${botName}/data/vectors.json`;
 
         this.load();
     }

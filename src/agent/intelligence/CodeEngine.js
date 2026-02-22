@@ -5,7 +5,7 @@ import { globalBus, SIGNAL } from '../core/SignalBus.js';
 import { ActionLogger } from '../../utils/ActionLogger.js';
 import { getBotOutputSummary } from '../../utils/mcdata.js';
 import { CodeSandbox } from '../core/CodeSandbox.js';
-// Legacy skills import removed
+import * as skills from '../../skills/library/index.js';
 
 /**
  * CodeEngine: Unified JS Execution & Learning System
@@ -274,7 +274,25 @@ export class CodeEngine {
                 }
             }
 
-            // Add custom skills
+            // Add built-in and custom skills from library
+            for (const [name, fn] of Object.entries(skills)) {
+                if (typeof fn === 'function') {
+                    // Wrap as a bridge call instead of toString() to avoid scope issues
+                    skillsSource[name] = `async (...args) => { return await bot.__call_skill__('${name}', ...args); }`;
+                }
+            }
+
+            // Add custom skills from SkillLibrary
+            if (this.library && this.library.customSkills) {
+                for (const [name, code] of Object.entries(this.library.customSkills)) {
+                    // Custom skills from the library might be full source, but we can treat them similarly 
+                    // or continue to use string-based if they are simple. 
+                    // To be safe, let's keep them as source if they were saved as source.
+                    skillsSource[name] = code;
+                }
+            }
+
+            // Add custom skills from agent.customSkills (compatibility)
             if (this.agent.customSkills) {
                 for (const key of Object.keys(this.agent.customSkills)) {
                     if (typeof this.agent.customSkills[key] === 'function') {
@@ -283,16 +301,28 @@ export class CodeEngine {
                 }
             }
 
+            const actionsSource = {};
+            // EXTREMELY IMPORTANT: Map ActionAPI methods as well
+            if (this.agent.actionAPI) {
+                const proto = Object.getPrototypeOf(this.agent.actionAPI);
+                for (const name of Object.getOwnPropertyNames(proto)) {
+                    if (typeof this.agent.actionAPI[name] === 'function' && name !== 'constructor' && !name.startsWith('_')) {
+                        actionsSource[name] = `async (params) => { return await bot.__call_action__('${name}', params); }`;
+                    }
+                }
+            }
+
             const contextData = {
                 botState,
                 // Serialize skill functions as strings for the sandbox to eval
                 skillsSource: Object.assign({}, skillsSource),
+                actionsSource: Object.assign({}, actionsSource),
                 bot_health: bot.health,
                 bot_food: bot.food,
                 bot_position: bot.entity.position
             };
 
-            const result = await this.sandbox.execute(code_clean, contextData);
+            const result = await this.sandbox.execute(code_clean, contextData, this.agent.actionAPI, skills);
 
             if (!result.success) {
                 throw new Error(result.error);

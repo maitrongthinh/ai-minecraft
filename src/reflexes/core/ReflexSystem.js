@@ -76,8 +76,13 @@ export class ReflexSystem {
 
         // Load Dynamic Reflexes (Phase 4)
         if (this.agent.evolution && this.agent.evolution.reflexCreator) {
-            const loaded = this.agent.evolution.reflexCreator.loadReflexes();
-            loaded.forEach(r => this.registerDynamicReflex(r));
+            this.agent.evolution.reflexCreator.loadReflexes()
+                .then(loaded => {
+                    if (Array.isArray(loaded)) {
+                        loaded.forEach(r => this.registerDynamicReflex(r));
+                    }
+                })
+                .catch(err => console.error('[ReflexSystem] Failed to load dynamic reflexes', err));
         }
     }
 

@@ -19,7 +19,13 @@ export class Prompter {
     constructor(agent, profile) {
         this.agent = agent;
         this.profile = profile;
-        let default_profile = JSON.parse(readFileSync('./profiles/defaults/_default.json', 'utf8'));
+        let default_profile = {};
+        try {
+            default_profile = JSON.parse(readFileSync('./profiles/defaults/_default.json', 'utf8'));
+        } catch (e) {
+            console.warn('[Prompter] Missing _default.json profile. Using empty default.');
+        }
+
         let base_fp = '';
         if (settings.base_profile.includes('survival')) {
             base_fp = './profiles/defaults/survival.json';
@@ -30,7 +36,15 @@ export class Prompter {
         } else if (settings.base_profile.includes('god_mode')) {
             base_fp = './profiles/defaults/god_mode.json';
         }
-        let base_profile = JSON.parse(readFileSync(base_fp, 'utf8'));
+
+        let base_profile = {};
+        if (base_fp) {
+            try {
+                base_profile = JSON.parse(readFileSync(base_fp, 'utf8'));
+            } catch (e) {
+                console.warn(`[Prompter] Missing base profile ${base_fp}.`);
+            }
+        }
 
         // first use defaults to fill in missing values in the base profile
         for (let key in default_profile) {

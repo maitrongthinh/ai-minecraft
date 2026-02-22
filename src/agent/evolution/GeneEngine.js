@@ -4,7 +4,8 @@ import path from 'path';
 export class GeneEngine {
     constructor(agent) {
         this.agent = agent;
-        this.profilePath = agent.prompts.getProfilePath();
+        const botName = agent.name || 'default';
+        this.profilePath = path.join(process.cwd(), 'bots', botName);
 
         // Genes file specific to this bot's profile
         this.genesFilePath = path.join(this.profilePath, 'genes.json');

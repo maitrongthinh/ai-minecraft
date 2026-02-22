@@ -22,7 +22,7 @@ export class ActionAPI {
      * @param {Object} directive - { type: string, params: Object, action_id: string }
      */
     async dispatch(directive) {
-        const { type, params, action_id } = directive;
+        let { type, params, action_id } = directive;
         console.log(`[ActionAPI] 🚀 Dispatching action: ${type} (${action_id || 'untracked'})`);
 
         // Wiki Tools Interception
@@ -40,6 +40,22 @@ export class ActionAPI {
             if (!this.agent.wiki) return { action_id, success: false, error: "Wiki tool not initialized" };
             const res = await this.agent.wiki.getMobInfo(params.mob);
             return { action_id, success: !!res, data: res || "Mob info not found" };
+        }
+
+        // Bridge Compatibility: If params is an array (from sandbox), map to object for known primitives
+        if (Array.isArray(params)) {
+            const t = type.toLowerCase();
+            if (t === 'gather_nearby') params = { matching: params[0], count: params[1], options: params[2] || {} };
+            else if (t === 'ensure_item') params = { itemName: params[0], targetCount: params[1], options: params[2] || {} };
+            else if (t === 'eat_if_hungry') params = { threshold: params[0], options: params[1] || {} };
+            else if (t === 'mine') params = { target: params[0], options: params[1] || {} };
+            else if (t === 'craft') params = { item: params[0], count: params[1], options: params[2] || {} };
+            else if (t === 'place') params = { block: params[0], pos: params[1], options: params[2] || {} };
+            else if (t === 'move_to') params = { pos: params[0], options: params[1] || {} };
+            else if (t === 'attack') params = { entity: params[0], options: params[1] || {} };
+            else if (t === 'equip') params = { item: params[0], dest: params[1], options: params[2] || {} };
+            else if (t === 'smelt') params = { item: params[0], count: params[1], options: params[2] || {} };
+            else if (params.length === 1 && typeof params[0] === 'object') params = params[0];
         }
 
         if (typeof this[type.toLowerCase()] === 'function') {

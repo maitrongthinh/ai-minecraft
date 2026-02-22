@@ -322,7 +322,7 @@ export class Agent {
 
         const count = this._extractRequestedCount(normalized, 16);
         const hasFetchVerb = /(lay|lấy|get|gather|farm|thu thap|collect|kiem|kiem cho|mang cho)/.test(normalized);
-        const hasResourceWord = /(go|wood|log|stone|da|coal|than|sat|iron)/.test(normalized);
+        const hasResourceWord = /\b(wood|log|stone|da|coal|than|sat|iron)\b|\bgo\b(?!\s+(to|up|down|away|back|home|there|here|around))/.test(normalized);
         const hasQuantity = /\b\d{1,3}\b/.test(normalized);
         if (!hasResourceWord || (!hasFetchVerb && !hasQuantity)) return null;
 
@@ -341,7 +341,7 @@ export class Agent {
                 break;
             }
         }
-        if (!item && /(wood|log|go)/.test(normalized)) {
+        if (!item && /\b(wood|log)\b|\bgo\b(?!\s+(to|up|down|away|back|home|there|here|around))/.test(normalized)) {
             item = 'any_log';
         }
         if (!item) return null;
@@ -623,6 +623,7 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
 
                 console.log('[INIT] Agent is online and listening. State: READY');
             } catch (error) {
+                console.error("[DEV DEBUG] SpawnError caught:", error);
                 this.handleSafeDisconnect('SpawnError', error, save_data, init_message, attempt);
             }
         });
@@ -883,13 +884,17 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
 
         // Initialize Mission Director (Autonomous Brain)
         try {
-            // cleanup old instance ifexists
-            if (this.missionDirector) {
-                this.missionDirector.stop();
+            if (typeof MissionDirector !== 'undefined') {
+                // cleanup old instance ifexists
+                if (this.missionDirector) {
+                    this.missionDirector.stop();
+                }
+                this.missionDirector = new MissionDirector(this);
+                this.missionDirector.init();
+                console.log('[INIT] MissionDirector instantiated.');
+            } else {
+                console.warn('[INIT] MissionDirector class not found. Post-EAI missions disabled.');
             }
-            this.missionDirector = new MissionDirector(this);
-            this.missionDirector.init();
-            console.log('[INIT] MissionDirector instantiated.');
         } catch (err) {
             console.error('[INIT] Failed to instantiate MissionDirector:', err);
         }
@@ -951,8 +956,14 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
             }
         }
 
-        this.bot.on('whisper', (u, m) => this._onWhisper(u, m));
-        this.bot.on('chat', (u, m) => this._onChat(u, m));
+        this.bot.on('whisper', async (u, m) => {
+            if (serverProxy.getNumOtherAgents() > 0) return;
+            await respondFunc(u, m);
+        });
+        this.bot.on('chat', async (u, m) => {
+            if (serverProxy.getNumOtherAgents() > 0) return;
+            await respondFunc(u, m);
+        });
 
         // Set up auto-eat (Prefer profile settings)
         this.bot.autoEat.options = {
@@ -1942,24 +1953,6 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
         this.shutdown('Task Finished');
     }
 
-    async _onWhisper(username, message) {
-        if (!this.running) return;
-        try {
-            await this.handleMessage(username, message);
-        } catch (error) {
-            console.error('[Agent] Whisper handle error:', error);
-        }
-    }
-
-    async _onChat(username, message) {
-        if (!this.running) return;
-        if (serverProxy.getNumOtherAgents() > 0) return;
-        try {
-            await this.handleMessage(username, message);
-        } catch (error) {
-            console.error('[Agent] Chat handle error:', error);
-        }
-    }
 
     /**
      * MINDCRAFT REBORN: The Soul Loop
