@@ -10,6 +10,7 @@ export class ExecutorAgent {
     constructor(agent) {
         this.agent = agent;
         this.maxRetries = 2;
+        this.actionTimeout = 30000; // 30s max for any single step (Phase 13 Improvement)
         this.currentPlan = null;
         this.currentStep = 0;
         this.executionLog = [];
@@ -150,17 +151,31 @@ export class ExecutorAgent {
                         return { success: false, message: 'Bot disconnected or dead', abort: true };
                     }
 
-                    // 2. Execution via ToolRegistry or Fallback
-                    const result = await this._executeViaRegistry(step);
+                    // 2. Execution via ToolRegistry or Fallback (with Phase 13 Timeout)
+                    const executionPromise = this._executeViaRegistry(step);
+                    const timeoutPromise = new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('Execution Timeout (Stalled Action)')), this.actionTimeout);
+                    });
+
+                    const result = await Promise.race([executionPromise, timeoutPromise]);
 
                     if (result.success) {
-                        return result; // Immediately return success to exit retry loop and function
+                        return result; // Immediately return success to exit retry loop
                     }
 
                     lastError = result.message || 'Unknown error';
                 } catch (error) {
                     console.warn(`[ExecutorAgent] execution error: ${error.message}`);
                     lastError = error.message;
+                    // If it was a timeout, we might want to abort or signal a stall
+                    if (error.message.includes('Timeout')) {
+                        globalBus.emitSignal(SIGNAL.TASK_FAILED, {
+                            step: step.id,
+                            task: step.task,
+                            error: 'STALLED',
+                            reason: 'Action exceeded 30s threshold'
+                        });
+                    }
                 } finally {
                     if (this.agent.locks && this.agent.locks.move && this.agent.locks.move.getOwner() === 'system2') {
                         this.agent.locks.move.release('system2');

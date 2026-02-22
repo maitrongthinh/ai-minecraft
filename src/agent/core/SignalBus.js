@@ -131,6 +131,7 @@ export const SIGNAL = {
     // System Errors & Recovery
     SYSTEM_ERROR: 'system.error',
     EMERGENCY_RECALL: 'system.emergency_recall',
+    SYSTEM_LATENCY_HIGH: 'system.latency_high', // Added for Phase 13 bottleneck detection
 
     // Behavior Rules
     RULE_LEARNED: 'rule.learned',
@@ -166,14 +167,17 @@ class SignalBus extends EventEmitter {
             errors: 0
         };
 
-        // Phase 11 EAI: Throttle bottleneck signals
+        // Phase 11 & 13 EAI: Throttle bottleneck signals
         this.throttleMap = new Map();
         this.throttleConfig = {
-            [SIGNAL.ENV_BLOCK_CHANGE]: 500, // Max 2 per second
-            [SIGNAL.ENV_ENTITY_ACTION]: 250, // Max 4 per second 
-            [SIGNAL.ENTITY_SPOTTED]: 1000,
-            [SIGNAL.BLOCK_FOUND]: 1000
+            [SIGNAL.ENV_BLOCK_CHANGE]: 1000, // Max 1 per second (Hardened for maritime biomes)
+            [SIGNAL.ENV_ENTITY_ACTION]: 500, // Max 2 per second 
+            [SIGNAL.ENTITY_SPOTTED]: 2000,   // Max 1 per 2 seconds
+            [SIGNAL.BLOCK_FOUND]: 2000,
+            [SIGNAL.SYSTEM_TICK]: 1000
         };
+
+        this.queueHistory = []; // Track processing speed
 
         console.log('[SignalBus] ⚡ Synapse Bus initialized');
     }
@@ -211,10 +215,11 @@ class SignalBus extends EventEmitter {
      * @param {object} payload - Data to send
      */
     emitSignal(signal, payload = {}) {
-        // Phase 11 EAI: Throttle logic
+        const now = Date.now();
+
+        // Phase 11 & 13 EAI: Throttle logic
         if (this.throttleConfig[signal]) {
             const lastEmit = this.throttleMap.get(signal) || 0;
-            const now = Date.now();
             if (now - lastEmit < this.throttleConfig[signal]) {
                 this.stats.signalsThrottled++;
                 return; // Drop signal to prevent bottleneck
@@ -222,10 +227,24 @@ class SignalBus extends EventEmitter {
             this.throttleMap.set(signal, now);
         }
 
+        // High-Load Detection (Phase 13 Improvement)
+        this.queueHistory.push(now);
+        if (this.queueHistory.length > 50) {
+            this.queueHistory.shift();
+            const oldest = this.queueHistory[0];
+            const rate = 50 / ((now - oldest) / 1000); // signals per second
+            if (rate > 100) { // Threshold for "MindOS Flood"
+                if (now % 10 === 0) { // Throttle the warning itself
+                    console.warn(`[SignalBus] ⚠ High Neural Load detected: ${rate.toFixed(1)} sig/s`);
+                    this.emit(SIGNAL.SYSTEM_LATENCY_HIGH, { rate });
+                }
+            }
+        }
+
         const event = {
             signal,
             payload,
-            timestamp: Date.now()
+            timestamp: now
         };
 
         // Log to history

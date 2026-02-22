@@ -50,6 +50,8 @@ Only the **Core layer** (Kernel) may emit `SYSTEM_*` and `BOT_*` signals.
 | `TASK_FAILED` | `TaskScheduler` | `{ task: string, error: string, fatal: boolean }` |
 | `DEATH` | `Bot Event Listener` | `{ position: Vec3, killer: string\|null }` |
 | `BLACKBOARD_UPDATE` | `Blackboard` | `{ path: string, value: any, source: string }` |
+| `SYSTEM_LATENCY_HIGH`| `SignalBus` | `{ rate: number }` (Phase 13 Load detection) |
+| `TASK_FAILED` | `ExecutorAgent` | `{ task: string, error: 'STALLED', reason: string }` |
 
 ### 2.2 TaskScheduler Constraints
 - **Concurrency**: One non-parallel task permitted per priority tier.
@@ -131,14 +133,17 @@ All primitive actions are implemented in `src/actions/core/ActionAPI.js`.
 ### 5.1 System 1: Reflexes (`src/agent/reflexes/`)
 Reflexes are **blocking-synchronous** on the tick and must complete within 20ms.
 - **`CombatReflex`**: Tactical strafing/kiting. Single-target focus.
-- **`SelfPreservationReflex`**: Auto-retreat at $health < 6$.
+- **`SelfPreservationReflex`**: Auto-retreat at $health < 6$. Persistent swimming if drowning.
 - **`StuckReflex`**: Jump-unstick if movement delta < 0.1 over 100 ticks.
 - **`FallDamageReflex`**: MLG water bucket (requires `water_bucket` in hotbar).
-- **`Watchdog`**: Zombie Killer. Kills tasks running $> 60s$.
+- **`Watchdog`**: Zombie Killer. Kills tasks running $> 60s$. (Handled by CoreSystem).
+- **`Movement Watchdog`** (Phase 13): Tracked by `ProactiveCurriculum`. Forces goal re-eval if delta < 2.0 blocks over 30s during active execution.
 
 ### 5.2 System 2: Evolution & Safety
 - **Evolution Tuning**: Limits parameter adjustments to $\pm 20\%$ of baseline.
 - **Code Sandbox**: `isolated-vm` enforced. 64MB RAM, 2000ms timeout for script evaluation.
+- **Action Timeouts**: All individual tasks enforced with a **30s hard timeout** in `ExecutorAgent`.
+- **Adaptive Trimming**: `ContextAssembler` restricts tool library (Top 3) and suppresses memories when health/oxygen $\le 10$.
 
 ---
 
@@ -160,5 +165,5 @@ Reflexes are **blocking-synchronous** on the tick and must complete within 20ms.
 
 ---
 **DOCUMENT END**
-**MIND-SYNC v3.1: FINAL STABLE BLUEPRINT**
-**LAST AUDIT: 2026-02-19**
+**MIND-SYNC v13.0: ARCHITECTURAL EVOLUTION (PROACTIVITY & STABILITY)**
+**LAST AUDIT: 2026-02-22**

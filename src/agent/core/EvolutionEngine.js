@@ -249,6 +249,16 @@ export class EvolutionEngine {
         } catch (e) { return false; }
     }
 
+    /**
+     * Unified Entry for Failure Analysis (Phase 13 Improvement)
+     * Used by CoreSystem to analyze Task failures
+     */
+    async analyzeAndCreate(data) {
+        console.log(`[EvolutionEngine] 🔍 Analyzing failure: ${data.cause}`);
+        const snapshot = this.captureSnapshot({ name: data.cause }, data.cause);
+        return await this.requestFix(snapshot);
+    }
+
     async registerWithToolRegistry(name, code, snapshot) {
         if (!this.agent.toolRegistry) return false;
         try {
@@ -294,10 +304,13 @@ export class EvolutionEngine {
     async recordSurvivalEvent(type, success) {
         console.log(`[EvolutionEngine] 🏥 Survival event recorded: ${type} (Success: ${success})`);
 
-        // Potential logic for future evolution:
-        // if (!success) {
-        //    this.mutateSurvivalGenome(`failed_${type}`);
-        // }
+        // Phase 13: Non-lethal failure analysis (e.g. stalled in water)
+        if (!success || type === 'STALLED') {
+            await this.analyzeAndCreate({
+                cause: type,
+                context: { pos: this.agent.bot?.entity?.position }
+            });
+        }
 
         this.stats.capturedErrors++; // Increment a general error/event counter if needed
         return true;

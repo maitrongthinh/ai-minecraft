@@ -230,8 +230,14 @@ export class System2Loop {
                 this._trace('execute', 'failed', 'Execution failed', {
                     failed: execResult.failed
                 });
-                // Attempt replan with intelligent retry check
-                if (SurvivalAnalysis.shouldRetry(execResult.failed.map(f => f.error).join('; '), this.failureCount)) {
+                // Attempt replan with intelligent retry check (Phase 13: Handle Stalls)
+                const failureStr = execResult.failed.map(f => f.error).join('; ');
+                if (failureStr.includes('STALLED')) {
+                    console.error('[System2Loop] 🚨 Stall detected in execution. Forcing immediate replan with survival bias.');
+                    return this._attemptReplan(goal, execResult.failed, 'Physical movement stall / Pathfinding failure');
+                }
+
+                if (SurvivalAnalysis.shouldRetry(failureStr, this.failureCount)) {
                     console.log('[System2Loop] Execution failed, attempting replan...');
                     this._trace('replan', 'start', 'Execution failed, starting replan', {
                         failed: execResult.failed

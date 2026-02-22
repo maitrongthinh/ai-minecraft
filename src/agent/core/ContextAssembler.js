@@ -25,6 +25,12 @@ export class ContextAssembler {
         const knowledge = this.agent.knowledge;
         if (!knowledge) return '';
 
+        // Phase 13 EAI: Adaptive Stress Check
+        const isStressed = bot.health <= 10 || (bot.oxygen && bot.oxygen <= 10);
+        if (isStressed) {
+            console.warn('[ContextAssembler] 🚨 High Stress Detected! Trimming context to survival essentials.');
+        }
+
         const manifest = knowledge.getManifest();
         if (!manifest) return '';
 
@@ -39,8 +45,12 @@ export class ContextAssembler {
         // 3. Learned Reflexes (Security/Safety)
         context += this._assembleReflexesSection(manifest);
 
-        // 4. Important Memories (Persistent params)
-        context += this._assembleMemorySection(manifest);
+        // 4. Important Memories (Persistent params) - Skip under high stress
+        if (!isStressed) {
+            context += this._assembleMemorySection(manifest);
+        } else {
+            context += '\n[NOTE]: Memories suppressed to focus on immediate survival.\n';
+        }
 
         context += '\n---------------------------------\n';
 
@@ -74,8 +84,9 @@ export class ContextAssembler {
                 // Phase 13 EAI: RAG Pruning. Only load Top K dynamic skills based on query
                 let dynamicToolsObj = {};
                 if (this.agent.skillManager) {
-                    // Pull top 10 relevant skills
-                    dynamicToolsObj = await this.agent.skillManager.searchSkills(query, 10);
+                    // Pull top 10 relevant skills (or just 3 if stressed)
+                    const skillLimit = (bot.health <= 10) ? 3 : 10;
+                    dynamicToolsObj = await this.agent.skillManager.searchSkills(query, skillLimit);
                 }
                 const dynamicTools = Object.entries(dynamicToolsObj);
 

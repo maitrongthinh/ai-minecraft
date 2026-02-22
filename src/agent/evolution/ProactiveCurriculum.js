@@ -15,6 +15,12 @@ export class ProactiveCurriculum {
         this.knownBiomes = new Set();
         this.knownItems = new Set();
 
+        // Phase 13 Watchdog State
+        this.lastPosition = null;
+        this.lastPosTime = Date.now();
+        this.failedGoalsHistory = new Map(); // goal_id -> failure_count
+        this.stallCounter = 0;
+
         // Basic Minecraft Tech Tree Objectives
         this.techTree = [
             { id: 'wood', goal: 'Mine 3 oak_log', requiredItems: [] },
@@ -38,6 +44,9 @@ export class ProactiveCurriculum {
                 this.cancelCurriculumEvaluation();
             }
         });
+
+        // Phase 13: Movement Watchdog Tick (Every 10s)
+        setInterval(() => this.checkMovementWatchdog(), 10000);
     }
 
     scheduleCurriculumEvaluation() {
@@ -83,6 +92,39 @@ export class ProactiveCurriculum {
             clearTimeout(this.idleTimeout);
             this.idleTimeout = null;
         }
+    }
+
+    /**
+     * Phase 13: Movement Watchdog
+     * Verifies the bot is actually making progress if it claims to be EXECUTING.
+     */
+    checkMovementWatchdog() {
+        const bot = this.agent.bot;
+        if (!bot || !bot.entity || !this.agent.brain || !this.agent.brain.isBusy()) {
+            this.lastPosition = null; // Reset if idle
+            this.stallCounter = 0;
+            return;
+        }
+
+        const currentPos = bot.entity.position.clone();
+        if (this.lastPosition && currentPos.distanceTo(this.lastPosition) < 2.0) {
+            this.stallCounter++;
+            console.warn(`[ProactiveCurriculum] ⚠ Movement Stall detected (${this.stallCounter}/3)`);
+
+            if (this.stallCounter >= 3) { // 30 seconds of no significant movement
+                console.error('[ProactiveCurriculum] 🚨 Bot is STALLED. Forcing goal re-evaluation.');
+                globalBus.emitSignal(SIGNAL.TASK_FAILED, {
+                    error: 'STALLED',
+                    reason: 'Proactive Watchdog: No movement for 30s'
+                });
+                this.evaluateAndStartGoal(true); // Force re-eval
+                this.stallCounter = 0;
+            }
+        } else {
+            this.stallCounter = 0;
+        }
+
+        this.lastPosition = currentPos;
     }
 
     /**
@@ -158,12 +200,13 @@ Examples of good responses:
 
     /**
      * Generate tasks and pass to System 2 Planner
+     * @param {boolean} force - Skip busy check (for watchdog)
      */
-    async evaluateAndStartGoal() {
+    async evaluateAndStartGoal(force = false) {
         try {
-            // Stop if we are already doing something (Lock check)
-            if (this.agent.brain && this.agent.brain.isBusy()) return;
-            if (this.agent.bot.entity.velocity.y < -0.1) return; // Falling
+            // Stop if we are already doing something (unless forced by watchdog)
+            if (!force && this.agent.brain && this.agent.brain.isBusy()) return;
+            if (!force && this.agent.bot.entity.velocity.y < -0.1) return; // Falling
 
             const nextGoal = await this.analyzeInventoryForNextGoal();
             this.activeGoal = nextGoal;
