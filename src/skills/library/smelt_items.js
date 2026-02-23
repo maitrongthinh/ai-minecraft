@@ -54,7 +54,7 @@ export default async function execute(agent, params = {}) {
     }
 
     if (agent?.actionAPI) {
-        const result = await agent.actionAPI.smelt(item, count, { retries });
+        const result = await agent.actionAPI.smelt({ itemName: item, count, options: { retries } });
         return {
             success: result.success,
             attempts: result.attempts || 0,

@@ -40,7 +40,6 @@ import { ReplayBuffer } from './core/ReplayBuffer.js';
 import { HitSelector } from './reflexes/HitSelector.js';
 import { SwarmSync } from './core/SwarmSync.js';
 // import { PathfindingWorkerController } from './core/PathfindingWorker.js';
-
 import ChatInstructionLearner from './core/ChatInstructionLearner.js';
 import { AdventureLogger } from './core/AdventureLogger.js';
 import { EnvironmentMonitor } from './core/EnvironmentMonitor.js';
@@ -77,6 +76,7 @@ export class Agent {
             teammates: [],
             obeyOwner: true
         };
+        this._prevIdleState = true;
     }
 
     async start(load_mem = false, init_message = null, count_id = 0) {
@@ -199,8 +199,6 @@ export class Agent {
         this.replayBuffer = new ReplayBuffer(this);
 
         this.swarm = new SwarmSync(this);
-        // Pathfinding Worker (Cleanup)
-        // this.pathfindingWorker = new PathfindingWorkerController(this);
 
         // Mission + Learning Runtime
 
@@ -1196,6 +1194,11 @@ if (deliverItem && available > 0 && skills.goToPlayer && skills.giveToPlayer) {
                     planObj.task = this._diversifyRepeatedTask(planObj.task, self_prompt);
                     planObj.task = this._sanitizeTaskForRuntime(planObj.task);
                     console.log(`[Agent] Received Task: ${planObj.task.type}`);
+                    if (planObj.task.content) {
+                        console.log('------------------ [TASK EXECUTION] ------------------');
+                        console.log(planObj.task.content);
+                        console.log('------------------------------------------------------');
+                    }
                     sendSystem2TraceToServer(this.name, {
                         phase: 'execute',
                         stage: 'start',
@@ -1422,7 +1425,7 @@ if (logCount + plankCount < 10) {
     .reduce((s, i) => s + i.count, 0);
 
   if (afterLogs <= logCount) {
-    const p = bot.entity.position.floored();
+    const p = bot.entity.position.floor();
     const dirs = [[6,0],[-6,0],[0,6],[0,-6]];
     const d = dirs[Math.floor(Math.random() * dirs.length)];
     try {
@@ -1507,7 +1510,7 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
             type: 'code',
             content: `
 await actions.eat_if_hungry({ threshold: 16, retries: 1 });
-const base = bot.entity.position.floored();
+const base = bot.entity.position.floor();
 const probes = [[12,0],[-12,0],[0,12],[0,-12],[18,18],[-18,18],[18,-18],[-18,-18]];
 let gathered = 0;
 for (const [dx, dz] of probes) {
@@ -1728,6 +1731,15 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
             lastTick = now;
 
             if (!this.running) return;
+
+            // Phase 6: Proactive State Transition Signaling
+            const currentIdle = this.isIdle();
+            if (currentIdle !== this._prevIdleState) {
+                if (currentIdle) {
+                    globalBus.emitSignal(SIGNAL.STATE_CHANGED, { state: 'IDLE' });
+                }
+                this._prevIdleState = currentIdle;
+            }
 
             try {
                 // Phase 3: Reflex Update (High Frequency - 50ms)
@@ -1986,8 +1998,8 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
                 return;
             }
 
-            // If idle for 15+ seconds, trigger internal thought
-            if (idleSeconds >= 15) {
+            // If idle for 10+ seconds, trigger internal thought
+            if (idleSeconds >= 10) {
                 idleSeconds = 0; // Reset counter
                 await this._triggerSoulThought();
             }
@@ -2035,7 +2047,12 @@ await actions.collect_drops({ radius: 8, maxItems: 4, continueOnError: true });
         // Don't interrupt if user is typing or if in combat
         if (this.combatReflex?.inCombat) return;
 
-        console.log('[Soul] 💭 Thinking...');
+        // console.log('[Soul] 💭 Thinking...');
+
+        // Phase 6: Link Soul Loop to Proactive Curriculum
+        if (this.curriculum && typeof this.curriculum.evaluateAndStartGoal === 'function') {
+            await this.curriculum.evaluateAndStartGoal(true);
+        }
 
         // Nudge the MissionDirector
         if (this.missionDirector) {

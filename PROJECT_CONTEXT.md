@@ -1,169 +1,173 @@
-# MIND-SYNC RUNTIME ARCHITECTURE (STABLE v3.1 FINAL)
+# Minecraft AI Survival Bot — Runtime Architecture
 
 > [!IMPORTANT]
-> **RUNTIME CONTRACT NOTICE**
-> This document is a reality-aligned reconstruction of the MIND-SYNC bot architecture. Every component, signal, and module described herein has been verified in the codebase. 
-> 
-> **STRICT ARCHITECTURAL GUARDRAILS**:
-> 1. **Existence Rule**: If an API, signal, or module is not explicitly listed in this document, it must be assumed to NOT exist.
-> 2. **Expansion Rule**: This document defines runtime truth. AI agents must NOT expand architecture or hallucinate capabilities beyond this file.
-> 3. **Immutability Guard**: Files within `src/agent/core/*` (Kernel) are immutable. Modifications are restricted to the EvolutionEngine pipeline.
+> **RULES FOR AI AGENTS EDITING THIS CODEBASE:**
+> 1. If an API, signal, or module is NOT listed here, assume it does NOT exist.
+> 2. Do NOT invent new architecture. Fix what exists.
+> 3. `src/agent/core/*` is the kernel — modifications must be minimal and tested.
 
 ---
 
-## 1. System Entry Point & Boot Sequence
+## 1. What This Bot Actually Does
 
-The system entry point is `src/agent/Agent.js`. Initialization is a phase-based deterministic sequence.
+An autonomous Minecraft survival bot powered by an LLM (GPT/Gemini). It connects to a Minecraft server via `mineflayer`, perceives its environment, makes decisions, and executes survival tasks (gather wood, craft tools, eat, fight, build shelter). When it fails, it analyzes what went wrong and tries to improve.
 
-### Phase 1: Environment Sync (Synchronous)
-- **Configuration**: `settings.js` is loaded and merged with `StandardProfileSchema.js`.
-- **API Setup**: Model aliases are resolved; API keys are injected from `env`.
+**What it CAN do:** Basic survival loop, combat reflexes, wood/ore gathering, crafting, smelting, eating, shelter-seeking, following players, basic collaboration.
 
-### Phase 2: Kernel Boot (Asynchronous)
-1. **`TaskScheduler`**: Central pulse initialized. Creates the `Blackboard`.
-2. **`MemorySystem`**: Initializes `VectorStore.js` and chat history persistence.
-3. **`EnvironmentMonitor`**: Starts the proactive sensor loop.
-4. **`PerceptionManager`**: Initializes `VisionScheduler` for world polling.
-5. **`ReflexSystem`**: System 1 (Amygdala) initialized with 50ms tick rate.
-6. **`ToolRegistry`**: Auto-discovers behavioral skills in `src/skills/library/`.
-7. **`EvolutionEngine`**: Attaches to `SIGNAL.TASK_FAILED` and `SIGNAL.DEATH` for retrospective analysis.
-
-### Phase 3: Bot Correlation (Asynchronous)
-- **Mineflayer Instance**: Bot initialized via `utils/mcdata.js`.
-- **Signal Bus Binding**: Bot vitals and event listeners are wired to `globalBus`.
-- **MotorCortex Bridge**: `MotorCortex` is attached to the bot instance for neuromorphic control.
+**What it CANNOT do:** Reliably build complex structures, navigate the Nether/End autonomously, play in ocean biomes (no biome awareness), run multiple bots in a swarm (SwarmSync disabled).
 
 ---
 
-## 2. Kernel & SignalBus (Nervous System)
+## 2. Entry Point & Boot Sequence
 
-### 2.1 SignalBus Ownership (`src/agent/core/SignalBus.js`)
-Only the **Core layer** (Kernel) may emit `SYSTEM_*` and `BOT_*` signals. 
+Entry: `main.js` → `src/agent/agent.js` (Agent class, ~2000 lines).
 
-| Signal Enum | Emission Source | Typical Payload Shape |
-| :--- | :--- | :--- |
-| `SYSTEM_READY` | `CoreSystem` | `{}` |
-| `BOT_SPAWNED` | `Agent` | `{ name: string, world_id: uuid }` |
-| `THREAT_DETECTED` | `EnvironmentMonitor` | `{ entity: Entity, position: Vec3 }` |
-| `HEALTH_CRITICAL` | `CoreSystem` (Watchdog) | `{ health: 0-6 }` |
-| `HUNGRY` | `CoreSystem` (Watchdog) | `{ food: 0-6 }` |
-| `TASK_FAILED` | `TaskScheduler` | `{ task: string, error: string, fatal: boolean }` |
-| `DEATH` | `Bot Event Listener` | `{ position: Vec3, killer: string\|null }` |
-| `BLACKBOARD_UPDATE` | `Blackboard` | `{ path: string, value: any, source: string }` |
-| `SYSTEM_LATENCY_HIGH`| `SignalBus` | `{ rate: number }` (Phase 13 Load detection) |
-| `TASK_FAILED` | `ExecutorAgent` | `{ task: string, error: 'STALLED', reason: string }` |
-
-### 2.2 TaskScheduler Constraints
-- **Concurrency**: One non-parallel task permitted per priority tier.
-- **Interruption**: Priority $\ge 100$ triggers `interruptPhysicalTasks()`.
-  - **Effect**: Calls `bot.pathfinder.setGoal(null)`, `bot.stopDigging()`, and aborts the active `TaskController`.
+### Boot Phases:
+1. **Config Load**: `settings.js` + profile JSON → merged into `this.config`
+2. **Kernel Boot** (`CoreSystem.initialize()`):
+   - `TaskScheduler` (priority queue + Blackboard state)
+   - `MemorySystem` (vector store + chat history)
+   - `EnvironmentMonitor` (world scanning)
+   - `ReflexSystem` (50ms tick combat/survival reflexes)
+   - `ToolRegistry` (auto-discovers skills from `src/skills/library/`)
+   - `EvolutionEngine` (post-death analysis + dynamic reflex creation)
+3. **Bot Connect**: `mineflayer` bot instance → signal bus → motor cortex
+4. **Heavy Subsystems** (after spawn):
+   - `KnowledgeStore`, `SkillLibrary`, `ToolCreatorEngine`
+   - `UnifiedBrain` (LLM interface — the actual "thinking" layer)
+   - `ProactiveCurriculum` (sets goals when idle)
 
 ---
 
-## 3. State Anchoring: Blackboard Schema
+## 3. Core Components (What Actually Runs)
 
-**State Mutation Rules**:
-- **Mutators**: `CoreSystem` (vitals/inventory) and `ActionAPI` (chain ops).
-- **Read-Only**: System 2 Planning and Skill Library must use `blackboard.get()`.
-- **Atomicity**: Updates must be performed via `blackboard.set(path, value, source)`.
+### 3.1 Signal Bus (`src/agent/core/SignalBus.js`)
 
+| Signal | Source | Payload |
+|--------|--------|---------|
+| `SYSTEM_READY` | CoreSystem | `{}` |
+| `BOT_SPAWNED` | Agent | `{ name, world_id }` |
+| `THREAT_DETECTED` | EnvironmentMonitor | `{ entity, position }` |
+| `HEALTH_CRITICAL` | CoreSystem | `{ health: 0-6 }` |
+| `HUNGRY` | CoreSystem | `{ food: 0-6 }` |
+| `TASK_FAILED` | TaskScheduler | `{ task, error, fatal }` |
+| `DEATH` | Bot listener | `{ position, killer }` |
+
+### 3.2 TaskScheduler (`src/agent/core/TaskScheduler.js`)
+- Priority tiers: SURVIVAL(100) > USER(80) > WORK(50) > BACKGROUND(10)
+- One blocking task at a time. Priority ≥ 100 triggers interrupt.
+- Zombie killer: kills tasks running > 60s.
+
+### 3.3 Blackboard (State)
 ```json
 {
-  "meta": { "version": "3.1.0", "last_update": "timestamp" },
-  "system_flags": {
-    "network_status": "connected|disconnected",
-    "is_combat_mode": "boolean",
-    "is_sleeping": "boolean",
-    "maintenance_mode": "boolean"
-  },
-  "strategic_data": {
-    "home_coordinates": "{x, y, z} | null",
-    "current_mission": "string",
-    "death_count": "number"
-  },
-  "social_context": {
-    "owner_name": "string",
-    "trusted_players": "string[]",
-    "enemies": "string[]"
-  },
-  "inventory_cache": {
-    "totem_count": "number",
-    "food_level": "0-20",
-    "main_hand": "item_name | null"
-  },
-  "self_state": {
-    "health": "0-20",
-    "food": "0-20",
-    "is_alive": "boolean"
-  },
-  "system2_state": {
-    "active_goal": "string | null",
-    "plan_phase": "idle|planning|executing",
-    "last_failure": "string | null"
-  }
+  "self_state": { "health": "0-20", "food": "0-20", "is_alive": "boolean" },
+  "inventory_cache": { "totem_count": "number", "food_level": "0-20" },
+  "strategic_data": { "current_mission": "string", "death_count": "number" },
+  "social_context": { "owner_name": "string", "trusted_players": "string[]" }
 }
 ```
 
 ---
 
-## 4. Action Layer: High-Fidelity API
+## 4. Action Layer
 
-All primitive actions are implemented in `src/actions/core/ActionAPI.js`.
+All primitives in `src/actions/core/ActionAPI.js`. Params are **always a single object**.
 
-### 4.1 Primitive Method Signatures
-| Method | Params Shape | Returns (Promise) |
-| :--- | :--- | :--- |
-| `moveto` | `{ position: {x,y,z}, options: {minDistance?:2, timeoutMs?:25000, retries?:1} }` | `{ success: boolean, attempts: number, error?: string }` |
-| `mine` | `{ targetBlock: Block, options: {retries?:2, baseDelay?:250} }` | `{ success: boolean, attempts: number, error?: string }` |
-| `place` | `{ blockType: string, position: Vec3, options: {placeOn?:'bottom', dontCheat?:false} }` | `{ success: boolean, attempts: number, error?: string }` |
-| `craft` | `{ itemName: string, count: number, options: {craftingTable?:Block} }` | `{ success: boolean, action: 'craft', attempts: number }` |
-| `ensure_item`| `{ itemName: string, targetCount: number, options: {} }` | `{ success: boolean, count: number, needed: number }` |
-| `attack` | `{ entity: Entity, options: {retries?:1, baseDelay?:400} }` | `{ success: boolean, attempts: number, error?: string }` |
-| `eat` | `{ itemName?: string, options: {retries?:1} }` | `{ success: boolean, action: 'eat', error?: string }` |
+| Method | Params | Returns |
+|--------|--------|---------|
+| `mine` | `{ targetBlock: Block, options: {retries?, baseDelay?} }` | `{ success, attempts, error? }` |
+| `craft` | `{ itemName: string, count, options }` | `{ success, action, attempts }` |
+| `smelt` | `{ itemName: string, count, options }` | `{ success, attempts, error? }` |
+| `place` | `{ blockType, position, options }` | `{ success, attempts, error? }` |
+| `moveto` | `{ position: {x,y,z}, options: {minDistance?, timeoutMs?} }` | `{ success, attempts, error? }` |
+| `eat` | `{ itemName?, options }` | `{ success, action, error? }` |
+| `attack` | `{ entity, options }` | `{ success, attempts, error? }` |
 
-### 4.2 Action Chain Contract
-`executeChain(chain: Step[], context: Object)` processes steps sequentially.
-- **Step Shape**: `{ type: 'ACTION_API'|'BLACKBOARD_OP'|'WAIT', name: string, params: Object, if?: Condition, store_as?: string }`
-- **Variable Interpolation**: Supports `${LocalVar}` and `${BB.path.to.key}`.
+### Action Chain
+`executeChain(steps[], context)` — sequential step processor. Supports `${LocalVar}` and `${BB.path}` interpolation.
 
 ---
 
-## 5. System 1 & System 2 Boundaries
+## 5. Reflexes (Fast Reactions, <20ms)
 
-### 5.1 System 1: Reflexes (`src/agent/reflexes/`)
-Reflexes are **blocking-synchronous** on the tick and must complete within 20ms.
-- **`CombatReflex`**: Tactical strafing/kiting. Single-target focus.
-- **`SelfPreservationReflex`**: Auto-retreat at $health < 6$. Persistent swimming if drowning.
-- **`StuckReflex`**: Jump-unstick if movement delta < 0.1 over 100 ticks.
-- **`FallDamageReflex`**: MLG water bucket (requires `water_bucket` in hotbar).
-- **`Watchdog`**: Zombie Killer. Kills tasks running $> 60s$. (Handled by CoreSystem).
-- **`Movement Watchdog`** (Phase 13): Tracked by `ProactiveCurriculum`. Forces goal re-eval if delta < 2.0 blocks over 30s during active execution.
+Located in `src/agent/reflexes/` and `src/reflexes/core/ReflexSystem.js`:
 
-### 5.2 System 2: Evolution & Safety
-- **Evolution Tuning**: Limits parameter adjustments to $\pm 20\%$ of baseline.
-- **Code Sandbox**: `isolated-vm` enforced. 64MB RAM, 2000ms timeout for script evaluation.
-- **Action Timeouts**: All individual tasks enforced with a **30s hard timeout** in `ExecutorAgent`.
-- **Adaptive Trimming**: `ContextAssembler` restricts tool library (Top 3) and suppresses memories when health/oxygen $\le 10$.
+| Reflex | What It Does |
+|--------|-------------|
+| `CombatReflex` | Tactical strafing/kiting, single-target focus |
+| `SelfPreservation` | Auto-retreat at health < 6, swimming if drowning |
+| `StuckReflex` | Jump-unstick if movement delta < 0.1 over 100 ticks |
+| `FallDamageReflex` | MLG water bucket (needs water_bucket in hotbar) |
+| `Watchdog` | Kills zombie tasks > 60s |
 
 ---
 
-## 6. Skill Library Catalog
+## 6. Skills (What the Bot Can Execute)
 
-| Category | Anchor Path | Functional Ownership |
-| :--- | :--- | :--- |
-| **Movement** | `library/go_to.js` | Pathfinder goals and player proximity. |
-| **Survival** | `library/gather_wood.js` | Logic for tree harvesting and plank tiering. |
-| **Economics** | `library/craft_items.js` | Furnace and Crafting Table management. |
-| **Tactics** | `library/combat_skills.js` | High-level battle engagement logic. |
+Located in `src/skills/library/`:
+
+| Skill | File | Status |
+|-------|------|--------|
+| Wood gathering | `gather_wood.js` | ✅ Working |
+| Crafting | `craft_items.js` | ✅ Working |
+| Smelting | `smelt_items.js` | ✅ Working |
+| Ore mining | `mine_ores.js` | ✅ Working |
+| Resource gathering | `gather_resources.js` | ✅ Working |
+| Shelter finding | `find_shelter.js` | ✅ Working |
+| Eating | `eat_food.js` | ✅ Working |
+| Combat | `combat_skills.js` | ✅ Working |
+| Navigation | `go_to.js` | ✅ Working |
+| Follow player | `follow_player.js` | ✅ Working |
+| Block placement | `place_blocks.js` | ✅ Working |
 
 ---
 
-## 7. Operational Constraints
-- **UNKNOWN API RULE**: If a function or key is not in this document, it does NOT exist.
-- **SYNC/ASYNC BOUNDARY**: All `ActionAPI` calls are `async`. Reaction listeners (signals) are synchronous but may schedule `async` tasks.
-- **CORE IMMUTABILITY**: Do NOT modify `src/agent/core/` files. Only `src/skills/library/` and `src/agent/reflexes/` may be evolved.
+## 7. Evolution & Learning
+
+- **GeneEngine**: Tunes bot parameters (±20% of baseline per generation)
+- **ProactiveCurriculum**: Sets goals when idle based on inventory analysis
+- **EvolutionEngine**: Listens to `TASK_FAILED`/`DEATH`, creates new reflexes
+- **ReflexCreatorEngine**: Generates dynamic reflexes from failure analysis
+- **CodeSandbox**: `isolated-vm`, 64MB, 2000ms timeout for eval
 
 ---
-**DOCUMENT END**
-**MIND-SYNC v13.0: ARCHITECTURAL EVOLUTION (PROACTIVITY & STABILITY)**
-**LAST AUDIT: 2026-02-22**
+
+## 8. Known Limitations (Honest)
+
+| Issue | Severity | Detail |
+|-------|----------|--------|
+| Ocean biome loop | Medium | `gather_wood` scouts infinitely in oceans — no biome check |
+| No Nether support | Low | Doesn't target crimson/warped stems |
+| `agent.js` monolith | Medium | 2000+ lines, hard to maintain |
+| No test runner | Low | 15 test files but no Jest/Vitest configured |
+
+---
+
+## 9. All Active Modules
+
+| Module | File | Purpose |
+|--------|------|---------|
+| SwarmSync | `core/SwarmSync.js` | Multi-bot coordination |
+| CombatAcademy | `core/CombatAcademy.js` | Combat pattern training |
+| PlayerTrainingMode | `core/PlayerTrainingMode.js` | Player teaching |
+| AdventureLogger | `core/AdventureLogger.js` | Activity logging |
+| ChatInstructionLearner | `core/ChatInstructionLearner.js` | Learn from chat commands |
+| Profiler | `core/Profiler.js` | Performance tracking |
+| CoreExtractor | `core/CoreExtractor.js` | Data extraction |
+| AutoHealer | `core/AutoHealer.js` | Auto healing |
+| ReplayBuffer | `core/ReplayBuffer.js` | Experience replay |
+| ToolCreatorEngine | `core/ToolCreatorEngine.js` | Dynamic tool creation |
+
+---
+
+## 10. Rules for Modifying This Bot
+
+1. **ALL `ActionAPI` calls use a single params object** — never positional args.
+2. **`async`/`await` everywhere** — ActionAPI is always async.
+3. **Signal listeners are sync** but may schedule async tasks.
+4. **Skills return `{ success: boolean, message: string }`** — always.
+5. **Don't modify kernel files** unless fixing a verified crash.
+
+---
+**LAST UPDATED: 2026-02-22**

@@ -64,15 +64,15 @@ export function selectAPI(profile) {
                 profile.api = 'qwen';
             else if (profile.model.includes('minimax'))
                 profile.api = 'openai';
-            else if (profile.model.includes('groq'))
+            else if (profile.model.includes('groq') || profile.model.includes('llama'))
                 profile.api = 'groq';
         }
         if (!profile.api) {
-            throw new Error('Unknown model:', profile.model);
+            throw new Error(`Unknown model: ${profile.model}`);
         }
     }
     if (!apiMap[profile.api]) {
-        throw new Error('Unknown api:', profile.api);
+        throw new Error(`Unknown api: ${profile.api}`);
     }
     if (profile.model && (typeof profile.model === 'string' || profile.model instanceof String)) {
         let model_name = profile.model.replace(profile.api + '/', ''); // remove prefix

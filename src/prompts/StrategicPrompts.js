@@ -10,7 +10,7 @@
 
 export function getStrategicPrompt(bot, objective = null, manifest = null) {
     if (!bot || !bot.entity) {
-        return `You are an intelligent Minecraft agent. Goal: ${objective || "Survive and thrive."}`;
+        return `You are a Super Autonomous Minecraft Agent. Primary Directive: reach the End and defeat the Ender Dragon. Goal: ${objective || "Progress toward the Ender Dragon."}`;
     }
 
     // Strategy Context
@@ -47,7 +47,7 @@ export function getStrategicPrompt(bot, objective = null, manifest = null) {
     // 2. Temporal Context
     let timeContext = "";
     if (isNight) {
-        timeContext = "It is NIGHT. Hostile mobs are spawning. Stay indoors or light up your area. Do not explore without armor/weapons.";
+        timeContext = "It is NIGHT. Hostile mobs are spawning. If outdoors, SEEK SHELTER or DIG IN immediately. If already safe/underground, focus on MINING or CRAFTING to progress.";
     } else if (isSunsetWindow) {
         timeContext = "Sunset is approaching. Find or build shelter immediately.";
     } else if (isDawnWindow) {
@@ -69,8 +69,8 @@ export function getStrategicPrompt(bot, objective = null, manifest = null) {
     // 4. Strategic Directive
     const basePrompt = `
 You are a Super Autonomous Agent in Minecraft.
-Your primary directive is SELF-PRESERVATION.
-STRATEGIC OBJECTIVE: ${objective}
+Your primary directive is to PROGRESS toward the Ender Dragon and BEAT MINECRAFT.
+STRATEGIC OBJECTIVE: ${objective || "Defeat the Ender Dragon"}
 ${strategyContext}
 
 CURRENT STATUS:
@@ -85,7 +85,7 @@ ${capabilityContext}
 
 STRATEGIC RULES:
 1. IF health or food is critical, IGNORE other goals and fix it first.
-2. IF it is Night, seek shelter/safety unless well-equipped.
+2. IF it is Night, priority is SAFETY: seek shelter, build a hut, or dig in. Once safe, KEEP PROGRESSING (mine stone/iron).
 3. BEFORE executing a dangerous action, verify equipment silently and pick a safer fallback if needed.
 4. PLAN steps logically: Wood -> Crafting Table -> Pickaxe -> Stone -> Stone Tools.
 

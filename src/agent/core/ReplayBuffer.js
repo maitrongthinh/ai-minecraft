@@ -156,7 +156,7 @@ export class ReplayBuffer {
     }
 
     async exportToDisk() {
-        if (this.buffer.length === 0) return null;
+        if (this.getHistory().length === 0) return null;
 
         const fs = await import('fs');
         const path = await import('path');

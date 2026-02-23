@@ -1,6 +1,6 @@
-import { globalBus, SIGNAL } from './src/agent/core/SignalBus.js';
-import { ExecutorAgent } from './src/agent/orchestration/ExecutorAgent.js';
-import { ProactiveCurriculum } from './src/agent/evolution/ProactiveCurriculum.js';
+import { globalBus, SIGNAL } from '../src/agent/core/SignalBus.js';
+import { ExecutorAgent } from '../src/agent/orchestration/ExecutorAgent.js';
+import { ProactiveCurriculum } from '../src/agent/evolution/ProactiveCurriculum.js';
 
 async function runSmokeTest() {
     console.log('--- STARTING ARCHITECTURAL SMOKE TEST ---');

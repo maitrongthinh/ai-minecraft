@@ -133,15 +133,32 @@ export class SelfPreservationReflex {
 
         // Persistent swim up
         const startTime = Date.now();
-        while (Date.now() - startTime < 3000) {
+        const maxSwimTime = 10000; // 10 seconds to reach surface
+
+        while (Date.now() - startTime < maxSwimTime) {
             this.bot.setControlState('jump', true);
+
+            // Phase 13: Shore-seeking logic (Move towards nearest solid block if drowning)
+            if (this.bot.oxygenLevel < 5) {
+                const nearestSolid = world.getNearestBlock(this.bot, 'dirt', 10) ||
+                    world.getNearestBlock(this.bot, 'sand', 10) ||
+                    world.getNearestBlock(this.bot, 'stone', 10);
+                if (nearestSolid) {
+                    this.bot.lookAt(nearestSolid.position.offset(0, 1, 0));
+                    this.bot.setControlState('forward', true);
+                }
+            }
+
             await new Promise(r => setTimeout(r, 200));
+
             // Stop if we reach surface or die
-            const headBlock = this.bot.blockAt(this.bot.entity.position.offset(0, 1.6, 0));
-            if (!headBlock || !headBlock.name.includes('water') || this.bot.health <= 0) break;
+            const headBlock = this.bot.blockAt(this.bot.entity.position.offset(0, 1.8, 0)); // Checks head clearance
+            const isSubmerged = headBlock && headBlock.name.includes('water');
+            if (!isSubmerged || this.bot.health <= 0 || this.bot.oxygenLevel >= 19) break;
         }
 
         this.bot.setControlState('jump', false);
+        this.bot.setControlState('forward', false);
         this.active = false;
 
         // Report to EvolutionEngine

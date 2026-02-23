@@ -74,15 +74,15 @@ const settings = {
             "api": "groq",
             "model": "llama-3.3-70b-versatile",
             "apiKeyEnv": "GROQ_API_KEY",
-            "uses": 1000,
-            "rate_limit": 1000 // requests per 12h
+            "uses": 2000,
+            "rate_limit": 2000
         },
         "fast": {
             "api": "groq",
-            "model": "llama-3.1-8b-instant",
+            "model": "llama-3.3-70b-versatile",
             "apiKeyEnv": "GROQ_API_KEY",
-            "uses": 1000,
-            "rate_limit": 1000 // requests per 12h (default)
+            "uses": 2000,
+            "rate_limit": 2000
         }
     },
 
@@ -150,13 +150,18 @@ if (process.env.SETTINGS_JSON) {
     }
 }
 
-// FORCE FIX: Ensure high_iq uses Groq
-settings.models.high_iq = {
+// FORCE FIX: Ensure all models use Groq 70b (Unified Brain v4.0)
+const unifiedModel = {
     api: "groq",
     model: "llama-3.3-70b-versatile",
-    apiKeyEnv: "GROQCLOUD_API_KEY", // Corrected env name
-    uses: 1000,
-    rate_limit: 1000
+    apiKeyEnv: "GROQ_API_KEY",
+    uses: 10000,
+    rate_limit: 10000
+};
+settings.models = {
+    brain: { ...unifiedModel },
+    high_iq: { ...unifiedModel }, // Compatibility
+    fast: { ...unifiedModel }     // Compatibility
 };
 
 // console.log('[DEBUG] settings.js Loaded. Models:', JSON.stringify(settings.models, null, 2));

@@ -119,9 +119,9 @@ export class PhysicsPredictor {
             vel.y = (vel.y - gravity) * drag;
             pos.add(vel);
 
-            const block = this.bot.blockAt(pos.floored());
+            const block = this.bot.blockAt(pos.floor());
             if (block && block.boundingBox !== 'empty') {
-                return pos.floored();
+                return pos.floor();
             }
         }
         return null;

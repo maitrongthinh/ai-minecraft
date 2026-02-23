@@ -37,7 +37,7 @@ export async function moveAway(bot, distance) {
     const safePos = StrategicMovement.findSafeRetreatPos(bot, pos, distance);
 
     if (safePos) {
-        localLog(bot, `Retreating to safe position: ${safePos.floored()}`);
+        localLog(bot, `Retreating to safe position: ${safePos.floor()}`);
         if (isModeOn(bot, 'cheat')) {
             bot.chat('/tp @s ' + safePos.x + ' ' + safePos.y + ' ' + safePos.z);
             return true;
@@ -45,7 +45,7 @@ export async function moveAway(bot, distance) {
 
         await goToGoal(bot, new pf.goals.GoalNear(safePos.x, safePos.y, safePos.z, 1));
         let new_pos = bot.entity.position;
-        localLog(bot, `Moved away from ${pos.floored()} to ${new_pos.floored()}.`);
+        localLog(bot, `Moved away from ${pos.floor()} to ${new_pos.floor()}.`);
         return true;
     }
 
@@ -56,8 +56,8 @@ export async function moveAway(bot, distance) {
     bot.pathfinder.setMovements(new pf.Movements(bot));
 
     await goToGoal(bot, inverted_goal);
-    let new_pos = bot.entity.position;
-    localLog(bot, `Moved away (blindly) from ${pos.floored()} to ${new_pos.floored()}.`);
+    let new_pos_fb = bot.entity.position;
+    localLog(bot, `Moved away (blindly) from ${pos.floor()} to ${new_pos_fb.floor()}.`);
     return true;
 }
 

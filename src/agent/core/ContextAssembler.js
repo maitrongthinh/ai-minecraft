@@ -26,7 +26,7 @@ export class ContextAssembler {
         if (!knowledge) return '';
 
         // Phase 13 EAI: Adaptive Stress Check
-        const isStressed = bot.health <= 10 || (bot.oxygen && bot.oxygen <= 10);
+        const isStressed = bot && (bot.health <= 10 || (bot.oxygen && bot.oxygen <= 10));
         if (isStressed) {
             console.warn('[ContextAssembler] 🚨 High Stress Detected! Trimming context to survival essentials.');
         }
@@ -37,7 +37,7 @@ export class ContextAssembler {
         let context = '\n\n--- AGENT KNOWLEDGE CONTEXT ---\n';
 
         // 1. Available Tools (Primitive + Dynamic)
-        context += await this._assembleToolsSection(knowledge, query);
+        context += await this._assembleToolsSection(knowledge, query, bot);
 
         // 2. Current Strategy State
         context += this._assembleStrategySection(knowledge);
@@ -74,7 +74,7 @@ export class ContextAssembler {
 
     // --- Private Assembly Methods ---
 
-    async _assembleToolsSection(knowledge, query) {
+    async _assembleToolsSection(knowledge, query, bot) {
         let section = '\n[AVAILABLE ACTIONS & TOOLS]\n';
 
         // A. Read ActionAPI docs (Primitives)
@@ -83,12 +83,12 @@ export class ContextAssembler {
             if (apiDocsPath) {
                 // Phase 13 EAI: RAG Pruning. Only load Top K dynamic skills based on query
                 let dynamicToolsObj = {};
-                if (this.agent.skillManager) {
+                if (this.agent.skillManager && typeof this.agent.skillManager.searchSkills === 'function') {
                     // Pull top 10 relevant skills (or just 3 if stressed)
-                    const skillLimit = (bot.health <= 10) ? 3 : 10;
+                    const skillLimit = (bot && bot.health <= 10) ? 3 : 10;
                     dynamicToolsObj = await this.agent.skillManager.searchSkills(query, skillLimit);
                 }
-                const dynamicTools = Object.entries(dynamicToolsObj);
+                const dynamicTools = dynamicToolsObj ? Object.entries(dynamicToolsObj) : [];
 
                 section += '1. PRIMITIVE ACTIONS (Native):\n';
                 section += '   (See ActionAPI Reference for details)\n';

@@ -60,12 +60,12 @@ export class StuckReflex {
 
     _findObstructingBlocks() {
         const bot = this.bot;
-        const pos = bot.entity.position.floored();
+        const pos = bot.entity.position.floor();
         const dir = new Vec3(-Math.sin(bot.entity.yaw), 0, -Math.cos(bot.entity.yaw));
 
         const scanOffsets = [
-            dir.clone().floored(), // Front
-            dir.clone().offset(0, 1, 0).floored(), // Front-Head
+            dir.clone().floor(), // Front
+            dir.clone().offset(0, 1, 0).floor(), // Front-Head
             new Vec3(0, 2, 0) // Overhead (if jumping)
         ];
 

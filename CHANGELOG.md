@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.2] - 2026-02-22
+### Added
+- **Proactivity Safety**: 30s goal cooldown in `ProactiveCurriculum.js` to prevent rate-limit loops during brain provider degradation.
+- **Enhanced Fallbacks**: Validated "dig-in" fallback for night survival in `find_shelter.js`.
+
+### Fixed
+- **Vec3 Consistency**: Fixed `floored()` -> `floor()` typo across multiple skills and reflexes (`retreat.js`, `gather_wood.js`, `PhysicsPredictor.js`, etc.).
+- **Brain Fallback Syntax**: Resolved "Unexpected token ':'" by standardizing `UnifiedBrain.js` rule-based fallbacks from JSON to async Javascript.
+- **Goal Pursuit**: Reduced idle detection delay to 2s for more aggressive autonomous progression.
+
 ## [2.5.1] - 2026-02-22
 ### Added
 - **Shared Brain (Phase 13)**: Initial Hive-Mind integration with global skill synchronization.

@@ -68,7 +68,7 @@ export default async function execute(agent, params = {}) {
         }
 
         if (agent?.actionAPI) {
-            const result = await agent.actionAPI.craft(item, count, { retries: 2, baseDelay: 300 });
+            const result = await agent.actionAPI.craft({ itemName: item, count, options: { retries: 2, baseDelay: 300 } });
             return {
                 success: result.success,
                 crafted: result.success ? count : 0,

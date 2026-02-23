@@ -279,7 +279,7 @@ class SignalBus extends EventEmitter {
         }
 
         // Debug log (only for important signals)
-        if (!signal.startsWith('memory.') && !signal.startsWith('entity.') && !signal.startsWith('bot.')) {
+        if (!signal.startsWith('memory.') && !signal.startsWith('entity.') && !signal.startsWith('bot.') && signal !== SIGNAL.SYSTEM_TICK) {
             console.log(`[SignalBus] ⚡ ${signal}`, payload.reason || payload.name || '');
         }
     }

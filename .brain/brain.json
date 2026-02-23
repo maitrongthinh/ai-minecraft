@@ -6,7 +6,7 @@
     "project": {
         "name": "Mindcraft Autonomous Evolution Agent",
         "type": "AI Agent",
-        "status": "V2.5.1 (Phase 13 Shared Brain Integration)"
+        "status": "V2.5.2 (Stability & Proactivity Refinement)"
     },
     "tech_stack": {
         "frontend": {
@@ -16,7 +16,7 @@
         "backend": {
             "framework": "Node.js (ES Modules)",
             "lib": "Mineflayer",
-            "ai_sdk": "OpenAI / Anthropic / Google / DeepSeek / Groq"
+            "ai_sdk": "Groq / OpenAI / Anthropic / Google"
         },
         "database": {
             "type": "Vector Store (ChromaDB/Local) + JSON"
@@ -33,16 +33,17 @@
         "Unified Memory (Short/Long term + Spatial + Self-Healing)",
         "Modular Skill Library",
         "Context Pruning (Optimization via RAG)",
-        "Task Amnesia Prevention (Memory Hooks)",
-        "Shared Brain (Hive-Mind) for Collective Intelligence"
+        "Continuous Proactivity Loop (Curriculum)",
+        "Task Amnesia Prevention (Memory Hooks)"
     ],
     "knowledge_items": {
         "patterns": [
             "SignalBus Pattern for decoupling",
             "Reflex Priority (System 1 overrides System 2)",
             "Sandbox Execution for AI Code (Hardened)",
-            "AbortController for Task Interruption",
-            "Centralized Timer Management",
+            "Rate-limit Cooldown (30s) for autonomous loops",
+            "Vec3 consistency: use .floor() not .floored()",
+            "UnifiedBrain: standard async JS code task fallbacks",
             "ivm.Reference bridge for asynchronous host calls",
             "Vector Search for Skill Selection (RAG Pruning)"
         ],
@@ -52,7 +53,7 @@
             "Test files belong in tests/",
             "Check dependencies (like brain) before use",
             "Avoid passing raw JS Modules to sandbox (cloning error)",
-            "Use JSON-RPC serialization for bridge data flow"
+            "Rule-based fallbacks MUST return async Javascript, not raw JSON"
         ]
     }
 }

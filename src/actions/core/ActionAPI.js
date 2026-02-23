@@ -231,6 +231,10 @@ export class ActionAPI {
     }
 
     async mine(params = {}) {
+        // Defensive: Accept raw Block object passed directly (has .position and .name)
+        if (params && params.position && params.name && !params.targetBlock) {
+            params = { targetBlock: params, options: {} };
+        }
         const normalizedParams = this._normalizeOptionsPayload(params, ['targetBlock']);
         const effective = this._applyPolicy('mine', normalizedParams);
         const { targetBlock, options = {} } = effective;
@@ -396,6 +400,9 @@ export class ActionAPI {
         const effective = this._applyPolicy('gather_nearby', normalizedParams);
         const { matching, count = 1, options = {} } = effective;
 
+        // Ensure collectDrops defaults to true unless explicitly disabled
+        if (options.collectDrops === undefined) options.collectDrops = true;
+
         const bot = this._getBot();
         if (!matching) {
             return { success: false, action: 'gather_nearby', gathered: 0, error: 'Missing block matcher' };
@@ -423,24 +430,30 @@ export class ActionAPI {
         let consecutiveMoveFailures = 0;
         // ... (existing logic remains mostly the same, just clean structure)
 
-        const findTargetBlock = () => bot.findBlock({
+        const blocks = bot.findBlocks({
             matching: (block) => {
                 if (!matcher(block)) return false;
                 if (!block?.position) return false;
                 return !blockedTargets.has(toKey(block.position));
             },
-            maxDistance
+            maxDistance,
+            count: maxSearchAttempts
         });
 
-        for (let i = 0; i < maxSearchAttempts && gathered < target; i++) {
-            const block = findTargetBlock();
-            if (!block) break;
-            const hasPosition = !!block?.position;
-            const targetKey = hasPosition ? toKey(block.position) : `ephemeral:${i}`;
+        // Sort blocks by distance
+        if (blocks && blocks.length > 0 && bot.entity?.position) {
+            blocks.sort((a, b) => bot.entity.position.distanceTo(a) - bot.entity.position.distanceTo(b));
+        }
 
+        for (let i = 0; i < blocks.length && gathered < target && attempts < maxSearchAttempts; i++) {
+            const blockPos = blocks[i];
+            const block = bot.blockAt(blockPos);
+            if (!block) continue;
+
+            const targetKey = toKey(block.position);
             attempts++;
+
             if (
-                hasPosition &&
                 bot?.entity?.position &&
                 typeof bot.entity.position.distanceTo === 'function' &&
                 bot.entity.position.distanceTo(block.position) > reachDistance
@@ -449,8 +462,8 @@ export class ActionAPI {
                     position: block.position,
                     options: {
                         minDistance: options.minDistance ?? 2,
-                        timeoutMs: options.moveTimeoutMs ?? 20000,
-                        retries: options.moveRetries ?? 1
+                        timeoutMs: options.moveTimeoutMs ?? 15000, // Reduced from 20000ms
+                        retries: options.moveRetries ?? 0 // Don't retry endlessly for gathering
                     }
                 });
 
@@ -463,6 +476,8 @@ export class ActionAPI {
                         console.warn('[ActionAPI] ⚠️ Too many move failures. Attempting safe_wander to unstuck...');
                         await this.safe_wander(4);
                         consecutiveMoveFailures = 0; // Reset counter after wander
+                        // Break early if we're constantly getting stuck
+                        if (!continueOnError || attempts >= maxSearchAttempts) break;
                     }
 
                     if (!continueOnError) {
@@ -479,28 +494,26 @@ export class ActionAPI {
                 consecutiveMoveFailures = 0; // Reset on success
             }
 
-            const mineResult = hasPosition
-                ? await this.mine({
-                    targetBlock: block,
-                    options: {
-                        retries: options.retries ?? 1,
-                        baseDelay: options.baseDelay ?? 250,
-                        executor: async () => {
-                            const latest = bot.blockAt(block.position);
-                            if (!latest || !matcher(latest)) {
-                                throw new Error('Target block disappeared');
-                            }
-                            if (bot.entity.position.distanceTo(latest.position) > reachDistance + 0.3) {
-                                throw new Error('Target block is out of reach');
-                            }
-                            if (typeof bot.canDigBlock === 'function' && !bot.canDigBlock(latest)) {
-                                throw new Error('Target block is not diggable');
-                            }
-                            await bot.dig(latest, true);
+            const mineResult = await this.mine({
+                targetBlock: block,
+                options: {
+                    retries: options.retries ?? 0, // No endless retries per block
+                    baseDelay: options.baseDelay ?? 250,
+                    executor: async () => {
+                        const latest = bot.blockAt(block.position);
+                        if (!latest || !matcher(latest)) {
+                            throw new Error('Target block disappeared');
                         }
+                        if (bot.entity.position.distanceTo(latest.position) > reachDistance + 0.3) {
+                            throw new Error('Target block is out of reach');
+                        }
+                        if (typeof bot.canDigBlock === 'function' && !bot.canDigBlock(latest)) {
+                            throw new Error('Target block is not diggable');
+                        }
+                        await bot.dig(latest, true);
                     }
-                })
-                : await this.mine({ targetBlock: block, options: { retries: options.retries ?? 1, baseDelay: options.baseDelay ?? 250 } });
+                }
+            });
 
             if (mineResult.success) {
                 gathered++;

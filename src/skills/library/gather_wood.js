@@ -189,7 +189,7 @@ export default async function execute(agent, params = {}) {
     };
 
     const scoutForLogs = async () => {
-        const origin = bot.entity.position.floored();
+        const origin = bot.entity.position.floor();
         const scoutRadii = [
             Math.max(8, Math.floor(maxDistance * 0.5)),
             Math.max(12, maxDistance),
@@ -294,9 +294,12 @@ export default async function execute(agent, params = {}) {
 
         try {
             if (agent.actionAPI) {
-                const mineResult = await agent.actionAPI.mine(target.block, {
-                    retries,
-                    executor: async () => mineOneLog(target.block.position)
+                const mineResult = await agent.actionAPI.mine({
+                    targetBlock: target.block,
+                    options: {
+                        retries,
+                        executor: async () => mineOneLog(target.block.position)
+                    }
                 });
                 if (!mineResult.success) {
                     throw new Error(mineResult.error || 'mine failed');

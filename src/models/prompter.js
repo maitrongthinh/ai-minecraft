@@ -169,7 +169,7 @@ export class Prompter {
     async chat(messages, modelConfig = null) {
         await this.checkCooldown();
         const model = modelConfig ? createModel({
-            ...selectAPI(modelConfig.model),
+            ...selectAPI(modelConfig),
             url: modelConfig.url || this.profile.url,
             params: { ...this.profile.params, ...modelConfig.params, apiKeyEnv: modelConfig.apiKeyEnv }
         }) : this.chat_model;

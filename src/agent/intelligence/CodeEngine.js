@@ -111,7 +111,20 @@ export class CodeEngine {
         // Inject Available Skills List to prevent hallucination
         const availableSkills = Object.keys(skills).join(', ');
         systemPrompt += `\n\nAVAILABLE SKILLS: ${availableSkills}`;
-        systemPrompt += `\nUse "skills.skillName()" to call them. Do NOT make up new skills.`;
+        systemPrompt += `\nUse "await skills.skillName()" to call them. Do NOT make up new skills.`;
+
+        // Inject Available Actions List to prevent hallucination (e.g., move_forward)
+        const actionNames = [];
+        if (this.agent.actionAPI) {
+            const proto = Object.getPrototypeOf(this.agent.actionAPI);
+            for (const name of Object.getOwnPropertyNames(proto)) {
+                if (typeof this.agent.actionAPI[name] === 'function' && name !== 'constructor' && !name.startsWith('_')) {
+                    actionNames.push(name);
+                }
+            }
+        }
+        systemPrompt += `\n\nAVAILABLE ACTIONS: ${actionNames.join(', ')}`;
+        systemPrompt += `\nUse "await actions.actionName(params)" to call them. NEVER hallucinate actions! e.g., "actions.move_forward" is INVALID if not listed. To move, use "await actions.moveto({position: Vec3})".`;
 
         if (this.referenceCode) {
             systemPrompt += `\n\n📚 REFERENCE CODE (Adapt if useful):\n\`\`\`javascript\n${this.referenceCode.slice(0, 1000)}\n\`\`\``;
@@ -262,9 +275,9 @@ export class CodeEngine {
                     dimension: bot.game?.dimension
                 },
                 time: {
-                    timeOfDay: bot.time?.timeOfDay,
-                    day: bot.time?.day,
-                    isDay: bot.time?.timeOfDay < 13000 || bot.time?.timeOfDay > 23000
+                    timeOfDay: bot.time?.timeOfDay ?? 0,
+                    day: bot.time?.day ?? 0,
+                    isDay: (bot.time?.timeOfDay ?? 0) < 13000 || (bot.time?.timeOfDay ?? 0) > 23000
                 }
             };
 
@@ -282,8 +295,16 @@ export class CodeEngine {
             // Add built-in and custom skills from library
             for (const [name, fn] of Object.entries(skills)) {
                 if (typeof fn === 'function') {
-                    // Wrap as a bridge call instead of toString() to avoid scope issues
-                    skillsSource[name] = `async (...args) => { return await bot.__call_skill__('${name}', ...args); }`;
+                    // Phase 13: Enhanced wrapper that filters out the bot argument to avoid ivm cloning errors
+                    skillsSource[name] = `async (...args) => { 
+                        // Strip 'bot' or 'agent' from args to avoid cloning complex internal objects
+                        const filtered = args.filter(a => {
+                            if (!a || typeof a !== 'object') return true;
+                            // Heuristic to detect bot/agent proxy objects that shouldn't cross back
+                            return !(a.entity || a.actions || a.inventory);
+                        });
+                        return await bot.__call_skill__('${name}', ...filtered); 
+                    }`;
                 }
             }
 

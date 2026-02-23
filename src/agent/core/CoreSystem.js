@@ -14,8 +14,8 @@ import { CoreExtractor } from './CoreExtractor.js';
 import { System2Loop } from '../orchestration/System2Loop.js';
 import { CombatAcademy } from './CombatAcademy.js';
 import { Task } from '../tasks/ScenarioManager.js';
-import { SwarmSync } from './SwarmSync.js'; // Phase 7 Unified Swarm System
-import { Profiler } from './Profiler.js'; // Phase 8: Reliability
+import { SwarmSync } from './SwarmSync.js';
+import { Profiler } from './Profiler.js';
 import { CodeEngine } from '../intelligence/CodeEngine.js';
 import { AutoHealer } from './AutoHealer.js'; // Phase 8: Reliability
 
@@ -95,6 +95,7 @@ export class CoreSystem {
 
         // 6. Initialize Evolution Engine (DNA)
         this.evolution = new EvolutionEngine(this.agent);
+        this.agent.evolution = this.evolution; // Expose to agent (Fix for CombatReflex crashes)
         // Listen for failures
         globalBus.subscribe(SIGNAL.TASK_FAILED, (payload) => {
             if (payload.fatal || payload.error.includes('died')) {
@@ -135,7 +136,7 @@ export class CoreSystem {
         // 10. Start Watchdogs
         this._startWatchdogs();
 
-        // 11. Profiler (Phase 8)
+        // 11. Profiler
         this.profiler = new Profiler(this.agent);
         this.agent.profiler = this.profiler;
         this.profiler.init();

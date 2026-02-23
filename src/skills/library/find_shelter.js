@@ -52,6 +52,13 @@ export default async function find_shelter(agent, options = {}) {
                 async () => {
                     const moved = await goToNearestBlock(bot, blockName, 2, 48);
                     if (!moved) throw new Error(`No ${blockName} nearby`);
+
+                    // Phase 13: Safety check - Ensure we didn't dive into an underwater death trap
+                    const headBlock = bot.blockAt(bot.entity.position.offset(0, 1.8, 0));
+                    if (headBlock && headBlock.name.includes('water')) {
+                        console.warn(`[find_shelter] Destination under ${blockName} is underwater. Aborting.`);
+                        throw new Error('Underwater destination');
+                    }
                 },
                 {
                     context: `find_shelter:${blockName}`,
@@ -74,5 +81,23 @@ export default async function find_shelter(agent, options = {}) {
         }
     }
 
-    return { success: false, message: 'No suitable shelter found nearby' };
+    // Final Fallback: If no shelter found, just dig into the ground!
+    console.log('[find_shelter] 🚨 No suitable shelter found. Digging emergency hole...');
+    try {
+        await agent.intelligence.execute(`
+            await actions.eat_if_hungry({ threshold: 14 });
+            const pos = bot.entity.position.floor();
+            await bot.dig(bot.blockAt(pos.offset(0, -1, 0))); // Dig down 1
+            await bot.dig(bot.blockAt(pos.offset(0, -2, 0))); // Dig down 2
+            await bot.pathfinder.goto(new pf.goals.GoalBlock(pos.x, pos.y - 2, pos.z));
+            // Place a block above head if possible
+            const blockToPlace = bot.inventory.items().find(i => i.name === 'dirt' || i.name === 'cobblestone');
+            if (blockToPlace) {
+                await actions.place(blockToPlace.name, pos.offset(0, -1, 0));
+            }
+        `);
+        return { success: true, message: 'Sheltered in emergency hole' };
+    } catch (err) {
+        return { success: false, message: 'Total failure seeking shelter: ' + err.message };
+    }
 }

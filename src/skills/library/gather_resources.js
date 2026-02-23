@@ -170,10 +170,13 @@ export default async function execute(agent, params = {}) {
             // Dig block
             try {
                 if (agent?.actionAPI) {
-                    const mined = await agent.actionAPI.mine(block, {
-                        retries: 2,
-                        baseDelay: 250,
-                        executor: async () => mineTargetBlock(block.position)
+                    const mined = await agent.actionAPI.mine({
+                        targetBlock: block,
+                        options: {
+                            retries: 2,
+                            baseDelay: 250,
+                            executor: async () => mineTargetBlock(block.position)
+                        }
                     });
                     if (!mined.success) {
                         throw new Error(mined.error || 'mine failed');

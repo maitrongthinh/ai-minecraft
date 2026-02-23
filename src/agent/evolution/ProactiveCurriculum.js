@@ -11,6 +11,8 @@ export class ProactiveCurriculum {
     constructor(agent) {
         this.agent = agent;
         this.activeGoal = null;
+        this.lastGoalTime = 0;
+        this.goalCooldown = 30000; // 30 seconds between autonomous goals
         this.idleTimeout = null;
         this.knownBiomes = new Set();
         this.knownItems = new Set();
@@ -33,7 +35,15 @@ export class ProactiveCurriculum {
             { id: 'iron_ore', goal: 'Mine 3 iron_ore or raw_iron', requiredItems: ['stone_pickaxe'] },
             { id: 'iron_ingot', goal: 'Smelt raw_iron into iron_ingot', requiredItems: ['furnace', 'raw_iron'] },
             { id: 'iron_pickaxe', goal: 'Craft 1 iron_pickaxe', requiredItems: ['crafting_table', 'iron_ingot', 'stick'] },
-            { id: 'diamond', goal: 'Mine 1 diamond', requiredItems: ['iron_pickaxe'] }
+            { id: 'diamond', goal: 'Mine 1 diamond', requiredItems: ['iron_pickaxe'] },
+            { id: 'diamond_pickaxe', goal: 'Craft 1 diamond_pickaxe', requiredItems: ['crafting_table', 'diamond', 'stick'] },
+            { id: 'obsidian', goal: 'Mine 10 obsidian blocks (bring water to lava)', requiredItems: ['diamond_pickaxe', 'water_bucket'] },
+            { id: 'nether_portal', goal: 'Build and enter a Nether Portal', requiredItems: ['obsidian', 'flint_and_steel'] },
+            { id: 'blaze_rod', goal: 'Hunt Blazes in Nether Fortress to get 7 blaze_rods', requiredItems: ['iron_sword', 'shield'] },
+            { id: 'ender_pearl', goal: 'Gather 12 ender_pearls from Endermen or trading', requiredItems: [] },
+            { id: 'eye_of_ender', goal: 'Craft 12 eye_of_ender', requiredItems: ['blaze_powder', 'ender_pearl'] },
+            { id: 'stronghold', goal: 'Locate and enter the Stronghold', requiredItems: ['eye_of_ender'] },
+            { id: 'beating_minecraft', goal: 'Enter the End and defeat the Ender Dragon', requiredItems: ['eye_of_ender', 'bed', 'bow'] }
         ];
 
         // Listen for IDLE state to trigger Proactive Learning
@@ -46,16 +56,16 @@ export class ProactiveCurriculum {
         });
 
         // Phase 13: Movement Watchdog Tick (Every 10s)
-        setInterval(() => this.checkMovementWatchdog(), 10000);
+        this._watchdogInterval = setInterval(() => this.checkMovementWatchdog(), 10000);
     }
 
     scheduleCurriculumEvaluation() {
         if (this.idleTimeout) clearTimeout(this.idleTimeout);
-        // Wait 5 seconds of idle before starting a new objective
+        // Wait 2 seconds of idle before starting a new objective
         this.idleTimeout = setTimeout(() => {
             this._checkMilestones();
             this.evaluateAndStartGoal();
-        }, 5000);
+        }, 2000);
     }
 
     _checkMilestones() {
@@ -100,7 +110,11 @@ export class ProactiveCurriculum {
      */
     checkMovementWatchdog() {
         const bot = this.agent.bot;
-        if (!bot || !bot.entity || !this.agent.brain || !this.agent.brain.isBusy()) {
+        if (!bot || !bot.entity) return;
+
+        // Use action manager to check if we are busy (brain doesn't have isBusy)
+        const isBusy = this.agent.actions?.isBusy() || this.agent.system2?.state !== 'idle';
+        if (!isBusy) {
             this.lastPosition = null; // Reset if idle
             this.stallCounter = 0;
             return;
@@ -146,8 +160,12 @@ export class ProactiveCurriculum {
         // Phase 12 EAI: LLM Driven Curriculum
         const prompt = `
 You are the Proactive Curriculum Engine for a Minecraft AI agent.
-Your goal is to suggest ONE single, highly specific next objective for the agent to accomplish based on its current inventory and learned skills.
-The objective must be a logical progression in the Minecraft survival tech tree.
+Your mission is to reach the End and defeat the Ender Dragon.
+
+Suggest ONE single, highly specific next objective for the agent.
+Be aggressive but logical. If it's night and safe, suggest mining underground.
+If the agent has logs but no planks, suggest planks.
+If the agent has enough wood and planks, suggest the Crafting Table.
 
 Current Inventory:
 ${itemsContext || 'Empty'}
@@ -162,6 +180,7 @@ Examples of good responses:
 - Mine 3 stone to upgrade tools
 - Smelt raw_iron in furnace
 - Hunt for food
+- Dig survival tunnel to mine iron at night
 `;
 
         try {
@@ -205,22 +224,41 @@ Examples of good responses:
     async evaluateAndStartGoal(force = false) {
         try {
             // Stop if we are already doing something (unless forced by watchdog)
-            if (!force && this.agent.brain && this.agent.brain.isBusy()) return;
-            if (!force && this.agent.bot.entity.velocity.y < -0.1) return; // Falling
+            if (!force && this.agent.actions?.isBusy()) return;
+            const bot = this.agent.bot;
+            if (!force && bot?.entity?.velocity?.y < -0.1) return; // Falling
+
+            const now = Date.now();
+            if (now - this.lastGoalTime < this.goalCooldown && !force) {
+                return;
+            }
 
             const nextGoal = await this.analyzeInventoryForNextGoal();
             this.activeGoal = nextGoal;
+            this.lastGoalTime = now;
 
             console.log(`[ProactiveCurriculum] 🎓 IDLE detected. Automatically setting goal: ${nextGoal.goal}`);
 
-            // Route to UnifiedBrain / Planner
-            if (this.agent.brain) {
-                this.agent.brain.receiveInstruction(`[Curriculum Goal] ${nextGoal.goal}`);
-            } else {
-                this.agent.actions.handleMessage('system', `Execute task: ${nextGoal.goal}`);
+            // Route curriculum goals through the agent's standard message handling path
+            if (this.agent.handleMessage) {
+                await this.agent.handleMessage('system', `[Curriculum Goal] ${nextGoal.goal}`);
             }
         } catch (error) {
             console.error('[ProactiveCurriculum] Error evaluating goal:', error.message);
         }
+    }
+
+    /**
+     * Cleanup timers to prevent memory leaks on reconnect/shutdown
+     */
+    shutdown() {
+        this.cancelCurriculumEvaluation();
+        if (this._watchdogInterval) {
+            clearInterval(this._watchdogInterval);
+            this._watchdogInterval = null;
+        }
+        this.activeGoal = null;
+        this.stallCounter = 0;
+        console.log('[ProactiveCurriculum] 🔌 Shutdown complete.');
     }
 }

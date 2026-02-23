@@ -270,10 +270,10 @@ export class CombatReflex {
         console.log('[CombatReflex] 🛡️ Combat ended');
 
         // Phase 2: Genetic Learning - Record result
-        if (this.agent.evolution) {
+        if (this.agent.evolution && typeof this.agent.evolution.recordCombatResult === 'function') {
             // If we retreated or HP is low, consider it a "loss" or "draw" for optimization
-            const result = (bot && bot.health > 10 && !this._shouldRetreat());
-            this.agent.evolution.recordCombatResult(result);
+            const win = (bot && bot.health > 10 && !this._shouldRetreat());
+            this.agent.evolution.recordCombatResult(win ? 'win' : 'loss');
         }
     }
 
@@ -473,6 +473,11 @@ export class CombatReflex {
                 await this.bot.equip(totem, 'off-hand').catch(() => { });
             }
         }
+    }
+
+    async _scanForTraps() {
+        // Stub for future trap detection logic
+        return false;
     }
 
     /**

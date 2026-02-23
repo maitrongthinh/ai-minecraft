@@ -10,12 +10,13 @@ import { SurvivalAnalysis } from './SurvivalAnalysis.js';
 export class UtilityEngine {
     constructor(agent) {
         this.agent = agent;
-        this.weights = settings.tactical?.weights || {
+        const defaultWeights = {
             health: 5,
             hunger: 2,
             threat: 10,
             time: 1
         };
+        this.weights = { ...defaultWeights, ...(settings.tactical?.weights || {}) };
     }
 
     /**
@@ -28,9 +29,9 @@ export class UtilityEngine {
         if (!bot) return 0;
 
         let score = 0;
-        const normalizedHealth = bot.health; // 0-20
-        const normalizedFood = bot.food;     // 0-20
-        const threatLevel = SurvivalAnalysis.getThreatLevel(bot); // 0-3
+        const normalizedHealth = bot.health || 20; // 0-20
+        const normalizedFood = bot.food || 20;     // 0-20
+        const threatLevel = SurvivalAnalysis?.getThreatLevel ? SurvivalAnalysis.getThreatLevel(bot) : 0; // 0-3
 
         const name = stateName.toLowerCase();
 

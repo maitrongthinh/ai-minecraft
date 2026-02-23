@@ -1,7 +1,7 @@
 {
   "meta": {
     "version": "3.1.0",
-    "last_update": 1771381315965
+    "last_update": 1771753938998
   },
   "system_flags": {
     "network_status": "disconnected",
@@ -23,9 +23,7 @@
   "inventory_cache": {
     "totem_count": 0,
     "arrows": 0,
-    "food_level": 20,
-    "main_hand": null,
-    "off_hand": null
+    "food_level": 20
   },
   "perception_snapshot": {
     "nearest_threat": null,
@@ -37,13 +35,9 @@
     "is_alive": true
   },
   "system2_state": {
-    "active_goal": "Long Task",
+    "active_goal": null,
     "plan_phase": "idle",
-    "current_step": {
-      "id": 1,
-      "task": "test_step_1",
-      "status": "executing"
-    },
+    "current_step": null,
     "last_failure": null
   },
   "swarm_state": {

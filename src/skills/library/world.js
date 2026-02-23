@@ -417,7 +417,7 @@ export async function isClearPath(bot, target) {
 export function shouldPlaceTorch(bot) {
     const torchModeOn = !!(bot?.modes && typeof bot.modes.isOn === 'function' && bot.modes.isOn('torch_placing'));
     if (!torchModeOn || bot.interrupt_code) return false;
-    const pos = getPosition(bot)?.floored ? getPosition(bot).floored() : getPosition(bot);
+    const pos = getPosition(bot)?.floor ? getPosition(bot).floor() : getPosition(bot);
     if (!pos) return false;
 
     let light = null;

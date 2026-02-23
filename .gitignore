@@ -53,3 +53,12 @@ verify_*.js
 
 # Temporary Plans
 plans/
+
+# Debug artifacts (diffs, tree dumps, temp scripts)
+*.diff
+project_tree*
+extract_core.js
+fix_profile.js
+print_tree.js
+tester_agent.js
+test_hive_mind.js

@@ -30,7 +30,11 @@ export class Blackboard {
         const defaults = this._getDefaultSchema();
         try {
             if (fs.existsSync(this.filepath)) {
-                const raw = fs.readFileSync(this.filepath, 'utf8');
+                const raw = fs.readFileSync(this.filepath, 'utf8').trim();
+                if (!raw) {
+                    console.warn('[Blackboard] File is empty, using defaults.');
+                    return defaults;
+                }
                 const loaded = JSON.parse(raw);
                 // Deep merge defaults with loaded to ensure new keys exist
                 return {
@@ -38,8 +42,12 @@ export class Blackboard {
                     ...loaded,
                     system_flags: { ...defaults.system_flags, ...loaded.system_flags },
                     strategic_data: { ...defaults.strategic_data, ...loaded.strategic_data },
+                    social_context: { ...defaults.social_context, ...loaded.social_context },
+                    inventory_cache: { ...defaults.inventory_cache, ...loaded.inventory_cache },
+                    perception_snapshot: { ...defaults.perception_snapshot, ...loaded.perception_snapshot },
                     self_state: { ...defaults.self_state, ...loaded.self_state },
-                    system2_state: { ...defaults.system2_state, ...loaded.system2_state }
+                    system2_state: { ...defaults.system2_state, ...loaded.system2_state },
+                    swarm_state: { ...defaults.swarm_state, ...loaded.swarm_state }
                 };
             }
         } catch (error) {

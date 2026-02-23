@@ -1,17 +1,20 @@
 {
-    "updated_at": "2026-02-22T10:45:00+07:00",
+    "updated_at": "2026-02-22T20:55:00+07:00",
     "working_on": {
-        "feature": "Shared Brain & Survival Loop Fix",
-        "task": "Phase 13: Tiered Skill System & RAG Pruning",
+        "feature": "Stability & Continuous Autonomy (Phase 6)",
+        "task": "Fixing Execution Errors and Rate Limiting",
         "status": "Completed",
         "files": [
-            "src/agent/core/CodeSandbox.js",
-            "src/agent/intelligence/CodeEngine.js",
             "src/brain/UnifiedBrain.js",
-            "src/actions/core/ActionAPI.js"
+            "src/agent/evolution/ProactiveCurriculum.js",
+            "src/skills/library/find_shelter.js",
+            "src/skills/library/retreat.js",
+            "src/skills/library/gather_wood.js",
+            "src/agent/reflexes/PhysicsPredictor.js",
+            "src/agent/reflexes/StuckReflex.js"
         ],
         "blockers": [],
-        "notes": "Resolved autonomous execution loop and implemented skill pruning. Bot is stable and performing survival tasks."
+        "notes": "Resolved critical 'floored()' crashes and standardized brain fallbacks to async JS. Implemented 30s mission cooldown to handle Groq rate limits gracefully."
     },
     "pending_tasks": [
         {
@@ -20,62 +23,57 @@
             "notes": "Improve long-term goal setting and obstacle avoidance logic."
         },
         {
-            "task": "Social Intelligence Integration",
-            "priority": "medium",
-            "notes": "Enhance HumanManager with dynamic trust scores from chat analysis."
+            "task": "End-Game Progression",
+            "priority": "high",
+            "notes": "Advance tech tree to Nether and End milestones."
         }
     ],
     "recent_changes": [
         {
             "timestamp": "2026-02-22",
             "type": "fix",
-            "description": "Resolved 'Thinking...' loop by fixing CodeEngine mapping and task normalization",
+            "description": "Standardized Vec3 method consistency (floored -> floor) across all skill and reflex modules.",
             "files": [
-                "src/agent/intelligence/CodeEngine.js",
+                "src/skills/library/find_shelter.js",
+                "src/skills/library/retreat.js",
+                "src/skills/library/gather_wood.js",
+                "src/agent/reflexes/PhysicsPredictor.js",
+                "src/agent/reflexes/StuckReflex.js"
+            ]
+        },
+        {
+            "timestamp": "2026-02-22",
+            "type": "fix",
+            "description": "Fixed 'Unexpected token :' by converting UnifiedBrain fallbacks from JSON to async Javascript.",
+            "files": [
                 "src/brain/UnifiedBrain.js"
             ]
         },
         {
             "timestamp": "2026-02-22",
-            "type": "security",
-            "description": "Hardened Sandbox Bridge with ivm.Reference and evalClosure",
-            "files": [
-                "src/agent/core/CodeSandbox.js"
-            ]
-        },
-        {
-            "timestamp": "2026-02-22",
             "type": "feature",
-            "description": "Implemented RAG-based Skill Pruning (Top 10 search)",
+            "description": "Added 30s goal cooldown and 2s idle detection for aggressive but safe autonomy.",
             "files": [
-                "src/brain/UnifiedBrain.js",
-                "src/agent/intelligence/SkillManager.js"
-            ]
-        },
-        {
-            "timestamp": "2026-02-22",
-            "type": "refactor",
-            "description": "Added parameter objectification to ActionAPI.dispatch",
-            "files": [
-                "src/actions/core/ActionAPI.js"
+                "src/agent/evolution/ProactiveCurriculum.js"
             ]
         }
     ],
     "errors_encountered": [
         {
-            "error": "could not be cloned (Promise/Module)",
-            "solution": "Used ivm.Reference and JSON-RPC bridge",
+            "error": "bot.entity.position.floored is not a function",
+            "solution": "Renamed all occurrences to .floor()",
+            "resolved": true
+        },
+        {
+            "error": "Unexpected token ':' during code execution",
+            "solution": "Updated UnifiedBrain fallbacks to return valid Javascript instead of JSON",
             "resolved": true
         }
     ],
     "decisions_made": [
         {
-            "decision": "Use Vector Selection (Top 10) for skills",
-            "reason": "Prevent context bloat and improve LLM instruction following IQ"
-        },
-        {
-            "decision": "Implement positional argument objectifier in ActionAPI",
-            "reason": "Enable direct skill calls from sandbox scripts without verbose object payloads"
+            "decision": "Implement 30s cooldown in ProactiveCurriculum",
+            "reason": "Prevents the bot from hammering the Groq API during rate-limit windows or provider degradation."
         }
     ]
 }

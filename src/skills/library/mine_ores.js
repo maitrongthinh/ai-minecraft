@@ -130,10 +130,13 @@ export default async function execute(agent, params = {}) {
                 const beforeCount = bot.inventory.items().length;
 
                 if (agent?.actionAPI) {
-                    const minedResult = await agent.actionAPI.mine(ore, {
-                        retries: 2,
-                        baseDelay: 250,
-                        executor: async () => mineTargetOre(ore.position)
+                    const minedResult = await agent.actionAPI.mine({
+                        targetBlock: ore,
+                        options: {
+                            retries: 2,
+                            baseDelay: 250,
+                            executor: async () => mineTargetOre(ore.position)
+                        }
                     });
                     if (!minedResult.success) {
                         throw new Error(minedResult.error || 'mine failed');

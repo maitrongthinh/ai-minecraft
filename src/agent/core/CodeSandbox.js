@@ -16,8 +16,9 @@ const DANGER_PATTERNS = [
     { pattern: /child_process/, reason: 'Child process is forbidden' },
     { pattern: /\.exit\s*\(/, reason: 'exit() is forbidden' },
     { pattern: /__proto__/, reason: 'Access to __proto__ is forbidden' },
-    { pattern: /prototype/, reason: 'Access to prototype is forbidden' },
-    { pattern: /constructor/, reason: 'Access to constructor is forbidden' },
+    { pattern: /Object\.setPrototypeOf/, reason: 'Prototype manipulation is forbidden' },
+    { pattern: /Object\.getPrototypeOf/, reason: 'Prototype introspection is forbidden' },
+    { pattern: /Reflect\.construct/, reason: 'Reflect.construct is forbidden' },
     { pattern: /global\./, reason: 'Access to global is forbidden' }
 ];
 
@@ -153,10 +154,21 @@ export class CodeSandbox {
 
             // Bridge for real actions
             if (actionAPI) {
+                const stripFunctionsHost = (obj) => {
+                    if (!obj || typeof obj !== 'object') return obj;
+                    if (Array.isArray(obj)) return obj.map(stripFunctionsHost);
+                    const newObj = {};
+                    for (const [key, val] of Object.entries(obj)) {
+                        if (typeof val === 'function') continue;
+                        newObj[key] = stripFunctionsHost(val);
+                    }
+                    return newObj;
+                };
+
                 const dispatchRef = new ivm.Reference(async (type, params) => {
                     try {
                         const res = await actionAPI.dispatch({ type, params: JSON.parse(params) });
-                        const safeRes = JSON.parse(JSON.stringify(res || { success: true }));
+                        const safeRes = stripFunctionsHost(res || { success: true });
                         return new ivm.ExternalCopy(safeRes).copyInto();
                     } catch (e) {
                         return new ivm.ExternalCopy({ success: false, error: e.message }).copyInto();
@@ -164,8 +176,19 @@ export class CodeSandbox {
                 });
                 await jail.set('_jail_dispatch_ref', dispatchRef);
                 await context.evalClosure(`
+                    globalThis.__strip = function(obj) {
+                        if (!obj || typeof obj !== 'object') return obj;
+                        if (Array.isArray(obj)) return obj.map(globalThis.__strip);
+                        const newObj = {};
+                        for (const key in obj) {
+                            if (typeof obj[key] === 'function') continue;
+                            newObj[key] = globalThis.__strip(obj[key]);
+                        }
+                        return newObj;
+                    };
                     globalThis._jail_dispatch = function(type, params) {
-                        return _jail_dispatch_ref.apply(undefined, [type, params], { promise: true, arguments: { copy: true } });
+                        const cleanParams = JSON.stringify(globalThis.__strip(params));
+                        return _jail_dispatch_ref.apply(undefined, [type, cleanParams], { promise: true, arguments: { copy: true } });
                     };
                 `);
             }
@@ -174,11 +197,11 @@ export class CodeSandbox {
             if (skillLibrary) {
                 const skillDispatchRef = new ivm.Reference(async (name, ...args) => {
                     try {
-                        const skillFn = skillLibrary[name];
+                        const skillFn = skillLibrary[name] || skills[name];
                         if (typeof skillFn !== 'function') throw new Error(`Skill ${name} not found in library`);
 
                         const res = await skillFn(actionAPI.agent, ...args);
-                        const safeRes = JSON.parse(JSON.stringify(res || { success: true }));
+                        const safeRes = stripFunctionsHost(res || { success: true });
                         return new ivm.ExternalCopy(safeRes).copyInto();
                     } catch (e) {
                         return new ivm.ExternalCopy({ success: false, error: e.message }).copyInto();
@@ -187,7 +210,8 @@ export class CodeSandbox {
                 await jail.set('_jail_skill_dispatch_ref', skillDispatchRef);
                 await context.evalClosure(`
                     globalThis._jail_skill_dispatch = function(name, ...args) {
-                        return _jail_skill_dispatch_ref.apply(undefined, [name, ...args], { promise: true, arguments: { copy: true } });
+                        const cleanArgs = args.map(arg => globalThis.__strip(arg));
+                        return _jail_skill_dispatch_ref.apply(undefined, [name, ...cleanArgs], { promise: true, arguments: { copy: true } });
                     };
                 `);
             }
@@ -213,7 +237,7 @@ export class CodeSandbox {
                     navigate: (dest) => log('[Sandbox:Navigate]', dest),
                     __call_action__: (type, params) => {
                         if (typeof _jail_dispatch !== 'undefined') {
-                            return _jail_dispatch(type, JSON.stringify(params));
+                            return _jail_dispatch(type, params);
                         }
                         throw new Error('Action bridge not available');
                     },
@@ -267,6 +291,7 @@ export class CodeSandbox {
                             try {
                                 const fn = eval('(' + _tmp_source_action_${name} + ')'); 
                                 globalThis.actions['${name}'] = fn;
+                                globalThis['${name}'] = fn; // Expose as top-level helper
                                 delete globalThis['_tmp_source_action_${name}']; 
                             } catch(e) {
                                 log('[Sandbox] Error evaling action ${name}: ' + e.message);
@@ -280,18 +305,37 @@ export class CodeSandbox {
 
             const wrappedCode = `
             (async () => {
-                ${codeString}
+                try {
+                    const __res = await (async () => {
+                        ${codeString}
+                    })();
+                    // JSON stringify to avoid isolated-vm clone errors with functions
+                    return JSON.stringify(__res === undefined ? null : __res);
+                } catch (e) {
+                    throw e;
+                }
             })();
             `;
 
             const script = await isolate.compileScript(wrappedCode);
-            const result = await script.run(context, {
+            const rawResult = await script.run(context, {
                 promise: true,
                 result: { copy: true, promise: true },
                 timeout: this.timeout
             });
 
-            return { success: true, result };
+            let parsedResult = null;
+            if (typeof rawResult === 'string') {
+                try {
+                    parsedResult = JSON.parse(rawResult);
+                } catch (e) {
+                    parsedResult = rawResult;
+                }
+            } else {
+                parsedResult = rawResult;
+            }
+
+            return { success: true, result: parsedResult };
         } catch (e) {
             let errorMsg = e.message;
             if (e.message && e.message.includes('Script execution timed out')) {

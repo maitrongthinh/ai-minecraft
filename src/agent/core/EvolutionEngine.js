@@ -85,11 +85,8 @@ export class EvolutionEngine {
             console.log('[EvolutionEngine] 💀 Death detected. Initiating Retrospective Analysis...');
             this.mutateSurvivalGenome('death');
 
-            // Phase 3 & 4: Dual Analysis (Replay + Reflex)
-            await Promise.all([
-                this._analyzeDeathReplay(event.payload),
-                this._proposeDeathReflex(event.payload)
-            ]);
+            // Phase 3: Analysis (Replay)
+            await this._analyzeDeathReplay(event.payload);
         });
 
         // Phase 3.1: Survival Reflex Evolution — mutate on near-death
@@ -313,6 +310,35 @@ export class EvolutionEngine {
         }
 
         this.stats.capturedErrors++; // Increment a general error/event counter if needed
+        return true;
+    }
+
+    /**
+     * Phase 2: Record results of generic actions (mining, crafting, moving)
+     */
+    recordActionOutcome(action, params, result) {
+        // Track stats for the action
+        if (!this.actionStats.has(action)) {
+            this.actionStats.set(action, { success: 0, failure: 0, avgDuration: 0, total: 0 });
+        }
+
+        const stats = this.actionStats.get(action);
+        stats.total++;
+        if (result.success) {
+            stats.success++;
+        } else {
+            stats.failure++;
+            // If it's a critical action failure, we might want to analyze it later
+            if (stats.failure > 5) {
+                console.warn(`[EvolutionEngine] ⚠️ High failure rate for action: ${action} (${stats.failure} fails)`);
+            }
+        }
+
+        // Rolling average for duration
+        if (result.duration) {
+            stats.avgDuration = (stats.avgDuration * (stats.total - 1) + result.duration) / stats.total;
+        }
+
         return true;
     }
 
