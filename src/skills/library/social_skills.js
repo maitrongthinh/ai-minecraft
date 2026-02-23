@@ -1,6 +1,5 @@
 import * as world from "./world.js";
 import pf from 'mineflayer-pathfinder';
-import { goToPosition } from "./go_to.js";
 import { goToPlayer } from "./follow_player.js";
 import { moveAwayFromEntity } from "./retreat.js";
 import { discard } from "./interaction_skills.js";

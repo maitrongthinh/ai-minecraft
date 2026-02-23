@@ -1,0 +1,591 @@
+{
+  "summary": {
+    "totalFiles": 204,
+    "brokenImports": 10,
+    "unusedImports": 63,
+    "duplicateImports": 7,
+    "circularDeps": 1,
+    "orphanFiles": 38,
+    "missingNpmDeps": 3,
+    "unusedNpmDeps": 3
+  },
+  "brokenImports": [
+    {
+      "file": "bots/lintTemplate.js",
+      "specifier": "../../../src/agent/library/skills.js",
+      "line": 1,
+      "raw": "import * as skills from '../../../src/agent/library/skills.js';",
+      "resolvedTo": "../../src/agent/library/skills.js"
+    },
+    {
+      "file": "bots/lintTemplate.js",
+      "specifier": "../../../src/agent/library/world.js",
+      "line": 2,
+      "raw": "import * as world from '../../../src/agent/library/world.js';",
+      "resolvedTo": "../../src/agent/library/world.js"
+    },
+    {
+      "file": "scripts/verify_strategy_wiring.js",
+      "specifier": "../src/agent/core/StrategyRunner.js",
+      "line": 2,
+      "raw": "import { StrategyRunner } from '../src/agent/core/StrategyRunner.js';",
+      "resolvedTo": "src/agent/core/StrategyRunner.js"
+    },
+    {
+      "file": "src/actions/core/ActionAPI.js",
+      "specifier": "./SignalBus.js",
+      "line": 1158,
+      "raw": "const { globalBus, SIGNAL } = await import('./SignalBus.js');",
+      "resolvedTo": "src/actions/core/SignalBus.js"
+    },
+    {
+      "file": "src/agent/agent.js",
+      "specifier": "../memory/CogneeMemoryBridge.js",
+      "line": 28,
+      "raw": "// import { CogneeMemoryBridge } from '../memory/CogneeMemoryBridge.js'; // Removed Phase 6",
+      "resolvedTo": "src/memory/CogneeMemoryBridge.js"
+    },
+    {
+      "file": "src/agent/interaction/SocialAuth.js",
+      "specifier": "../../settings.js",
+      "line": 2,
+      "raw": "// import settings from '../../settings.js'; // Causes issues in test env, use process.env or mock",
+      "resolvedTo": "src/settings.js"
+    },
+    {
+      "file": "tests/regression_phase_13.js",
+      "specifier": "./src/agent/evolution/ProactiveCurriculum.js",
+      "line": 5,
+      "raw": "import { ProactiveCurriculum } from './src/agent/evolution/ProactiveCurriculum.js';",
+      "resolvedTo": "tests/src/agent/evolution/ProactiveCurriculum.js"
+    },
+    {
+      "file": "tests/regression_phase_13.js",
+      "specifier": "./src/agent/core/SignalBus.js",
+      "line": 6,
+      "raw": "import { globalBus } from './src/agent/core/SignalBus.js';",
+      "resolvedTo": "tests/src/agent/core/SignalBus.js"
+    },
+    {
+      "file": "_audit_imports.cjs",
+      "specifier": "...",
+      "line": 34,
+      "raw": "// require('...')",
+      "resolvedTo": "..."
+    },
+    {
+      "file": "_audit_imports.cjs",
+      "specifier": "...",
+      "line": 40,
+      "raw": "// import ... from '...'",
+      "resolvedTo": "..."
+    }
+  ],
+  "unusedImports": [
+    {
+      "file": "bots/lintTemplate.js",
+      "name": "Vec3",
+      "specifier": "vec3",
+      "line": 3
+    },
+    {
+      "file": "services/verify_world_ids.js",
+      "name": "path",
+      "specifier": "path",
+      "line": 9
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "MemorySystem",
+      "specifier": "./memory/MemorySystem.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "PRIORITY",
+      "specifier": "./core/TaskScheduler.js",
+      "line": 2
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "STATE_PRIORITY",
+      "specifier": "./StateStack.js",
+      "line": 3
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "validateNameFormat",
+      "specifier": "./connection_handler.js",
+      "line": 10
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "PhysicsPredictor",
+      "specifier": "./reflexes/PhysicsPredictor.js",
+      "line": 36
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "HitSelector",
+      "specifier": "./reflexes/HitSelector.js",
+      "line": 40
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "PathfindingWorkerController",
+      "specifier": "./core/PathfindingWorker.js",
+      "line": 42
+    },
+    {
+      "file": "src/agent/agent.js",
+      "name": "CombatAcademy",
+      "specifier": "./core/CombatAcademy.js",
+      "line": 46
+    },
+    {
+      "file": "src/agent/core/CombatAcademy.js",
+      "name": "globalBus",
+      "specifier": "../core/SignalBus.js",
+      "line": 2
+    },
+    {
+      "file": "src/agent/core/CombatAcademy.js",
+      "name": "SIGNAL",
+      "specifier": "../core/SignalBus.js",
+      "line": 2
+    },
+    {
+      "file": "src/agent/core/ContextManager.js",
+      "name": "globalBus",
+      "specifier": "./SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/core/ContextManager.js",
+      "name": "SIGNAL",
+      "specifier": "./SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/core/CoreSystem.js",
+      "name": "SwarmSync",
+      "specifier": "./SwarmSync.js",
+      "line": 17
+    },
+    {
+      "file": "src/agent/core/EvolutionEngine.js",
+      "name": "CODER_SYSTEM_PROMPT",
+      "specifier": "../../prompts/CoderPrompt.js",
+      "line": 20
+    },
+    {
+      "file": "src/agent/core/PlayerTrainingMode.js",
+      "name": "globalBus",
+      "specifier": "./SignalBus.js",
+      "line": 4
+    },
+    {
+      "file": "src/agent/core/PlayerTrainingMode.js",
+      "name": "SIGNAL",
+      "specifier": "./SignalBus.js",
+      "line": 4
+    },
+    {
+      "file": "src/agent/core/ToolSandboxWorker.js",
+      "name": "workerData",
+      "specifier": "worker_threads",
+      "line": 1
+    },
+    {
+      "file": "src/agent/intelligence/CodeEngine.js",
+      "name": "ActionLogger",
+      "specifier": "../../utils/ActionLogger.js",
+      "line": 5
+    },
+    {
+      "file": "src/agent/intelligence/SurvivalAnalysis.js",
+      "name": "globalBus",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/intelligence/SurvivalAnalysis.js",
+      "name": "SIGNAL",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/interaction/DialogueSystem.js",
+      "name": "globalBus",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/interaction/DialogueSystem.js",
+      "name": "SIGNAL",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/interaction/DialogueSystem.js",
+      "name": "SocialAuth",
+      "specifier": "./SocialAuth.js",
+      "line": 2
+    },
+    {
+      "file": "src/agent/interaction/SocialAuth.js",
+      "name": "settings",
+      "specifier": "../../settings.js",
+      "line": 2
+    },
+    {
+      "file": "src/agent/memory/AgenticQueryGenerator.js",
+      "name": "globalBus",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/memory/AgenticQueryGenerator.js",
+      "name": "SIGNAL",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/orchestration/CriticAgent.js",
+      "name": "globalBus",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/orchestration/CriticAgent.js",
+      "name": "SIGNAL",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/reflexes/SelfPreservationReflex.js",
+      "name": "globalBus",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/reflexes/SelfPreservationReflex.js",
+      "name": "SIGNAL",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/reflexes/StuckReflex.js",
+      "name": "globalBus",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/agent/reflexes/StuckReflex.js",
+      "name": "SIGNAL",
+      "specifier": "../core/SignalBus.js",
+      "line": 1
+    },
+    {
+      "file": "src/models/deepseek.js",
+      "name": "hasKey",
+      "specifier": "../utils/keys.js",
+      "line": 2
+    },
+    {
+      "file": "src/models/gpt.js",
+      "name": "strictFormat",
+      "specifier": "../utils/text.js",
+      "line": 3
+    },
+    {
+      "file": "src/models/mercury.js",
+      "name": "hasKey",
+      "specifier": "../utils/keys.js",
+      "line": 2
+    },
+    {
+      "file": "src/models/openrouter.js",
+      "name": "hasKey",
+      "specifier": "../utils/keys.js",
+      "line": 2
+    },
+    {
+      "file": "src/models/prompter.js",
+      "name": "getCommandDocs",
+      "specifier": "../agent/commands/index.js",
+      "line": 3
+    },
+    {
+      "file": "src/models/prompter.js",
+      "name": "getCommand",
+      "specifier": "../agent/commands/index.js",
+      "line": 6
+    },
+    {
+      "file": "src/models/qwen.js",
+      "name": "hasKey",
+      "specifier": "../utils/keys.js",
+      "line": 2
+    },
+    {
+      "file": "src/models/vllm.js",
+      "name": "getKey",
+      "specifier": "../utils/keys.js",
+      "line": 5
+    },
+    {
+      "file": "src/models/vllm.js",
+      "name": "hasKey",
+      "specifier": "../utils/keys.js",
+      "line": 5
+    },
+    {
+      "file": "src/skills/library/combat_skills.js",
+      "name": "moveAwayFromEntity",
+      "specifier": "./retreat.js",
+      "line": 3
+    },
+    {
+      "file": "src/skills/library/combat_skills.js",
+      "name": "goToGoal",
+      "specifier": "./go_to.js",
+      "line": 4
+    },
+    {
+      "file": "src/skills/library/interaction_skills.js",
+      "name": "goToNearestBlock",
+      "specifier": "./go_to.js",
+      "line": 6
+    },
+    {
+      "file": "src/skills/library/interaction_skills.js",
+      "name": "goToGoal",
+      "specifier": "./go_to.js",
+      "line": 6
+    },
+    {
+      "file": "src/skills/library/social_skills.js",
+      "name": "goToPosition",
+      "specifier": "./go_to.js",
+      "line": 3
+    },
+    {
+      "file": "src/skills/library/StrategicMovement.js",
+      "name": "log",
+      "specifier": "./util.js",
+      "line": 2
+    },
+    {
+      "file": "src/skills/SkillOptimizer.js",
+      "name": "SyntaxError",
+      "specifier": "acorn",
+      "line": 190
+    },
+    {
+      "file": "src/tools/MinecraftWiki.js",
+      "name": "path",
+      "specifier": "path",
+      "line": 4
+    },
+    {
+      "file": "src/utils/CombatUtils.js",
+      "name": "minecraftData",
+      "specifier": "minecraft-data",
+      "line": 2
+    },
+    {
+      "file": "src/utils/JsonSanitizer.js",
+      "name": "json5",
+      "specifier": "json5",
+      "line": 1
+    },
+    {
+      "file": "tasks/construction_tasks/get_blueprint.js",
+      "name": "start",
+      "specifier": "repl",
+      "line": 4
+    },
+    {
+      "file": "tasks/human_evaluation.js",
+      "name": "start",
+      "specifier": "repl",
+      "line": 8
+    },
+    {
+      "file": "tests/action_layer_test.js",
+      "name": "assert",
+      "specifier": "assert",
+      "line": 4
+    },
+    {
+      "file": "tests/performance_benchmark.js",
+      "name": "globalBus",
+      "specifier": "../src/agent/core/SignalBus.js",
+      "line": 2
+    },
+    {
+      "file": "tests/performance_benchmark.js",
+      "name": "SIGNAL",
+      "specifier": "../src/agent/core/SignalBus.js",
+      "line": 2
+    },
+    {
+      "file": "tests/regression_phase_13.js",
+      "name": "globalBus",
+      "specifier": "./src/agent/core/SignalBus.js",
+      "line": 6
+    },
+    {
+      "file": "tests/safety_pipeline_test.js",
+      "name": "globalBus",
+      "specifier": "../src/agent/core/SignalBus.js",
+      "line": 4
+    },
+    {
+      "file": "tests/safety_pipeline_test.js",
+      "name": "SIGNAL",
+      "specifier": "../src/agent/core/SignalBus.js",
+      "line": 4
+    },
+    {
+      "file": "tests/social_security_test.js",
+      "name": "SocialAuth",
+      "specifier": "../src/agent/interaction/SocialAuth.js",
+      "line": 2
+    },
+    {
+      "file": "tests/swarm_test.js",
+      "name": "SIGNAL",
+      "specifier": "../src/agent/core/SignalBus.js",
+      "line": 2
+    }
+  ],
+  "duplicateImports": [
+    {
+      "file": "src/agent/orchestration/ExecutorAgent.js",
+      "specifier": "mineflayer-pathfinder",
+      "lines": [
+        295,
+        310
+      ]
+    },
+    {
+      "file": "src/agent/orchestration/ExecutorAgent.js",
+      "specifier": "mineflayer-pathfinder",
+      "lines": [
+        295,
+        333
+      ]
+    },
+    {
+      "file": "src/models/prompter.js",
+      "specifier": "../agent/commands/index.js",
+      "lines": [
+        3,
+        6
+      ]
+    },
+    {
+      "file": "src/models/prompter.js",
+      "specifier": "fs",
+      "lines": [
+        1,
+        8
+      ]
+    },
+    {
+      "file": "tasks/construction_tasks/generate_multiagent_construction_tasks.js",
+      "specifier": "fs",
+      "lines": [
+        1,
+        153
+      ]
+    },
+    {
+      "file": "tasks/construction_tasks/generate_multiagent_construction_tasks.js",
+      "specifier": "path",
+      "lines": [
+        2,
+        154
+      ]
+    },
+    {
+      "file": "_audit_imports.cjs",
+      "specifier": "...",
+      "lines": [
+        34,
+        40
+      ]
+    }
+  ],
+  "circularDependencies": [
+    [
+      "src/agent/commands/index.js",
+      "src/agent/commands/queries.js",
+      "src/agent/commands/index.js"
+    ]
+  ],
+  "orphanFiles": [
+    "src/agent/core/milestones/adventure.js",
+    "src/agent/core/milestones/end.js",
+    "src/agent/core/milestones/husbandry.js",
+    "src/agent/core/milestones/nether.js",
+    "src/agent/core/milestones/story.js",
+    "src/agent/core/ToolSandboxWorker.js",
+    "src/agent/intelligence/CodeSanitizer.js",
+    "src/agent/memory_bank.js",
+    "src/agent/modes.js",
+    "src/agent/npc/controller.js",
+    "src/agent/tasks/tasks.js",
+    "src/models/azure.js",
+    "src/models/cerebras.js",
+    "src/models/claude.js",
+    "src/models/deepseek.js",
+    "src/models/glhf.js",
+    "src/models/grok.js",
+    "src/models/groq.js",
+    "src/models/huggingface.js",
+    "src/models/hyperbolic.js",
+    "src/models/mercury.js",
+    "src/models/mistral.js",
+    "src/models/novita.js",
+    "src/models/ollama.js",
+    "src/models/openrouter.js",
+    "src/models/qwen.js",
+    "src/models/replicate.js",
+    "src/models/vllm.js",
+    "src/process/init_agent.js",
+    "src/process/start_safe.js",
+    "src/skills/library/attack_target.js",
+    "src/skills/library/combat_skills.js",
+    "src/skills/library/defend_position.js",
+    "src/skills/library/eat_food.js",
+    "src/skills/library/equip_best_weapon.js",
+    "src/skills/library/explore.js",
+    "src/skills/library/social_skills.js",
+    "_audit_imports.cjs"
+  ],
+  "missingNpmDeps": [
+    {
+      "file": "src/mindcraft/mcserver.js",
+      "package": "minecraft-protocol",
+      "line": 2
+    },
+    {
+      "file": "src/tools/core/ToolRegistry.js",
+      "package": "file:",
+      "line": 153
+    },
+    {
+      "file": "src/utils/JsonSanitizer.js",
+      "package": "json5",
+      "line": 1
+    }
+  ],
+  "unusedNpmDeps": [
+    "bezier-easing",
+    "canvas",
+    "patch-package"
+  ]
+}

@@ -1,6 +1,4 @@
 
-import minecraftData from 'minecraft-data';
-
 // Base damage values (Java Edition 1.16+)
 const WEAPON_BASE_DAMAGE = {
     'sword': {

@@ -1,4 +1,4 @@
-import { globalBus, SIGNAL } from '../core/SignalBus.js';
+
 
 /**
  * CriticAgent - Safety & Feasibility Validator

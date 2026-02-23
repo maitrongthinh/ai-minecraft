@@ -1155,7 +1155,7 @@ export class ActionAPI {
 
         console.log(`[ActionAPI] 🧠 Brain requested new tool: ${description}`);
         // Dynamic import to avoid circular dependency if SignalBus imports ActionAPI (unlikely but safe)
-        const { globalBus, SIGNAL } = await import('./SignalBus.js');
+        const { globalBus, SIGNAL } = await import('../../agent/core/SignalBus.js');
 
         globalBus.emitSignal(SIGNAL.TOOL_NEEDED, {
             desc: description,

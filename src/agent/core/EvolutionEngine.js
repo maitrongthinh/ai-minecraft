@@ -17,7 +17,6 @@ import path from 'path';
 
 import { SafetySandwich } from '../safety/SafetySandwich.js';
 import { RollbackManager } from '../safety/RollbackManager.js';
-import { CODER_SYSTEM_PROMPT } from '../../prompts/CoderPrompt.js';
 import { globalBus, SIGNAL } from './SignalBus.js';
 import { ToolCreatorEngine } from './ToolCreatorEngine.js';
 import { ReflexCreatorEngine } from '../../evolution/ReflexCreatorEngine.js';

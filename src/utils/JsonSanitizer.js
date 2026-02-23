@@ -1,5 +1,3 @@
-// import json5 from 'json5'; // Not available, using custom dirty parser
-
 export class JsonSanitizer {
     /**
      * Extracts and parses JSON from a string that might contain other text.

@@ -1,5 +1,4 @@
 import Vec3 from 'vec3';
-import { log } from './util.js';
 
 /**
  * StrategicMovement

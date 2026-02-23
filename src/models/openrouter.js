@@ -1,5 +1,5 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 
 export class OpenRouter {
@@ -16,12 +16,12 @@ export class OpenRouter {
         }
 
         // Pass the API key to OpenAI compatible Api
-        config.apiKey = apiKey; 
+        config.apiKey = apiKey;
 
         this.openai = new OpenAIApi(config);
     }
 
-    async sendRequest(turns, systemMessage, stop_seq='*') {
+    async sendRequest(turns, systemMessage, stop_seq = '*') {
         let messages = [{ role: 'system', content: systemMessage }, ...turns];
         messages = strictFormat(messages);
 
@@ -67,7 +67,7 @@ export class OpenRouter {
                 }
             ]
         });
-        
+
         return this.sendRequest(imageMessages, systemMessage);
     }
 

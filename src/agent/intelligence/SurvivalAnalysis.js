@@ -1,4 +1,4 @@
-import { globalBus, SIGNAL } from '../core/SignalBus.js';
+
 import settings from '../../../settings.js';
 
 /**

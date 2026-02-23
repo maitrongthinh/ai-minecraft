@@ -1,4 +1,4 @@
-import { globalBus, SIGNAL } from '../core/SignalBus.js';
+
 import { moveAway } from '../../skills/library/retreat.js';
 import { goToPosition } from '../../skills/library/go_to.js';
 import * as world from '../../skills/library/world.js';

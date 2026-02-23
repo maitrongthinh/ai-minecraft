@@ -1,5 +1,5 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 
 export class DeepSeek {
@@ -16,8 +16,8 @@ export class DeepSeek {
         this.openai = new OpenAIApi(config);
     }
 
-    async sendRequest(turns, systemMessage, stop_seq='***') {
-        let messages = [{'role': 'system', 'content': systemMessage}].concat(turns);
+    async sendRequest(turns, systemMessage, stop_seq = '***') {
+        let messages = [{ 'role': 'system', 'content': systemMessage }].concat(turns);
 
         messages = strictFormat(messages);
 
@@ -34,7 +34,7 @@ export class DeepSeek {
             // console.log('Messages:', messages);
             let completion = await this.openai.chat.completions.create(pack);
             if (completion.choices[0].finish_reason == 'length')
-                throw new Error('Context length exceeded'); 
+                throw new Error('Context length exceeded');
             console.log('Received.')
             res = completion.choices[0].message.content;
         }

@@ -1,5 +1,5 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 
 export class Mercury {
@@ -18,13 +18,13 @@ export class Mercury {
         this.openai = new OpenAIApi(config);
     }
 
-    async sendRequest(turns, systemMessage, stop_seq='***') {
+    async sendRequest(turns, systemMessage, stop_seq = '***') {
         if (typeof stop_seq === 'string') {
             stop_seq = [stop_seq];
         } else if (!Array.isArray(stop_seq)) {
             stop_seq = [];
         }
-        let messages = [{'role': 'system', 'content': systemMessage}].concat(turns);
+        let messages = [{ 'role': 'system', 'content': systemMessage }].concat(turns);
         messages = strictFormat(messages);
         const pack = {
             model: this.model_name || "mercury-coder-small",
@@ -41,7 +41,7 @@ export class Mercury {
             // console.log('Messages:', messages);
             let completion = await this.openai.chat.completions.create(pack);
             if (completion.choices[0].finish_reason == 'length')
-                throw new Error('Context length exceeded'); 
+                throw new Error('Context length exceeded');
             console.log('Received.')
             res = completion.choices[0].message.content;
         }
@@ -74,7 +74,7 @@ export class Mercury {
                 }
             ]
         });
-        
+
         return this.sendRequest(imageMessages, systemMessage);
     }
 

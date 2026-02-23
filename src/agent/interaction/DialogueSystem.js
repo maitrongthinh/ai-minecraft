@@ -1,4 +1,4 @@
-import { globalBus, SIGNAL } from '../core/SignalBus.js';
+
 import { SocialAuth } from './SocialAuth.js';
 
 /**

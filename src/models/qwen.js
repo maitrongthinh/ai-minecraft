@@ -1,5 +1,5 @@
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
+import { getKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 
 export class Qwen {
@@ -15,8 +15,8 @@ export class Qwen {
         this.openai = new OpenAIApi(config);
     }
 
-    async sendRequest(turns, systemMessage, stop_seq='***') {
-        let messages = [{'role': 'system', 'content': systemMessage}].concat(turns);
+    async sendRequest(turns, systemMessage, stop_seq = '***') {
+        let messages = [{ 'role': 'system', 'content': systemMessage }].concat(turns);
 
         messages = strictFormat(messages);
 
@@ -40,7 +40,7 @@ export class Qwen {
             if (completion.choices[0].finish_reason == 'length')
                 throw new Error('Context length exceeded');
             console.log('Received.');
-            
+
             // Handle reasoning output if present
             let res = completion.choices[0].message.content;
             if (completion.choices[0].message.reasoning) {

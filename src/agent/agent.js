@@ -1,13 +1,13 @@
-import { MemorySystem } from './memory/MemorySystem.js';
-import { TaskScheduler, PRIORITY } from './core/TaskScheduler.js';
-import { StateStack, STATE_PRIORITY } from './StateStack.js';
+
+import { TaskScheduler } from './core/TaskScheduler.js';
+import { StateStack } from './StateStack.js';
 import { globalBus, SIGNAL } from './core/SignalBus.js';
 import convoManager from './conversation.js';
 import { handleTranslation } from '../utils/translator.js';
 import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendThoughtToServer, sendOutputToServer, sendSystem2TraceToServer } from './mindserver_proxy.js';
 import { speak } from './speak.js';
-import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
+import { log, handleDisconnection } from './connection_handler.js';
 import { UnifiedBrain } from '../brain/UnifiedBrain.js';
 import { PlannerAgent } from './orchestration/PlannerAgent.js';
 
@@ -33,17 +33,17 @@ import { Prompter } from '../models/prompter.js';
 import { UtilityEngine } from './intelligence/UtilityEngine.js';
 import { SelfPrompter } from './self_prompter.js';
 import { Task } from './tasks/ScenarioManager.js';
-import { PhysicsPredictor } from './reflexes/PhysicsPredictor.js';
+
 import { DeathRecovery } from './reflexes/DeathRecovery.js';
 import { Watchdog } from './reflexes/Watchdog.js';
 import { ReplayBuffer } from './core/ReplayBuffer.js';
-import { HitSelector } from './reflexes/HitSelector.js';
+
 import { SwarmSync } from './core/SwarmSync.js';
-// import { PathfindingWorkerController } from './core/PathfindingWorker.js';
+
 import ChatInstructionLearner from './core/ChatInstructionLearner.js';
 import { AdventureLogger } from './core/AdventureLogger.js';
 import { EnvironmentMonitor } from './core/EnvironmentMonitor.js';
-import { CombatAcademy } from './core/CombatAcademy.js';
+
 import { PlayerTrainingMode } from './core/PlayerTrainingMode.js';
 import { ToolCreatorEngine } from './core/ToolCreatorEngine.js';
 import { KnowledgeStore } from './core/KnowledgeStore.js';

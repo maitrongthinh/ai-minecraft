@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import {proceduralGeneration} from "../../src/agent/tasks/construction_tasks.js";
+import { proceduralGeneration } from "../../src/agent/tasks/construction_tasks.js";
 
 //note 'main' (script to run generation of tasks) is at bottom of page
 
@@ -18,7 +18,7 @@ function createInitialInventory(blueprint, agents, evenlySplit = true) {
 
     // Initialize inventories
     for (let i = 0; i < agents; i++) {
-        inventories[i] = {'diamond_pickaxe': 1};
+        inventories[i] = { 'diamond_pickaxe': 1 };
     }
 
     // Count materials in blueprint and replace ladder variants with "ladder"
@@ -107,39 +107,39 @@ function generateConstructionTasks(variants, agents) {
         for (let r = 0; r < roomCounts.length; r++) {
             for (let w = 0; w < windowStyles.length; w++) {
                 for (let c = 0; c < carpetStyles.length; c++) {
-                        for (let variant = 0; variant < variants; variant++) {
+                    for (let variant = 0; variant < variants; variant++) {
 
-                            const rooms = roomCounts[r];
-                            const spaceSize = calculateSpaceNeeded(rooms);
+                        const rooms = roomCounts[r];
+                        const spaceSize = calculateSpaceNeeded(rooms);
 
-                            const blueprint = proceduralGeneration(
-                                spaceSize,
-                                spaceSize,
-                                spaceSize,
-                                rooms,
-                                5,
-                                5,
-                                4,
-                                5,
-                                "air",
-                                carpetStyles[c],
-                                windowStyles[w],
-                                m + 1
-                            );
+                        const blueprint = proceduralGeneration(
+                            spaceSize,
+                            spaceSize,
+                            spaceSize,
+                            rooms,
+                            5,
+                            5,
+                            4,
+                            5,
+                            "air",
+                            carpetStyles[c],
+                            windowStyles[w],
+                            m + 1
+                        );
 
-                            const taskName = `materials_${m}_rooms_${r}_window_${w}_carpet_${c}_variant_${variant}`;
+                        const taskName = `materials_${m}_rooms_${r}_window_${w}_carpet_${c}_variant_${variant}`;
 
-                            tasks[taskName] = {
-                                type: "construction",
-                                goal: "Make a house with the blueprint",
-                                conversation: "Let's share materials and make a house with the blueprint",
-                                agent_count: agents,
-                                initial_inventory: createInitialInventory(blueprint, agents),
-                                timeout: timeout + (300 * r), // 5 minute per additional level of complexity
-                                blueprint: blueprint,
+                        tasks[taskName] = {
+                            type: "construction",
+                            goal: "Make a house with the blueprint",
+                            conversation: "Let's share materials and make a house with the blueprint",
+                            agent_count: agents,
+                            initial_inventory: createInitialInventory(blueprint, agents),
+                            timeout: timeout + (300 * r), // 5 minute per additional level of complexity
+                            blueprint: blueprint,
 
-                            };
-                        }
+                        };
+                    }
 
                 }
             }
@@ -148,10 +148,6 @@ function generateConstructionTasks(variants, agents) {
 
     return tasks;
 }
-
-
-// const fs = require('fs');
-// const path = require('path');
 
 // Function to create directories and generate tasks
 function setupTaskFiles(baseDirs, agentCounts, variants) {

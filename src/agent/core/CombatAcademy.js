@@ -1,5 +1,5 @@
 
-import { globalBus, SIGNAL } from '../core/SignalBus.js';
+
 
 export class CombatAcademy {
     constructor(agent) {

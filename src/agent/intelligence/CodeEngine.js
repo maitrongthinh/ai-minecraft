@@ -2,7 +2,6 @@ import { SkillLibrary } from '../library/skill_library.js';
 import { initLockdown } from '../library/lockdown.js';
 import { JsonSanitizer } from '../../utils/JsonSanitizer.js';
 import { globalBus, SIGNAL } from '../core/SignalBus.js';
-import { ActionLogger } from '../../utils/ActionLogger.js';
 import { getBotOutputSummary } from '../../utils/mcdata.js';
 import { CodeSandbox } from '../core/CodeSandbox.js';
 import * as skills from '../../skills/library/index.js';

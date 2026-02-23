@@ -2,7 +2,6 @@
 // Qwen is also compatible with the OpenAI API format;
 
 import OpenAIApi from 'openai';
-import { getKey, hasKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 
 export class VLLM {
@@ -24,11 +23,11 @@ export class VLLM {
 
     async sendRequest(turns, systemMessage, stop_seq = '***') {
         let messages = [{ 'role': 'system', 'content': systemMessage }].concat(turns);
-        let model = this.model_name || "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B";  
-        
+        let model = this.model_name || "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B";
+
         if (model.includes('deepseek') || model.includes('qwen')) {
             messages = strictFormat(messages);
-        } 
+        }
 
         const pack = {
             model: model,

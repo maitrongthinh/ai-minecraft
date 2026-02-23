@@ -5,6 +5,15 @@ import { queryList } from './queries.js';
 let suppressNoDomainWarning = true;
 
 const commandList = queryList.concat(actionsList);
+
+commandList.push({
+    name: '!help',
+    description: 'Lists all available commands and their descriptions.',
+    perform: async function (agent) {
+        return getCommandDocs(agent);
+    }
+});
+
 const commandMap = {};
 for (let command of commandList) {
     commandMap[command.name] = command;

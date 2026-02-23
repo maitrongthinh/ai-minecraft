@@ -14,7 +14,6 @@ import { CoreExtractor } from './CoreExtractor.js';
 import { System2Loop } from '../orchestration/System2Loop.js';
 import { CombatAcademy } from './CombatAcademy.js';
 import { Task } from '../tasks/ScenarioManager.js';
-import { SwarmSync } from './SwarmSync.js';
 import { Profiler } from './Profiler.js';
 import { CodeEngine } from '../intelligence/CodeEngine.js';
 import { AutoHealer } from './AutoHealer.js'; // Phase 8: Reliability

@@ -2,8 +2,8 @@
 /**
  * Regression Test for Phase 13 Fixes
  */
-import { ProactiveCurriculum } from './src/agent/evolution/ProactiveCurriculum.js';
-import { globalBus } from './src/agent/core/SignalBus.js';
+import { ProactiveCurriculum } from '../src/agent/evolution/ProactiveCurriculum.js';
+import { globalBus } from '../src/agent/core/SignalBus.js';
 
 async function test() {
     console.log('--- Testing Regression Fixes ---');
